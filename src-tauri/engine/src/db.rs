@@ -1,5 +1,7 @@
 use crate::{
-    EngineError, ExecutionError, ExecutionRecord, ExecutionStatus, Workflow, WorkflowSummary,
+    BrowserDiagnostics, BrowserProfile, ConnectionMetadata, ConnectionStatus, EngineError,
+    ExecutionError, ExecutionRecord, ExecutionStatus, PendingApproval, RecordedWorkflowDraft,
+    Workflow, WorkflowSummary,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -59,6 +61,17 @@ impl Database {
                 .execute_batch(include_str!("../migrations/002_schedule_state.sql"))
                 .map_err(storage)?;
         }
+        if version < 3 {
+            connection
+                .execute_batch(include_str!("../migrations/003_browser_integrations.sql"))
+                .map_err(storage)?;
+        }
+        if version < 4 {
+            connection
+                .execute_batch(include_str!("../migrations/004_integration_polling.sql"))
+                .map_err(storage)?;
+        }
+        migrate_saved_workflows(&connection)?;
         Ok(())
     }
 
@@ -70,16 +83,53 @@ impl Database {
             .map_err(storage)
     }
 
-    pub fn save_workflow(&self, mut workflow: Workflow) -> Result<Workflow, EngineError> {
+    pub fn save_workflow(&self, workflow: Workflow) -> Result<Workflow, EngineError> {
+        let mut workflow = migrate_workflow(workflow)?;
         let previous = self.get_workflow(&workflow.id)?;
         if let Some(old) = &previous {
             if dangerous_fingerprint(old) != dangerous_fingerprint(&workflow) {
                 workflow.settings.permissions.command_execution_permitted = false;
                 workflow.settings.permissions.approval_revision = None;
             }
+            if browser_fingerprint(old) != browser_fingerprint(&workflow) {
+                workflow.settings.permissions.browser_automation_permitted = false;
+            }
+            if communication_fingerprint(old) != communication_fingerprint(&workflow) {
+                workflow
+                    .settings
+                    .permissions
+                    .external_communication_permitted = false;
+                workflow
+                    .settings
+                    .permissions
+                    .communication_approval_revision = None;
+            }
         } else if workflow.nodes.iter().any(|n| n.node_type == "run_command") {
             workflow.settings.permissions.command_execution_permitted = false;
             workflow.settings.permissions.approval_revision = None;
+        }
+        if previous.is_none()
+            && workflow
+                .nodes
+                .iter()
+                .any(|node| is_browser_node(&node.node_type))
+        {
+            workflow.settings.permissions.browser_automation_permitted = false;
+        }
+        if previous.is_none()
+            && workflow
+                .nodes
+                .iter()
+                .any(|node| is_communication_node(&node.node_type))
+        {
+            workflow
+                .settings
+                .permissions
+                .external_communication_permitted = false;
+            workflow
+                .settings
+                .permissions
+                .communication_approval_revision = None;
         }
         workflow.updated_at = Utc::now();
         let trigger_type = workflow
@@ -126,8 +176,7 @@ impl Database {
             )
             .optional()
             .map_err(storage)?;
-        json.map(|value| serde_json::from_str(&value).map_err(storage))
-            .transpose()
+        json.map(|value| decode_workflow(&value)).transpose()
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowSummary>, EngineError> {
@@ -142,7 +191,7 @@ impl Database {
             let rows = statement
                 .query_map([], |row| row.get::<_, String>(0))
                 .map_err(storage)?;
-            rows.map(|row| serde_json::from_str(&row.map_err(storage)?).map_err(storage))
+            rows.map(|row| decode_workflow(&row.map_err(storage)?))
                 .collect::<Result<_, _>>()?
         };
         workflows
@@ -220,9 +269,44 @@ impl Database {
         }
     }
 
-    pub fn clear_old_executions(&self, keep: usize) -> Result<usize, EngineError> {
-        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
-            .execute("DELETE FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?)", [keep as i64]).map_err(storage)
+    pub fn clear_old_executions(
+        &self,
+        keep: usize,
+    ) -> Result<(usize, Vec<String>), EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let paths = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE execution_id IN (SELECT id FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?))",
+                )
+                .map_err(storage)?;
+            let rows = statement
+                .query_map([keep as i64], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?
+                .into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>();
+            rows
+        };
+        let removed = transaction
+            .execute(
+                "DELETE FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?)",
+                [keep as i64],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok((removed, paths))
     }
 
     pub fn recover_unfinished(&self) -> Result<usize, EngineError> {
@@ -273,6 +357,265 @@ impl Database {
             })
             .transpose()
     }
+
+    pub fn save_browser_profile(&self, profile: &BrowserProfile) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO browser_profiles(id,name,persistent,data_path,settings_json,created_at,last_used_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,persistent=excluded.persistent,data_path=excluded.data_path,settings_json=excluded.settings_json,last_used_at=excluded.last_used_at",
+            params![profile.id, profile.name, profile.persistent, profile.data_path, serde_json::to_string(&profile.settings).map_err(storage)?, profile.created_at.to_rfc3339(), profile.last_used_at.map(|value| value.to_rfc3339())]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn list_browser_profiles(&self) -> Result<Vec<BrowserProfile>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection.prepare("SELECT id,name,persistent,data_path,settings_json,created_at,last_used_at FROM browser_profiles ORDER BY name").map_err(storage)?;
+        let rows = statement
+            .query_map([], |row| {
+                let settings: String = row.get(4)?;
+                let created: String = row.get(5)?;
+                let last_used: Option<String> = row.get(6)?;
+                Ok(BrowserProfile {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    persistent: row.get(2)?,
+                    data_path: row.get(3)?,
+                    settings: serde_json::from_str(&settings).unwrap_or_default(),
+                    created_at: parse_time(&created),
+                    last_used_at: last_used.as_deref().map(parse_time),
+                })
+            })
+            .map_err(storage)?;
+        let values = rows.map(|row| row.map_err(storage)).collect();
+        values
+    }
+
+    pub fn get_browser_profile(&self, id: &str) -> Result<Option<BrowserProfile>, EngineError> {
+        Ok(self
+            .list_browser_profiles()?
+            .into_iter()
+            .find(|profile| profile.id == id))
+    }
+
+    pub fn delete_browser_profile(&self, id: &str) -> Result<(), EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute("DELETE FROM browser_profiles WHERE id=?", [id])
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn save_connection(&self, connection: &ConnectionMetadata) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO connections(id,provider,display_name,account_identifier,scopes_json,created_at,last_used_at,expires_at,status,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET provider=excluded.provider,display_name=excluded.display_name,account_identifier=excluded.account_identifier,scopes_json=excluded.scopes_json,last_used_at=excluded.last_used_at,expires_at=excluded.expires_at,status=excluded.status,metadata_json=excluded.metadata_json",
+            params![connection.id, connection.provider, connection.display_name, connection.account_identifier, serde_json::to_string(&connection.scopes).map_err(storage)?, connection.created_at.to_rfc3339(), connection.last_used_at.map(|value|value.to_rfc3339()), connection.expires_at.map(|value|value.to_rfc3339()), connection_status_str(&connection.status), serde_json::to_string(&connection.metadata).map_err(storage)?]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn list_connections(&self) -> Result<Vec<ConnectionMetadata>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection.prepare("SELECT id,provider,display_name,account_identifier,scopes_json,created_at,last_used_at,expires_at,status,metadata_json FROM connections ORDER BY display_name").map_err(storage)?;
+        let rows = statement.query_map([], parse_connection).map_err(storage)?;
+        let values = rows.map(|row| row.map_err(storage)).collect();
+        values
+    }
+
+    pub fn get_connection(&self, id: &str) -> Result<Option<ConnectionMetadata>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        connection.query_row("SELECT id,provider,display_name,account_identifier,scopes_json,created_at,last_used_at,expires_at,status,metadata_json FROM connections WHERE id=?", [id], parse_connection).optional().map_err(storage)
+    }
+
+    pub fn delete_connection(&self, id: &str) -> Result<(), EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute("DELETE FROM connections WHERE id=?", [id])
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn save_pending_approval(&self, approval: &PendingApproval) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO pending_approvals(id,execution_id,workflow_id,node_id,action_json,status,created_at,expires_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,resolved_at=excluded.resolved_at",
+            params![approval.id, approval.execution_id, approval.workflow_id, approval.node_id, serde_json::to_string(&approval.action).map_err(storage)?, approval.status, approval.created_at.to_rfc3339(), approval.expires_at.to_rfc3339(), approval.resolved_at.map(|value|value.to_rfc3339())]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn list_pending_approvals(&self) -> Result<Vec<PendingApproval>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection.prepare("SELECT id,execution_id,workflow_id,node_id,action_json,status,created_at,expires_at,resolved_at FROM pending_approvals WHERE status='pending' ORDER BY created_at DESC").map_err(storage)?;
+        let rows = statement
+            .query_map([], |row| {
+                let action: String = row.get(4)?;
+                let created: String = row.get(6)?;
+                let expires: String = row.get(7)?;
+                let resolved: Option<String> = row.get(8)?;
+                Ok(PendingApproval {
+                    id: row.get(0)?,
+                    execution_id: row.get(1)?,
+                    workflow_id: row.get(2)?,
+                    node_id: row.get(3)?,
+                    action: serde_json::from_str(&action).unwrap_or_default(),
+                    status: row.get(5)?,
+                    created_at: parse_time(&created),
+                    expires_at: parse_time(&expires),
+                    resolved_at: resolved.as_deref().map(parse_time),
+                })
+            })
+            .map_err(storage)?;
+        let values = rows.map(|row| row.map_err(storage)).collect();
+        values
+    }
+
+    pub fn get_pending_approval(&self, id: &str) -> Result<Option<PendingApproval>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        connection.query_row("SELECT id,execution_id,workflow_id,node_id,action_json,status,created_at,expires_at,resolved_at FROM pending_approvals WHERE id=?", [id], |row| {
+            let action:String=row.get(4)?;let created:String=row.get(6)?;let expires:String=row.get(7)?;let resolved:Option<String>=row.get(8)?;
+            Ok(PendingApproval{id:row.get(0)?,execution_id:row.get(1)?,workflow_id:row.get(2)?,node_id:row.get(3)?,action:serde_json::from_str(&action).unwrap_or_default(),status:row.get(5)?,created_at:parse_time(&created),expires_at:parse_time(&expires),resolved_at:resolved.as_deref().map(parse_time)})
+        }).optional().map_err(storage)
+    }
+
+    pub fn resolve_pending_approval(&self, id: &str, status: &str) -> Result<bool, EngineError> {
+        if !matches!(status, "approved" | "rejected") {
+            return Err(EngineError::Validation(
+                "Approval status must be approved or rejected.".into(),
+            ));
+        }
+        let changed=self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "UPDATE pending_approvals SET status=?,resolved_at=? WHERE id=? AND status='pending' AND expires_at>?",
+            params![status,Utc::now().to_rfc3339(),id,Utc::now().to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(changed == 1)
+    }
+
+    pub fn save_recording_draft(&self, draft: &RecordedWorkflowDraft) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO recorded_workflow_drafts(id,workflow_id,profile_id,status,steps_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET workflow_id=excluded.workflow_id,status=excluded.status,steps_json=excluded.steps_json,updated_at=excluded.updated_at",
+            params![draft.id,draft.workflow_id,draft.profile_id,draft.status,serde_json::to_string(&draft.steps).map_err(storage)?,draft.created_at.to_rfc3339(),draft.updated_at.to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn save_browser_diagnostic(
+        &self,
+        execution_id: &str,
+        node_id: &str,
+        diagnostic: &BrowserDiagnostics,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO browser_diagnostics(id,execution_id,node_id,diagnostic_json,screenshot_path,trace_path,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)",
+            params![uuid::Uuid::new_v4().to_string(),execution_id,node_id,serde_json::to_string(diagnostic).map_err(storage)?,diagnostic.screenshot_path,diagnostic.trace_path,Utc::now().to_rfc3339(),expires_at.to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn take_expired_browser_artifacts(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let paths = {
+            let mut statement = transaction
+                .prepare("SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE expires_at<=?")
+                .map_err(storage)?;
+            let rows = statement
+                .query_map([now.to_rfc3339()], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?
+                .into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>()
+        };
+        transaction
+            .execute(
+                "DELETE FROM browser_diagnostics WHERE expires_at<=?",
+                [now.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(paths)
+    }
+
+    pub fn gmail_message_processed(
+        &self,
+        workflow_id: &str,
+        message_id: &str,
+    ) -> Result<bool, EngineError> {
+        let changed = self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT OR IGNORE INTO gmail_poll_state(workflow_id,message_id,processed_at) VALUES(?,?,?)",
+            params![workflow_id,message_id,Utc::now().to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(changed == 0)
+    }
+
+    pub fn get_last_integration_poll(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<DateTime<Utc>>, EngineError> {
+        let value: Option<String> = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT last_polled_at FROM integration_poll_state WHERE workflow_id=?",
+                [workflow_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        Ok(value.as_deref().map(parse_time))
+    }
+
+    pub fn set_last_integration_poll(
+        &self,
+        workflow_id: &str,
+        value: DateTime<Utc>,
+    ) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO integration_poll_state(workflow_id,last_polled_at) VALUES(?,?) ON CONFLICT(workflow_id) DO UPDATE SET last_polled_at=excluded.last_polled_at",
+            params![workflow_id,value.to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn workflows_using_reference(&self, key: &str) -> Result<Vec<String>, EngineError> {
+        Ok(self
+            .list_workflows()?
+            .into_iter()
+            .filter(|summary| {
+                serde_json::to_string(&summary.workflow).is_ok_and(|json| json.contains(key))
+            })
+            .map(|summary| summary.workflow.id)
+            .collect())
+    }
 }
 
 fn dangerous_fingerprint(workflow: &Workflow) -> String {
@@ -285,6 +628,56 @@ fn dangerous_fingerprint(workflow: &Workflow) -> String {
             .collect::<Vec<_>>(),
     )
     .unwrap_or_default()
+}
+fn browser_fingerprint(workflow: &Workflow) -> String {
+    serde_json::to_string(
+        &workflow
+            .nodes
+            .iter()
+            .filter(|node| is_browser_node(&node.node_type))
+            .map(|node| (&node.id, &node.node_type, &node.configuration))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_default()
+}
+fn communication_fingerprint(workflow: &Workflow) -> String {
+    serde_json::to_string(
+        &workflow
+            .nodes
+            .iter()
+            .filter(|node| is_communication_node(&node.node_type))
+            .map(|node| (&node.id, &node.node_type, &node.configuration))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_default()
+}
+fn is_browser_node(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "open_browser"
+            | "navigate"
+            | "click_element"
+            | "fill_field"
+            | "select_option"
+            | "press_key"
+            | "wait_for"
+            | "extract_data"
+            | "screenshot"
+            | "download_file"
+            | "upload_file"
+            | "close_browser"
+    )
+}
+fn is_communication_node(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "gmail_create_draft"
+            | "gmail_send_email"
+            | "gmail_add_label"
+            | "discord_webhook"
+            | "discord_embed"
+            | "slack_webhook"
+    )
 }
 fn storage(error: impl std::fmt::Display) -> EngineError {
     EngineError::Storage(error.to_string())
@@ -338,6 +731,97 @@ fn parse_execution(row: &rusqlite::Row) -> rusqlite::Result<ExecutionRecord> {
     })
 }
 
+fn parse_time(value: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now())
+}
+
+fn connection_status_str(status: &ConnectionStatus) -> &'static str {
+    match status {
+        ConnectionStatus::Connected => "connected",
+        ConnectionStatus::Expired => "expired",
+        ConnectionStatus::Revoked => "revoked",
+        ConnectionStatus::Error => "error",
+        ConnectionStatus::SetupRequired => "setup_required",
+    }
+}
+
+fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata> {
+    let scopes: String = row.get(4)?;
+    let created: String = row.get(5)?;
+    let last: Option<String> = row.get(6)?;
+    let expires: Option<String> = row.get(7)?;
+    let status: String = row.get(8)?;
+    let metadata: String = row.get(9)?;
+    Ok(ConnectionMetadata {
+        id: row.get(0)?,
+        provider: row.get(1)?,
+        display_name: row.get(2)?,
+        account_identifier: row.get(3)?,
+        scopes: serde_json::from_str(&scopes).unwrap_or_default(),
+        created_at: parse_time(&created),
+        last_used_at: last.as_deref().map(parse_time),
+        expires_at: expires.as_deref().map(parse_time),
+        status: match status.as_str() {
+            "connected" => ConnectionStatus::Connected,
+            "expired" => ConnectionStatus::Expired,
+            "revoked" => ConnectionStatus::Revoked,
+            "error" => ConnectionStatus::Error,
+            _ => ConnectionStatus::SetupRequired,
+        },
+        metadata: serde_json::from_str(&metadata).unwrap_or_default(),
+    })
+}
+
+fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
+    match workflow.schema_version {
+        crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
+        1 => {
+            workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
+            Ok(workflow)
+        }
+        version if version > crate::model::CURRENT_SCHEMA_VERSION => Err(EngineError::Validation(
+            format!("Workflow schema {version} was created by a newer version of Sandbox."),
+        )),
+        version => Err(EngineError::Validation(format!(
+            "Workflow schema {version} is not supported."
+        ))),
+    }
+}
+
+fn decode_workflow(json: &str) -> Result<Workflow, EngineError> {
+    migrate_workflow(serde_json::from_str(json).map_err(storage)?)
+}
+
+fn migrate_saved_workflows(connection: &Connection) -> Result<(), EngineError> {
+    let rows: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare("SELECT id, definition_json FROM workflows WHERE schema_version < ?")
+            .map_err(storage)?;
+        let values = statement
+            .query_map([crate::model::CURRENT_SCHEMA_VERSION], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .map_err(storage)?;
+        values.collect::<Result<_, _>>().map_err(storage)?
+    };
+    for (id, json) in rows {
+        let workflow = decode_workflow(&json)?;
+        connection
+            .execute(
+                "UPDATE workflows SET schema_version=?, definition_json=? WHERE id=?",
+                params![
+                    workflow.schema_version,
+                    serde_json::to_string(&workflow).map_err(storage)?,
+                    id
+                ],
+            )
+            .map_err(storage)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,10 +853,18 @@ mod tests {
     }
     #[test]
     fn migrations_and_persistence_work() {
-        let db = Database::in_memory().unwrap();
-        assert_eq!(db.schema_version().unwrap(), 2);
-        db.save_workflow(workflow()).unwrap();
-        assert_eq!(db.get_workflow("w").unwrap().unwrap().name, "Saved");
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("sandbox.db");
+        {
+            let db = Database::open(&path).unwrap();
+            assert_eq!(db.schema_version().unwrap(), 4);
+            db.save_workflow(workflow()).unwrap();
+        }
+        let reopened = Database::open(&path).unwrap();
+        let saved = reopened.get_workflow("w").unwrap().unwrap();
+        assert_eq!(saved.name, "Saved");
+        assert_eq!(saved.schema_version, crate::model::CURRENT_SCHEMA_VERSION);
+        assert!(!saved.settings.permissions.browser_automation_permitted);
     }
     #[test]
     fn recovers_running_records() {
@@ -401,5 +893,87 @@ mod tests {
                 .unwrap()
                 .recovered_after_crash
         );
+    }
+
+    #[test]
+    fn expires_browser_diagnostics_and_returns_owned_artifacts() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        let now = Utc::now();
+        let record = ExecutionRecord {
+            id: "browser-run".into(),
+            workflow_id: "w".into(),
+            workflow_version: 2,
+            trigger: json!({}),
+            status: ExecutionStatus::Failed,
+            started_at: now,
+            completed_at: Some(now),
+            duration_ms: Some(1),
+            node_executions: vec![],
+            error: None,
+            skip_reason: None,
+            recovered_after_crash: false,
+        };
+        db.save_execution(&record).unwrap();
+        let diagnostic = BrowserDiagnostics {
+            screenshot_path: Some("C:/app/artifacts/failure.png".into()),
+            trace_path: Some("C:/app/artifacts/trace.zip".into()),
+            ..BrowserDiagnostics::default()
+        };
+        db.save_browser_diagnostic(
+            "browser-run",
+            "browser",
+            &diagnostic,
+            now - chrono::Duration::seconds(1),
+        )
+        .unwrap();
+        let paths = db.take_expired_browser_artifacts(now).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().any(|path| path.ends_with("failure.png")));
+        assert!(db.take_expired_browser_artifacts(now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clearing_history_returns_artifacts_for_removed_executions_only() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        let now = Utc::now();
+        for (id, started_at) in [
+            ("old-browser-run", now - chrono::Duration::minutes(1)),
+            ("latest-browser-run", now),
+        ] {
+            db.save_execution(&ExecutionRecord {
+                id: id.into(),
+                workflow_id: "w".into(),
+                workflow_version: 2,
+                trigger: json!({}),
+                status: ExecutionStatus::Successful,
+                started_at,
+                completed_at: Some(started_at),
+                duration_ms: Some(1),
+                node_executions: vec![],
+                error: None,
+                skip_reason: None,
+                recovered_after_crash: false,
+            })
+            .unwrap();
+            db.save_browser_diagnostic(
+                id,
+                "browser",
+                &BrowserDiagnostics {
+                    screenshot_path: Some(format!("C:/app/artifacts/{id}.png")),
+                    ..BrowserDiagnostics::default()
+                },
+                now + chrono::Duration::days(1),
+            )
+            .unwrap();
+        }
+
+        let (removed, paths) = db.clear_old_executions(1).unwrap();
+
+        assert_eq!(removed, 1);
+        assert_eq!(paths, ["C:/app/artifacts/old-browser-run.png"]);
+        assert!(db.get_execution("old-browser-run").unwrap().is_none());
+        assert!(db.get_execution("latest-browser-run").unwrap().is_some());
     }
 }

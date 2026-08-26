@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { api } from "./api";
 import type { ExecutionRecord, Workflow, WorkflowSummary } from "./types";
 
-type View="workflows"|"history"|"editor";
+export type View="workflows"|"history"|"editor"|"settings"|"approvals";
 interface AppStore {
   view:View; workflows:WorkflowSummary[]; executions:ExecutionRecord[]; activeWorkflow?:Workflow; selectedExecution?:ExecutionRecord;
   loading:boolean; error?:string; setView:(view:View)=>void; load:()=>Promise<void>; openWorkflow:(id:string)=>Promise<void>;

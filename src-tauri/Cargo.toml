@@ -1,6 +1,6 @@
 [package]
 name = "sandbox-app"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first visual workflow automation"
 authors = ["Sandbox"]
 edition = "2021"
@@ -28,6 +28,13 @@ parking_lot = "0.12"
 async-trait = "0.1"
 notify = "8"
 globset = "0.4"
+keyring = { version = "4.1", features = ["v1"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.9"
+zeroize = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
 
 [workspace]
 members = ["engine"]

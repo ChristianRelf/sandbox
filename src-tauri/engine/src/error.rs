@@ -1,4 +1,4 @@
-use crate::model::ExecutionError;
+use crate::model::{BrowserDiagnostics, ExecutionError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -12,6 +12,11 @@ pub enum EngineError {
     Cancelled,
     #[error("{0}")]
     Permission(String),
+    #[error("{message}")]
+    Browser {
+        message: String,
+        diagnostics: Option<BrowserDiagnostics>,
+    },
 }
 
 impl EngineError {
@@ -33,6 +38,10 @@ impl EngineError {
             Self::Permission(_) => (
                 "permission_required",
                 "Review and approve the workflow permissions.",
+            ),
+            Self::Browser { .. } => (
+                "browser_operation_failed",
+                "Inspect the locator attempts and failure screenshot, then test or re-record this node.",
             ),
         };
         ExecutionError {

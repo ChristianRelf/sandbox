@@ -1,5 +1,5 @@
 import * as Tabs from "@radix-ui/react-tabs";
-import { Clipboard, Copy, RotateCcw, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, Clipboard, Copy, ExternalLink, Image, LocateFixed, RotateCcw, Square, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { format, formatDistanceStrict } from "date-fns";
 import { api } from "../api";
@@ -11,6 +11,8 @@ interface ExecutionInspectorProps {
   workflow?: Workflow;
   onRetry: () => void;
   onRetryNode?: (nodeId: string) => void;
+  onRetryHeaded?: () => void;
+  onEditNode?: (nodeId: string) => void;
   onClear?: () => void;
   compact?: boolean;
 }
@@ -20,6 +22,8 @@ export function ExecutionInspector({
   workflow,
   onRetry,
   onRetryNode,
+  onRetryHeaded,
+  onEditNode,
   onClear,
   compact = false,
 }: ExecutionInspectorProps) {
@@ -55,6 +59,11 @@ export function ExecutionInspector({
           {nodeRun?.status === "failed" && onRetryNode && (
             <button className="button" onClick={() => onRetryNode(nodeRun.nodeId)}>
               <RotateCcw size={13} />Retry failed node
+            </button>
+          )}
+          {nodeRun?.browserDiagnostics && onRetryHeaded && (
+            <button className="button" onClick={onRetryHeaded}>
+              <ExternalLink size={13} />Retry headed
             </button>
           )}
           {run.error && (
@@ -111,6 +120,7 @@ export function ExecutionInspector({
             execution={nodeRun}
             name={node?.name ?? nodeRun.nodeId}
             onCopy={copy}
+            onEditNode={onEditNode}
           />
         )}
       </div>
@@ -122,10 +132,12 @@ function NodeExecutionDetail({
   execution,
   name,
   onCopy,
+  onEditNode,
 }: {
   execution: NodeExecution;
   name: string;
   onCopy: (value: unknown) => void;
+  onEditNode?: (nodeId: string) => void;
 }) {
   return (
     <div className="node-execution-detail">
@@ -153,6 +165,14 @@ function NodeExecutionDetail({
           {execution.branchFollowed && <span>Followed the {execution.branchFollowed} branch.</span>}
         </div>
       )}
+      {execution.browserDiagnostics && (
+        <BrowserDiagnosticDetail
+          diagnostics={execution.browserDiagnostics}
+          nodeId={execution.nodeId}
+          onCopy={onCopy}
+          onEditNode={onEditNode}
+        />
+      )}
       <Tabs.Root defaultValue="output">
         <Tabs.List className="detail-tabs">
           <Tabs.Trigger value="input">Input</Tabs.Trigger>
@@ -170,6 +190,70 @@ function NodeExecutionDetail({
         </Tabs.Content>
       </Tabs.Root>
     </div>
+  );
+}
+
+function BrowserDiagnosticDetail({
+  diagnostics,
+  nodeId,
+  onCopy,
+  onEditNode,
+}: {
+  diagnostics: NonNullable<NodeExecution["browserDiagnostics"]>;
+  nodeId: string;
+  onCopy: (value: unknown) => void;
+  onEditNode?: (nodeId: string) => void;
+}) {
+  const successful = diagnostics.successfulLocator;
+  const weak = diagnostics.locatorAttempts.some(attempt => attempt.succeeded && attempt.weakFallback);
+  const openScreenshot = async () => {
+    if (!diagnostics.screenshotPath) return;
+    try {
+      await api.openExecutionArtifact(diagnostics.screenshotPath);
+    } catch (error) {
+      alert(String(error));
+    }
+  };
+  return (
+    <section className="browser-diagnostics">
+      <header>
+        <span><LocateFixed size={14} />Browser evidence</span>
+        <div>
+          {diagnostics.screenshotPath && <button className="button" onClick={openScreenshot}><Image size={13} />Open screenshot</button>}
+          {onEditNode && diagnostics.rerecordAvailable && <button className="button" onClick={() => onEditNode(nodeId)}><LocateFixed size={13} />Replace locator</button>}
+          <button className="button" onClick={() => onCopy(diagnostics)}><Copy size={13} />Copy technical details</button>
+        </div>
+      </header>
+      <div className="diagnostic-context">
+        <span><small>Current URL</small><b>{diagnostics.currentUrl || "Unavailable"}</b></span>
+        <span><small>Page title</small><b>{diagnostics.pageTitle || "Unavailable"}</b></span>
+        <span><small>Matches</small><b>{diagnostics.matchCount}</b></span>
+      </div>
+      {diagnostics.playwrightError && <div className="diagnostic-warning"><AlertTriangle size={14} /><span><b>Playwright reported</b>{diagnostics.playwrightError}</span></div>}
+      {weak && <div className="diagnostic-warning"><AlertTriangle size={14} /><span><b>Weak locator fallback used</b>The target matched only after stronger accessible locators failed.</span></div>}
+      {diagnostics.unexpectedNavigation && <div className="diagnostic-warning"><AlertTriangle size={14} /><span><b>Unexpected navigation</b>The page navigated when this node did not declare a navigation.</span></div>}
+      <details open={Boolean(diagnostics.locatorAttempts.length)}>
+        <summary>Locator attempts ({diagnostics.locatorAttempts.length})</summary>
+        <div className="locator-attempts">
+          {diagnostics.locatorAttempts.length ? diagnostics.locatorAttempts.map((attempt, index) => (
+            <div key={`${attempt.kind}-${index}`} className={attempt.succeeded ? "succeeded" : "failed"}>
+              <span>{index + 1}</span><code>{attempt.kind}</code><b>{attempt.value}</b><em>{attempt.matchCount} match{attempt.matchCount === 1 ? "" : "es"}</em>
+              {attempt.error && <small>{attempt.error}</small>}
+            </div>
+          )) : <p>No locator was required for this browser step.</p>}
+        </div>
+      </details>
+      {successful && <p className="successful-locator">Succeeded with <code>{successful.kind}</code> · {successful.value}</p>}
+      {(diagnostics.consoleErrors.length > 0 || diagnostics.failedNetworkRequests.length > 0) && (
+        <details>
+          <summary>Console and network evidence ({diagnostics.consoleErrors.length + diagnostics.failedNetworkRequests.length})</summary>
+          <div className="diagnostic-errors">
+            {diagnostics.consoleErrors.map((error, index) => <p key={`console-${index}`}><b>Console</b>{error}</p>)}
+            {diagnostics.failedNetworkRequests.map((error, index) => <p key={`network-${index}`}><b>Network</b>{error}</p>)}
+          </div>
+        </details>
+      )}
+    </section>
   );
 }
 

@@ -1,9 +1,10 @@
 use crate::AppState;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use notify::{EventKind, RecursiveMode, Watcher};
 use sandbox_engine::{schedule::next_run, Workflow};
 use serde_json::json;
 use std::{
+    collections::hash_map::Entry,
     path::Path,
     sync::{atomic::Ordering, Arc},
     time::Duration,
@@ -11,16 +12,17 @@ use std::{
 use tauri::{
     menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    App, AppHandle, Manager,
+    App, AppHandle, Emitter, Manager,
 };
 use tokio_util::sync::CancellationToken;
 
 pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Sandbox").build(app)?;
+    let approvals = MenuItemBuilder::with_id("approvals", "Pending Approvals").build(app)?;
     let pause = CheckMenuItemBuilder::with_id("pause", "Pause Automations").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&open, &pause, &quit])
+        .items(&[&open, &approvals, &pause, &quit])
         .build()?;
     let paused = state.paused.clone();
     let quitting = state.quitting.clone();
@@ -32,6 +34,13 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
+                }
+            }
+            "approvals" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = app.emit("navigate", "approvals");
                 }
             }
             "pause" => {
@@ -59,6 +68,26 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
 }
 
 pub fn start_background_services(app: AppHandle, state: &AppState) {
+    let retention_engine = state.engine.clone();
+    let artifact_root = state.data_dir.join("artifacts");
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            interval.tick().await;
+            let Ok(paths) = retention_engine
+                .database()
+                .take_expired_browser_artifacts(Utc::now())
+            else {
+                continue;
+            };
+            for path in paths {
+                let candidate = std::path::PathBuf::from(path);
+                if candidate.is_file() && candidate.starts_with(&artifact_root) {
+                    let _ = tokio::fs::remove_file(candidate).await;
+                }
+            }
+        }
+    });
     let engine = state.engine.clone();
     let paused = state.paused.clone();
     let cancellations = state.cancellations.clone();
@@ -69,9 +98,29 @@ pub fn start_background_services(app: AppHandle, state: &AppState) {
             if paused.load(Ordering::SeqCst) {
                 continue;
             }
-            let workflows = match engine.database().list_workflows() {
-                Ok(v) => v,
-                Err(_) => continue,
+            for (workflow, scheduled_at) in due_schedule_workflows(&engine, Utc::now()) {
+                spawn_run(
+                    engine.clone(),
+                    cancellations.clone(),
+                    workflow,
+                    json!({"type":"schedule","scheduledAt":scheduled_at}),
+                );
+            }
+        }
+    });
+    let gmail_engine = state.engine.clone();
+    let gmail_paused = state.paused.clone();
+    let gmail_cancellations = state.cancellations.clone();
+    let gmail_vault = state.credential_vault.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if gmail_paused.load(Ordering::SeqCst) {
+                continue;
+            }
+            let Ok(workflows) = gmail_engine.database().list_workflows() else {
+                continue;
             };
             for summary in workflows {
                 let workflow = summary.workflow;
@@ -80,29 +129,45 @@ pub fn start_background_services(app: AppHandle, state: &AppState) {
                 {
                     continue;
                 }
-                let trigger = workflow
-                    .nodes
-                    .iter()
-                    .find(|n| n.id == workflow.trigger_node_id);
-                if trigger.is_none_or(|n| n.node_type != "schedule_trigger") {
+                let Some(trigger) = workflow.nodes.iter().find(|node| {
+                    node.id == workflow.trigger_node_id
+                        && node.node_type == "gmail_new_email_trigger"
+                }) else {
+                    continue;
+                };
+                let poll_minutes = trigger
+                    .configuration
+                    .get("pollIntervalMinutes")
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or(5)
+                    .clamp(1, 60);
+                let last = gmail_engine
+                    .database()
+                    .get_last_integration_poll(&workflow.id)
+                    .ok()
+                    .flatten();
+                if last.is_some_and(|value| {
+                    Utc::now() - value < chrono::Duration::minutes(poll_minutes)
+                }) {
                     continue;
                 }
-                let trigger = trigger.unwrap();
-                let next = summary
-                    .next_run_at
-                    .or_else(|| next_run(trigger, Utc::now()).ok());
-                if let Some(next_at) = next {
-                    if summary.next_run_at.is_none() {
-                        let _ = engine.database().set_next_run(&workflow.id, Some(next_at));
-                    }
-                    if next_at <= Utc::now() {
-                        let next_after = next_run(trigger, Utc::now()).ok();
-                        let _ = engine.database().set_next_run(&workflow.id, next_after);
+                let _ = gmail_engine
+                    .database()
+                    .set_last_integration_poll(&workflow.id, Utc::now());
+                if let Ok(messages) = crate::integrations::poll_gmail(
+                    &workflow.id,
+                    &trigger.configuration,
+                    gmail_engine.database(),
+                    gmail_vault.clone(),
+                )
+                .await
+                {
+                    for message in messages {
                         spawn_run(
-                            engine.clone(),
-                            cancellations.clone(),
-                            workflow,
-                            json!({"type":"schedule","scheduledAt":next_at}),
+                            gmail_engine.clone(),
+                            gmail_cancellations.clone(),
+                            workflow.clone(),
+                            json!({"type":"gmail_new_email","email":message}),
                         );
                     }
                 }
@@ -110,6 +175,43 @@ pub fn start_background_services(app: AppHandle, state: &AppState) {
         }
     });
     start_file_watch_service(app, state);
+}
+
+fn due_schedule_workflows(
+    engine: &sandbox_engine::Engine,
+    now: DateTime<Utc>,
+) -> Vec<(Workflow, DateTime<Utc>)> {
+    let Ok(workflows) = engine.database().list_workflows() else {
+        return vec![];
+    };
+    workflows
+        .into_iter()
+        .filter_map(|summary| {
+            let workflow = summary.workflow;
+            if !workflow.enabled || !workflow.settings.permissions.background_execution_permitted {
+                return None;
+            }
+            let trigger = workflow
+                .nodes
+                .iter()
+                .find(|node| node.id == workflow.trigger_node_id)?;
+            if trigger.node_type != "schedule_trigger" {
+                return None;
+            }
+            let next_at = summary
+                .next_run_at
+                .or_else(|| next_run(trigger, now).ok())?;
+            if summary.next_run_at.is_none() {
+                let _ = engine.database().set_next_run(&workflow.id, Some(next_at));
+            }
+            if next_at > now {
+                return None;
+            }
+            let next_after = next_run(trigger, now).ok();
+            let _ = engine.database().set_next_run(&workflow.id, next_after);
+            Some((workflow, next_at))
+        })
+        .collect()
 }
 
 fn spawn_run(
@@ -120,12 +222,21 @@ fn spawn_run(
 ) {
     tauri::async_runtime::spawn(async move {
         let token = CancellationToken::new();
-        cancellations
-            .lock()
-            .insert(workflow.id.clone(), token.clone());
         let id = workflow.id.clone();
+        let owns_token = {
+            let mut active = cancellations.lock();
+            match active.entry(id.clone()) {
+                Entry::Vacant(entry) => {
+                    entry.insert(token.clone());
+                    true
+                }
+                Entry::Occupied(_) => false,
+            }
+        };
         let _ = engine.run(workflow, trigger, token).await;
-        cancellations.lock().remove(&id);
+        if owns_token {
+            cancellations.lock().remove(&id);
+        }
     });
 }
 
@@ -235,4 +346,37 @@ fn glob_match(pattern: &str, name: &str) -> bool {
         .ok()
         .map(|g| g.compile_matcher().is_match(name))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::templates;
+    use chrono::Duration as ChronoDuration;
+    use sandbox_engine::{Database, Engine, LocalHost};
+
+    #[test]
+    fn due_schedule_tick_advances_state_and_returns_workflow() {
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let mut workflow = templates::by_key("blank", Some("Scheduled".into()));
+        workflow.enabled = true;
+        workflow.settings.permissions.background_execution_permitted = true;
+        workflow.nodes[0].node_type = "schedule_trigger".into();
+        workflow.nodes[0].configuration = json!({"scheduleType":"minutes","every":5});
+        engine.database().save_workflow(workflow.clone()).unwrap();
+        let now = Utc::now();
+        engine
+            .database()
+            .set_next_run(&workflow.id, Some(now - ChronoDuration::seconds(1)))
+            .unwrap();
+
+        let due = due_schedule_workflows(&engine, now);
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].0.id, workflow.id);
+        assert!(engine
+            .database()
+            .get_next_run(&workflow.id)
+            .unwrap()
+            .is_some_and(|next| next > now));
+    }
 }
