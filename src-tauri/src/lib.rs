@@ -311,9 +311,9 @@ pub fn run() {
             commands::approve_plugin_permissions,
             commands::set_plugin_enabled,
             commands::prepare_workflow_sync,
-            commands::import_synced_revision_copy
-            ,commands::search_marketplace
-            ,commands::inspect_marketplace_plugin
+            commands::import_synced_revision_copy,
+            commands::search_marketplace,
+            commands::inspect_marketplace_plugin
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

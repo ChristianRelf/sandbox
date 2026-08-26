@@ -1,6 +1,6 @@
 use crate::{
     account_auth,
-    plugin_manager::{PackageTrustMetadata, PluginPackageInspection, PluginManager},
+    plugin_manager::{PackageTrustMetadata, PluginManager, PluginPackageInspection},
 };
 use reqwest::{redirect::Policy, Client, Url};
 use serde::{Deserialize, Serialize};
@@ -126,9 +126,11 @@ pub async fn inspect_for_install(
     manager: &PluginManager,
 ) -> Result<PluginPackageInspection, String> {
     if plugin_id.len() > 200
-        || !plugin_id
-            .chars()
-            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || matches!(character, '.' | '-'))
+        || !plugin_id.chars().all(|character| {
+            character.is_ascii_lowercase()
+                || character.is_ascii_digit()
+                || matches!(character, '.' | '-')
+        })
     {
         return Err("Marketplace plugin ID is invalid.".into());
     }
@@ -168,11 +170,7 @@ pub async fn inspect_for_install(
     if download_url.scheme() != "https" || download_url.host_str().is_none() {
         return Err("Plugin downloads require a signed HTTPS URL.".into());
     }
-    let package_response = client()?
-        .get(download_url)
-        .send()
-        .await
-        .map_err(network)?;
+    let package_response = client()?.get(download_url).send().await.map_err(network)?;
     if !package_response.status().is_success() {
         return Err(format!(
             "Plugin package download failed with HTTP {}.",
