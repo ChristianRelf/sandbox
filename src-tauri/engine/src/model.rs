@@ -6,7 +6,10 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct Position { pub x: f64, pub y: f64 }
+pub struct Position {
+    pub x: f64,
+    pub y: f64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -35,7 +38,10 @@ pub struct WorkflowEdge {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct CredentialReference { pub provider: String, pub key: String }
+pub struct CredentialReference {
+    pub provider: String,
+    pub key: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -62,10 +68,20 @@ pub struct WorkflowSettings {
     #[serde(default)]
     pub permissions: PermissionSummary,
 }
-fn default_timeout() -> u64 { 30_000 }
-fn default_concurrency() -> usize { 4 }
+fn default_timeout() -> u64 {
+    30_000
+}
+fn default_concurrency() -> usize {
+    4
+}
 impl Default for WorkflowSettings {
-    fn default() -> Self { Self { default_node_timeout_ms: default_timeout(), max_concurrent_nodes: default_concurrency(), permissions: PermissionSummary::default() } }
+    fn default() -> Self {
+        Self {
+            default_node_timeout_ms: default_timeout(),
+            max_concurrent_nodes: default_concurrency(),
+            permissions: PermissionSummary::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -88,11 +104,26 @@ pub struct Workflow {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum ExecutionStatus { Queued, Running, Successful, Failed, Skipped, Cancelled }
+pub enum ExecutionStatus {
+    Queued,
+    Running,
+    Successful,
+    Failed,
+    Skipped,
+    Cancelled,
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum NodeStatus { Idle, Waiting, Running, Successful, Failed, Skipped, Cancelled }
+pub enum NodeStatus {
+    Idle,
+    Waiting,
+    Running,
+    Successful,
+    Failed,
+    Skipped,
+    Cancelled,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -113,10 +144,14 @@ pub struct NodeExecution {
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<u64>,
-    #[serde(default)] pub input: Value,
-    #[serde(default)] pub output: Value,
-    #[serde(default)] pub logs: Vec<String>,
-    #[serde(default)] pub retry_count: u32,
+    #[serde(default)]
+    pub input: Value,
+    #[serde(default)]
+    pub output: Value,
+    #[serde(default)]
+    pub logs: Vec<String>,
+    #[serde(default)]
+    pub retry_count: u32,
     pub error: Option<ExecutionError>,
     pub skip_reason: Option<String>,
     pub branch_followed: Option<String>,
@@ -136,7 +171,8 @@ pub struct ExecutionRecord {
     pub node_executions: Vec<NodeExecution>,
     pub error: Option<ExecutionError>,
     pub skip_reason: Option<String>,
-    #[serde(default)] pub recovered_after_crash: bool,
+    #[serde(default)]
+    pub recovered_after_crash: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
