@@ -2,6 +2,7 @@ import { Copy, ExternalLink, MoreHorizontal, Plus, RefreshCcw, ShieldCheck, Tras
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { BrowserEngineStatus, BrowserProfile, BrowserProfileSettings } from "../types";
+import { ConnectionsSettings } from "./ConnectionsSettings";
 
 const defaults: BrowserProfileSettings = { viewportWidth: 1280, viewportHeight: 800, permissions: [] };
 
@@ -13,8 +14,13 @@ export function SettingsView() {
   const [error, setError] = useState<string>();
 
   const load = async () => {
-    setProfiles(await api.listBrowserProfiles());
-    setEngine(await api.browserEngineStatus());
+    try {
+      const [nextProfiles, nextEngine] = await Promise.all([api.listBrowserProfiles(), api.browserEngineStatus()]);
+      setProfiles(nextProfiles);
+      setEngine(nextEngine);
+    } catch (value) {
+      setError(`Settings could not load: ${String(value)}`);
+    }
   };
 
   useEffect(() => { void load(); }, []);
@@ -50,13 +56,14 @@ export function SettingsView() {
       {error && <div className="error-banner"><b>{error}</b></div>}
       {profiles.length ? <div className="profile-list">{profiles.map(profile => <div className="profile-row" key={profile.id}>
         <span className="profile-avatar">{profile.name.slice(0, 2).toUpperCase()}</span>
-        <div><b>{profile.name}</b><small>{profile.persistent ? "Persists between runs" : "Clears after each run"} · {profile.settings.viewportWidth}×{profile.settings.viewportHeight}{profile.lastUsedAt ? ` · Last used ${new Date(profile.lastUsedAt).toLocaleDateString()}` : " · Never used"}</small></div>
+        <div><b>{profile.name}</b><small>{profile.persistent ? "Persists between runs" : "Clears after each run"} · {profile.settings?.viewportWidth ?? 1280}×{profile.settings?.viewportHeight ?? 800}{profile.lastUsedAt ? ` · Last used ${new Date(profile.lastUsedAt).toLocaleDateString()}` : " · Never used"}</small></div>
         <span className="profile-path">Managed data · {profile.id.slice(0, 8)}</span>
         <button className="button" disabled={!api.isDesktop} onClick={() => act(() => api.openBrowserProfile(profile.id))}><ExternalLink size={13} />Open</button>
         <button className="icon-button" title="Duplicate without browser data" onClick={() => act(() => api.duplicateBrowserProfile(profile.id))}><Copy size={14} /></button>
         <button className="icon-button" title="Edit profile" onClick={() => setEditing(profile)}><MoreHorizontal size={15} /></button>
       </div>)}</div> : <div className="settings-empty"><ShieldCheck size={22} /><h3>No managed profiles</h3><p>Create an isolated Chromium identity for browser workflows and recording.</p><button className="button" onClick={() => setEditing("new")}>Create browser profile</button></div>}
     </section>
+    <ConnectionsSettings />
     {editing && <ProfileEditor
       profile={editing === "new" ? undefined : editing}
       busy={busy}

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { BrowserProfile, RecordedStep } from "../types";
 
-export function BrowserRecorder({ profiles, onApply }: { profiles: BrowserProfile[]; onApply: (profileId: string, steps: RecordedStep[]) => void }) {
+export function BrowserRecorder({ profiles, onProfileCreated, onApply }: { profiles: BrowserProfile[]; onProfileCreated: (profile: BrowserProfile) => void; onApply: (profileId: string, steps: RecordedStep[]) => void }) {
   const [setupOpen, setSetupOpen] = useState(false);
   const [profileId, setProfileId] = useState("");
   const [initialUrl, setInitialUrl] = useState("");
@@ -40,6 +40,14 @@ export function BrowserRecorder({ profiles, onApply }: { profiles: BrowserProfil
       setReviewing(true);
     } catch (value) { setError(String(value)); } finally { setBusy(false); }
   };
+  const createProfile = async () => {
+    setBusy(true); setError(undefined);
+    try {
+      const profile = await api.createBrowserProfile("Work browser", true, { viewportWidth: 1280, viewportHeight: 800, permissions: [] });
+      onProfileCreated(profile);
+      setProfileId(profile.id);
+    } catch (value) { setError(String(value)); } finally { setBusy(false); }
+  };
   const cancelReview = () => { setReviewing(false); setSteps([]); };
 
   return <>
@@ -47,7 +55,7 @@ export function BrowserRecorder({ profiles, onApply }: { profiles: BrowserProfil
     {sessionId && <div className="recording-control"><Circle size={8} fill="currentColor" /><span>Recording browser</span><em>{steps.length} draft step{steps.length === 1 ? "" : "s"}</em><button onClick={stop} disabled={busy}><Square size={10} fill="currentColor" />Stop</button></div>}
     {setupOpen && <div className="overlay" onMouseDown={event => event.target === event.currentTarget && setSetupOpen(false)}><div className="recording-setup">
       <header><span className="recording-icon"><Circle size={10} fill="currentColor" /></span><div><h2>Record workflow</h2><p>Actions are captured in an isolated managed Chromium profile.</p></div></header>
-      <section><label className="field"><span>Browser profile</span><select autoFocus value={profileId} onChange={event => setProfileId(event.target.value)}><option value="">Select a profile…</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label><label className="field"><span>Starting URL <small>Optional</small></span><input placeholder="https://app.example.com" value={initialUrl} onChange={event => setInitialUrl(event.target.value)} /></label><div className="security-note"><AlertTriangle size={14} /><span>Password and payment fields are detected but their values are never recorded. They become required protected inputs.</span></div>{profiles.length === 0 && <div className="error-banner">Create a browser profile in Settings before recording.</div>}{error && <div className="error-banner">{error}</div>}</section>
+      <section><label className="field"><span>Browser profile</span><select autoFocus value={profileId} onChange={event => setProfileId(event.target.value)}><option value="">Select a profile…</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label><label className="field"><span>Starting URL <small>Optional</small></span><input placeholder="https://app.example.com" value={initialUrl} onChange={event => setInitialUrl(event.target.value)} /></label><div className="security-note"><AlertTriangle size={14} /><span>Password and payment fields are detected but their values are never recorded. They become required protected inputs.</span></div>{profiles.length === 0 && <div className="inline-setup"><span>No managed profile exists yet.</span><button className="button" disabled={busy} onClick={createProfile}>Create default profile</button></div>}{error && <div className="error-banner">{error}</div>}</section>
       <footer><button className="button" onClick={() => setSetupOpen(false)}>Cancel</button><button className="button primary" disabled={!profileId || busy} onClick={begin}>{busy ? "Opening…" : "Open Chromium & record"}</button></footer>
     </div></div>}
     {reviewing && <RecordingReview steps={steps} setSteps={setSteps} onCancel={cancelReview} onApply={() => { onApply(profileId, steps); cancelReview(); }} />}

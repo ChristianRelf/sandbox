@@ -2,7 +2,12 @@ use crate::{EngineError, Workflow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-const TRIGGERS: &[&str] = &["manual_trigger", "schedule_trigger", "file_watch_trigger"];
+const TRIGGERS: &[&str] = &[
+    "manual_trigger",
+    "schedule_trigger",
+    "file_watch_trigger",
+    "gmail_new_email_trigger",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -187,33 +192,98 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                 .then_some("Run Command requires an executable."),
             "open_browser" => empty_string(&node.configuration, "profileId")
                 .then_some("Open Browser requires a managed browser profile."),
-            "navigate" => empty_string(&node.configuration, "url")
-                .then_some("Navigate requires a URL."),
-            "click_element" | "select_option" | "extract_data" => (!has_locator(&node.configuration))
-                .then_some("This browser action requires a structured target locator."),
+            "navigate" => {
+                empty_string(&node.configuration, "url").then_some("Navigate requires a URL.")
+            }
+            "click_element" | "select_option" | "extract_data" => {
+                (!has_locator(&node.configuration))
+                    .then_some("This browser action requires a structured target locator.")
+            }
             "fill_field" => {
                 if !has_locator(&node.configuration) {
                     Some("Fill Field requires a structured target locator.")
                 } else if empty_string(&node.configuration, "value") {
-                    Some(if node.configuration.get("sensitive").and_then(|v| v.as_bool()) == Some(true) {
-                        "Fill Field has a protected value that must be mapped to a credential or protected workflow input."
-                    } else {
-                        "Fill Field requires a value."
-                    })
+                    Some(
+                        if node
+                            .configuration
+                            .get("sensitive")
+                            .and_then(|v| v.as_bool())
+                            == Some(true)
+                        {
+                            "Fill Field has a protected value that must be mapped to a credential or protected workflow input."
+                        } else {
+                            "Fill Field requires a value."
+                        },
+                    )
                 } else {
                     None
                 }
             }
-            "download_file" => if !has_locator(&node.configuration) {
-                Some("Download File requires a structured target locator.")
-            } else if empty_string(&node.configuration, "destinationFolder") {
-                Some("Download File requires an approved destination folder.")
-            } else { None },
-            "upload_file" => if !has_locator(&node.configuration) {
-                Some("Upload File requires a structured target locator.")
-            } else if empty_string(&node.configuration, "file") {
-                Some("Upload File requires an approved local file or trusted file mapping.")
-            } else { None },
+            "download_file" => {
+                if !has_locator(&node.configuration) {
+                    Some("Download File requires a structured target locator.")
+                } else if empty_string(&node.configuration, "destinationFolder") {
+                    Some("Download File requires an approved destination folder.")
+                } else {
+                    None
+                }
+            }
+            "upload_file" => {
+                if !has_locator(&node.configuration) {
+                    Some("Upload File requires a structured target locator.")
+                } else if empty_string(&node.configuration, "file") {
+                    Some("Upload File requires an approved local file or trusted file mapping.")
+                } else {
+                    None
+                }
+            }
+            "gmail_new_email_trigger" => empty_string(&node.configuration, "credentialId")
+                .then_some("New Email Trigger requires a Gmail connection."),
+            "gmail_get_email" => {
+                if empty_string(&node.configuration, "credentialId") {
+                    Some("Get Email requires a Gmail connection.")
+                } else if empty_string(&node.configuration, "messageId") {
+                    Some("Get Email requires a message or thread ID.")
+                } else {
+                    None
+                }
+            }
+            "gmail_create_draft" | "gmail_send_email" => {
+                if empty_string(&node.configuration, "credentialId") {
+                    Some("Gmail action requires a connection.")
+                } else if empty_string(&node.configuration, "to") {
+                    Some("Email action requires at least one recipient.")
+                } else {
+                    None
+                }
+            }
+            "gmail_add_label" => {
+                if empty_string(&node.configuration, "credentialId") {
+                    Some("Add Label requires a Gmail connection.")
+                } else if empty_string(&node.configuration, "messageId") {
+                    Some("Add Label requires a message ID.")
+                } else {
+                    None
+                }
+            }
+            "discord_webhook" | "discord_embed" | "slack_webhook" => {
+                if empty_string(&node.configuration, "credentialId") {
+                    Some("Webhook action requires a secure connection.")
+                } else if empty_string(
+                    &node.configuration,
+                    if node.node_type == "discord_embed" {
+                        "description"
+                    } else {
+                        "content"
+                    },
+                ) {
+                    Some("Webhook action requires message content.")
+                } else {
+                    None
+                }
+            }
+            "approval" => empty_string(&node.configuration, "proposedAction")
+                .then_some("Manual Approval requires a proposed action description."),
             _ => None,
         };
         if let Some(message) = missing {
@@ -239,7 +309,12 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
 }
 
 fn empty_string(configuration: &serde_json::Value, key: &str) -> bool {
-    configuration.get(key).and_then(|value| value.as_str()).map(str::trim).unwrap_or("").is_empty()
+    configuration
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .unwrap_or("")
+        .is_empty()
 }
 
 fn has_locator(configuration: &serde_json::Value) -> bool {
@@ -253,16 +328,46 @@ fn has_locator(configuration: &serde_json::Value) -> bool {
 }
 
 fn is_browser_action(node_type: &str) -> bool {
-    matches!(node_type, "navigate" | "click_element" | "fill_field" | "select_option" | "press_key" | "wait_for" | "extract_data" | "screenshot" | "download_file" | "upload_file" | "close_browser")
+    matches!(
+        node_type,
+        "navigate"
+            | "click_element"
+            | "fill_field"
+            | "select_option"
+            | "press_key"
+            | "wait_for"
+            | "extract_data"
+            | "screenshot"
+            | "download_file"
+            | "upload_file"
+            | "close_browser"
+    )
 }
 
-fn has_upstream_browser_session(workflow: &Workflow, node_id: &str, visited: &mut HashSet<String>) -> bool {
-    if !visited.insert(node_id.to_string()) { return false; }
-    workflow.edges.iter().filter(|edge| edge.target_node_id == node_id).any(|edge| {
-        workflow.nodes.iter().find(|node| node.id == edge.source_node_id).map(|node| {
-            node.node_type == "open_browser" || (is_browser_action(&node.node_type) && has_upstream_browser_session(workflow, &node.id, visited))
-        }).unwrap_or(false)
-    })
+fn has_upstream_browser_session(
+    workflow: &Workflow,
+    node_id: &str,
+    visited: &mut HashSet<String>,
+) -> bool {
+    if !visited.insert(node_id.to_string()) {
+        return false;
+    }
+    workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.target_node_id == node_id)
+        .any(|edge| {
+            workflow
+                .nodes
+                .iter()
+                .find(|node| node.id == edge.source_node_id)
+                .map(|node| {
+                    node.node_type == "open_browser"
+                        || (is_browser_action(&node.node_type)
+                            && has_upstream_browser_session(workflow, &node.id, visited))
+                })
+                .unwrap_or(false)
+        })
 }
 
 fn issue(

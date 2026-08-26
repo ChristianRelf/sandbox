@@ -173,9 +173,278 @@ pub fn downloads_organiser() -> Workflow {
     )
 }
 
+fn accessible_locator(kind: &str, value: &str, name: Option<&str>) -> serde_json::Value {
+    json!({
+        "primary": { "kind": kind, "value": value, "name": name },
+        "alternatives": [],
+        "elementRole": if kind == "role" { Some(value) } else { None::<&str> },
+        "accessibleName": name,
+        "tag": null,
+        "stableAttributes": {},
+        "frame": null,
+        "recordingUrl": null,
+        "nearbyText": null
+    })
+}
+
+pub fn website_change_monitor() -> Workflow {
+    base(
+        "Website Change Monitor",
+        vec![
+            node(
+                "schedule",
+                "schedule_trigger",
+                "Every 30 minutes",
+                60.,
+                220.,
+                json!({"scheduleType":"minutes","every":30,"time":"09:00","cron":"*/30 * * * *"}),
+            ),
+            node(
+                "browser",
+                "open_browser",
+                "Open monitored browser",
+                340.,
+                220.,
+                json!({"profileId":"","headed":false,"initialUrl":"","viewport":{"width":1280,"height":800},"defaultTimeoutMs":30000,"closeAutomatically":true,"maximumDurationMs":600000}),
+            ),
+            node(
+                "navigate",
+                "navigate",
+                "Open monitored page",
+                620.,
+                220.,
+                json!({"url":"https://example.com","waitCondition":"dom_ready","timeoutMs":30000}),
+            ),
+            node(
+                "extract",
+                "extract_data",
+                "Extract page heading",
+                900.,
+                220.,
+                json!({"locator":accessible_locator("role", "heading", Some("Example Domain")),"extract":"text","fieldName":"heading","repeated":false,"timeoutMs":30000}),
+            ),
+            node(
+                "condition",
+                "condition",
+                "Has expected heading",
+                1180.,
+                220.,
+                json!({"left":"{{nodes.extract.output.data.heading}}","operator":"contains","right":"Example Domain"}),
+            ),
+            node(
+                "changed",
+                "desktop_notification",
+                "Notify when changed",
+                1460.,
+                330.,
+                json!({"title":"Website content changed","message":"The monitored heading is now: {{nodes.extract.output.data.heading}}"}),
+            ),
+        ],
+        vec![
+            edge("e1", "schedule", "output", "browser"),
+            edge("e2", "browser", "output", "navigate"),
+            edge("e3", "navigate", "output", "extract"),
+            edge("e4", "extract", "output", "condition"),
+            edge("e5", "condition", "false", "changed"),
+        ],
+        "schedule",
+        PermissionSummary {
+            approved_network_domains: vec!["example.com".into()],
+            ..Default::default()
+        },
+    )
+}
+
+pub fn download_daily_report() -> Workflow {
+    base(
+        "Download Daily Report",
+        vec![
+            node(
+                "schedule",
+                "schedule_trigger",
+                "Daily at 09:00",
+                60.,
+                220.,
+                json!({"scheduleType":"daily","every":1,"time":"09:00","cron":"0 9 * * *"}),
+            ),
+            node(
+                "browser",
+                "open_browser",
+                "Open reporting profile",
+                340.,
+                220.,
+                json!({"profileId":"","headed":false,"initialUrl":"","viewport":{"width":1280,"height":800},"defaultTimeoutMs":30000,"closeAutomatically":true,"maximumDurationMs":900000}),
+            ),
+            node(
+                "navigate",
+                "navigate",
+                "Open report portal",
+                620.,
+                220.,
+                json!({"url":"https://example.com","waitCondition":"dom_ready","timeoutMs":30000}),
+            ),
+            node(
+                "fill",
+                "fill_field",
+                "Fill account email",
+                900.,
+                220.,
+                json!({"locator":accessible_locator("label", "Email address", Some("Email address")),"value":"","clearExisting":true,"inputDelayMs":0,"sensitive":false,"timeoutMs":30000}),
+            ),
+            node(
+                "click",
+                "click_element",
+                "Open reports",
+                1180.,
+                220.,
+                json!({"locator":accessible_locator("role", "button", Some("Open reports")),"clickType":"normal","mouseButton":"left","modifiers":[],"waitAfterMs":500,"timeoutMs":30000}),
+            ),
+            node(
+                "download",
+                "download_file",
+                "Download report",
+                1460.,
+                220.,
+                json!({"locator":accessible_locator("role", "button", Some("Download report")),"destinationFolder":"","filename":"daily-report.csv","collisionBehaviour":"rename","maximumBytes":104857600,"timeoutMs":60000}),
+            ),
+            node(
+                "notification",
+                "desktop_notification",
+                "Report downloaded",
+                1740.,
+                220.,
+                json!({"title":"Daily report downloaded","message":"Saved {{nodes.download.output.filename}}"}),
+            ),
+        ],
+        vec![
+            edge("e1", "schedule", "output", "browser"),
+            edge("e2", "browser", "output", "navigate"),
+            edge("e3", "navigate", "output", "fill"),
+            edge("e4", "fill", "output", "click"),
+            edge("e5", "click", "output", "download"),
+            edge("e6", "download", "output", "notification"),
+        ],
+        "schedule",
+        PermissionSummary {
+            approved_network_domains: vec!["example.com".into()],
+            ..Default::default()
+        },
+    )
+}
+
+pub fn email_enquiry_draft() -> Workflow {
+    base(
+        "Email Enquiry Draft",
+        vec![
+            node(
+                "new_email",
+                "gmail_new_email_trigger",
+                "New enquiry email",
+                60.,
+                220.,
+                json!({"credentialId":"","pollIntervalMinutes":5,"sender":"","recipient":"","subjectContains":"enquiry","hasAttachment":false,"label":"","includeHtmlBody":false,"markAsProcessed":"deduplicate"}),
+            ),
+            node(
+                "condition",
+                "condition",
+                "Has a sender",
+                340.,
+                220.,
+                json!({"left":"{{trigger.email.sender}}","operator":"exists","right":null}),
+            ),
+            node(
+                "compose",
+                "set_data",
+                "Prepare acknowledgement",
+                620.,
+                150.,
+                json!({"values":{"recipient":"{{trigger.email.sender}}","subject":"Re: {{trigger.email.subject}}","body":"Thanks for your enquiry. We have received your message and will respond shortly."}}),
+            ),
+            node(
+                "draft",
+                "gmail_create_draft",
+                "Create Gmail draft",
+                900.,
+                150.,
+                json!({"credentialId":"","to":"{{nodes.compose.output.recipient}}","cc":"","bcc":"","subject":"{{nodes.compose.output.subject}}","body":"{{nodes.compose.output.body}}","htmlBody":"","replyToMessage":"{{trigger.email.messageId}}"}),
+            ),
+            node(
+                "notification",
+                "desktop_notification",
+                "Draft ready",
+                1180.,
+                150.,
+                json!({"title":"Email draft ready","message":"A draft reply to {{trigger.email.sender}} is ready in Gmail."}),
+            ),
+        ],
+        vec![
+            edge("e1", "new_email", "output", "condition"),
+            edge("e2", "condition", "true", "compose"),
+            edge("e3", "compose", "output", "draft"),
+            edge("e4", "draft", "output", "notification"),
+        ],
+        "new_email",
+        PermissionSummary::default(),
+    )
+}
+
+pub fn website_status_discord() -> Workflow {
+    base(
+        "Website Status to Discord",
+        vec![
+            node(
+                "schedule",
+                "schedule_trigger",
+                "Every 15 minutes",
+                60.,
+                220.,
+                json!({"scheduleType":"minutes","every":15,"time":"09:00","cron":"*/15 * * * *"}),
+            ),
+            node(
+                "request",
+                "http_request",
+                "Check website",
+                340.,
+                220.,
+                json!({"method":"GET","url":"https://example.com","query":{},"headers":{},"body":null,"timeoutMs":30000,"retryCount":1}),
+            ),
+            node(
+                "condition",
+                "condition",
+                "Status is healthy",
+                620.,
+                220.,
+                json!({"left":"{{nodes.request.output.status}}","operator":"equals","right":200}),
+            ),
+            node(
+                "discord",
+                "discord_webhook",
+                "Alert Discord",
+                900.,
+                330.,
+                json!({"credentialId":"","content":"Website check failed with HTTP {{nodes.request.output.status}}.","username":"Sandbox monitor","avatarUrl":""}),
+            ),
+        ],
+        vec![
+            edge("e1", "schedule", "output", "request"),
+            edge("e2", "request", "output", "condition"),
+            edge("e3", "condition", "false", "discord"),
+        ],
+        "schedule",
+        PermissionSummary {
+            approved_network_domains: vec!["example.com".into()],
+            ..Default::default()
+        },
+    )
+}
+
 pub fn by_key(key: &str, name: Option<String>) -> Workflow {
     match key {
         "website-health" => website_health(),
+        "website-change-monitor" => website_change_monitor(),
+        "download-daily-report" => download_daily_report(),
+        "email-enquiry-draft" => email_enquiry_draft(),
+        "website-status-discord" => website_status_discord(),
         "downloads-organiser" => downloads_organiser(),
         _ => blank(name),
     }

@@ -35,6 +35,9 @@ function sessionOutput(session: ManagedSession) {
     page: { pageId: session.pageId },
     currentUrl: session.page.url(),
     closeAutomatically: session.closeAutomatically,
+    consoleErrors: session.consoleErrors,
+    failedNetworkRequests: session.failedNetworkRequests,
+    tracePath: session.tracePath,
   };
 }
 

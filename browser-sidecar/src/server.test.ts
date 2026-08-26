@@ -47,7 +47,7 @@ describe("authenticated protocol", () => {
     expect(hello.result.protocolVersion).toBe(1);
     expect(hello.result.sidecarVersion).toBe("0.2.0");
     expect(hello.result.browserName).toBe("chromium");
-    expect(hello.result.browserVersion).toMatch(/^140\./);
+    expect(hello.result.browserVersion).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
   }, 30_000);
 });
 

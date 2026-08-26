@@ -31,6 +31,12 @@ export function HistoryView() {
     await loadExecutions();
     selectExecution(run);
   };
+  const retryHeaded = async () => {
+    if (!selectedExecution) return;
+    const run = await api.retryBrowserExecutionHeaded(selectedExecution.id);
+    await loadExecutions();
+    selectExecution(run);
+  };
   const clear = async () => {
     if (confirm("Clear all execution history? This cannot be undone.")) {
       await api.clearExecutionHistory();
@@ -48,6 +54,7 @@ export function HistoryView() {
           workflow={workflow}
           onRetry={retry}
           onRetryNode={retryNode}
+          onRetryHeaded={retryHeaded}
           onClear={clear}
         />
       </main>

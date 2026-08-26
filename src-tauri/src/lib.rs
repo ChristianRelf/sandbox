@@ -1,12 +1,18 @@
 mod browser_sidecar;
 mod commands;
+mod credential_vault;
+mod integrations;
+mod oauth;
 mod runner;
 mod templates;
 
 use async_trait::async_trait;
 use browser_sidecar::BrowserSidecar;
+use credential_vault::{CredentialVault, OsCredentialVault};
 use parking_lot::Mutex;
-use sandbox_engine::{BrowserDiagnostics, Database, Engine, EngineError, HostServices};
+use sandbox_engine::{
+    BrowserDiagnostics, Database, Engine, EngineError, HostServices, PendingApproval,
+};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -24,6 +30,7 @@ pub struct TauriHost {
     database: Database,
     browser_sidecar: BrowserSidecar,
     data_dir: std::path::PathBuf,
+    credential_vault: Arc<dyn CredentialVault>,
 }
 #[async_trait]
 impl HostServices for TauriHost {
@@ -98,6 +105,13 @@ impl HostServices for TauriHost {
         object.entry("diagnosticDirectory").or_insert(Value::String(
             diagnostic_directory.to_string_lossy().to_string(),
         ));
+        if operation == "open_browser" && !object.contains_key("tracePath") {
+            let trace = diagnostic_directory.join(format!("trace-{}.zip", uuid::Uuid::new_v4()));
+            object.insert(
+                "tracePath".into(),
+                Value::String(trace.to_string_lossy().to_string()),
+            );
+        }
         if operation == "screenshot" && !object.contains_key("outputPath") {
             let output =
                 diagnostic_directory.join(format!("screenshot-{}.png", uuid::Uuid::new_v4()));
@@ -127,6 +141,37 @@ impl HostServices for TauriHost {
                 }
             })
     }
+
+    async fn integration_operation(
+        &self,
+        operation: &str,
+        payload: Value,
+    ) -> Result<Value, EngineError> {
+        integrations::execute(
+            operation,
+            payload,
+            &self.database,
+            self.credential_vault.clone(),
+        )
+        .await
+        .map_err(EngineError::Node)
+    }
+    async fn approval_requested(&self, approval: &PendingApproval) -> Result<(), EngineError> {
+        let action = approval
+            .action
+            .get("proposedAction")
+            .and_then(Value::as_str)
+            .unwrap_or("Workflow action");
+        let _ = self
+            .app
+            .notification()
+            .builder()
+            .title("Sandbox approval required")
+            .body(action)
+            .show();
+        let _ = self.app.emit("approval-requested", approval);
+        Ok(())
+    }
 }
 
 pub struct AppState {
@@ -135,6 +180,7 @@ pub struct AppState {
     pub paused: Arc<AtomicBool>,
     pub quitting: Arc<AtomicBool>,
     pub browser_sidecar: BrowserSidecar,
+    pub credential_vault: Arc<dyn CredentialVault>,
     pub data_dir: std::path::PathBuf,
 }
 
@@ -153,6 +199,7 @@ pub fn run() {
                 .map_err(|error| error.to_string())?;
             let browser_sidecar =
                 BrowserSidecar::new(app.handle()).map_err(|error| error.to_string())?;
+            let credential_vault: Arc<dyn CredentialVault> = Arc::new(OsCredentialVault::new());
             let sidecar_for_verify = browser_sidecar.clone();
             tauri::async_runtime::block_on(async {
                 let _ = sidecar_for_verify.verify().await;
@@ -164,6 +211,7 @@ pub fn run() {
                     database,
                     browser_sidecar: browser_sidecar.clone(),
                     data_dir: data_dir.clone(),
+                    credential_vault: credential_vault.clone(),
                 }),
             );
             let state = AppState {
@@ -172,6 +220,7 @@ pub fn run() {
                 paused: Arc::new(AtomicBool::new(false)),
                 quitting: Arc::new(AtomicBool::new(false)),
                 browser_sidecar,
+                credential_vault,
                 data_dir,
             };
             runner::create_tray(app, &state)?;
@@ -202,9 +251,13 @@ pub fn run() {
             commands::save_workflow,
             commands::delete_workflow,
             commands::create_workflow,
+            commands::export_workflow,
+            commands::import_workflow,
             commands::validate_workflow,
             commands::run_workflow,
             commands::retry_failed_node,
+            commands::retry_browser_execution_headed,
+            commands::open_execution_artifact,
             commands::cancel_execution,
             commands::list_executions,
             commands::get_execution,
@@ -223,7 +276,18 @@ pub fn run() {
             commands::start_browser_recording,
             commands::get_browser_recording,
             commands::stop_browser_recording,
-            commands::test_browser_locator
+            commands::test_browser_locator,
+            commands::list_connections,
+            commands::create_connection,
+            commands::rename_connection,
+            commands::reconnect_connection,
+            commands::test_connection,
+            commands::revoke_connection,
+            commands::delete_connection,
+            commands::workflows_using_connection,
+            commands::start_gmail_oauth,
+            commands::list_pending_approvals,
+            commands::resolve_pending_approval
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

@@ -3,8 +3,8 @@ use crate::{
     redaction::{bounded_log, redact_value},
     references::resolve_value,
     validation::{topological_order, validate},
-    Database, EngineError, ExecutionRecord, ExecutionStatus, NodeExecution, NodeStatus, Workflow,
-    WorkflowNode,
+    Database, EngineError, ExecutionRecord, ExecutionStatus, NodeExecution, NodeStatus,
+    PendingApproval, Workflow, WorkflowNode,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -49,6 +49,18 @@ pub trait HostServices: Send + Sync {
         Err(EngineError::Node(
             "The managed browser engine is unavailable on this host.".into(),
         ))
+    }
+    async fn integration_operation(
+        &self,
+        _operation: &str,
+        _payload: Value,
+    ) -> Result<Value, EngineError> {
+        Err(EngineError::Node(
+            "The requested integration is unavailable on this host.".into(),
+        ))
+    }
+    async fn approval_requested(&self, _approval: &PendingApproval) -> Result<(), EngineError> {
+        Ok(())
     }
 }
 
@@ -264,15 +276,24 @@ impl Engine {
             });
             self.publish(&record)?;
             let instant = Instant::now();
-            let timeout_ms = node
-                .configuration
-                .get("timeoutMs")
-                .and_then(Value::as_u64)
-                .unwrap_or(workflow.settings.default_node_timeout_ms)
-                .clamp(100, 600_000);
+            let timeout_ms = if node.node_type == "approval" {
+                node.configuration
+                    .get("expiresInMinutes")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(60)
+                    .clamp(1, 10_080)
+                    .saturating_mul(60_000)
+                    .saturating_add(5_000)
+            } else {
+                node.configuration
+                    .get("timeoutMs")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(workflow.settings.default_node_timeout_ms)
+                    .clamp(100, 600_000)
+            };
             let execution = tokio::select! {
                 _ = cancellation.cancelled() => Err(EngineError::Cancelled),
-                result = tokio::time::timeout(Duration::from_millis(timeout_ms), self.execute_node(node, workflow, &trigger, &outputs, cancellation.clone())) => {
+                result = tokio::time::timeout(Duration::from_millis(timeout_ms), self.execute_node(node, workflow, &record.id, &trigger, &outputs, cancellation.clone())) => {
                     match result { Ok(value) => value, Err(_) => Err(EngineError::Node(format!("{} exceeded its {}-second timeout.", node.name, timeout_ms as f64 / 1000.0))) }
                 }
             };
@@ -310,6 +331,18 @@ impl Engine {
                         node_record.browser_diagnostics = diagnostics.clone();
                     }
                     node_record.logs.push(bounded_log(error.to_string()));
+                }
+            }
+            if let Some(diagnostics) = node_record.browser_diagnostics.clone() {
+                if let Err(error) = self.db.save_browser_diagnostic(
+                    &record.id,
+                    &node.id,
+                    &diagnostics,
+                    Utc::now() + chrono::Duration::days(7),
+                ) {
+                    node_record.logs.push(bounded_log(format!(
+                        "Browser diagnostics could not be indexed for retention: {error}"
+                    )));
                 }
             }
             self.publish(&record)?;
@@ -494,7 +527,7 @@ impl Engine {
             _ = cancellation.cancelled() => Err(EngineError::Cancelled),
             result = tokio::time::timeout(
                 Duration::from_millis(timeout_ms),
-                self.execute_node(node, workflow, &previous.trigger, &outputs, cancellation.clone())
+                self.execute_node(node, workflow, &record.id, &previous.trigger, &outputs, cancellation.clone())
             ) => match result {
                 Ok(value) => value,
                 Err(_) => Err(EngineError::Node(format!(
@@ -538,6 +571,18 @@ impl Engine {
                 record.error = node_record.error.clone();
             }
         }
+        if let Some(diagnostics) = node_record.browser_diagnostics.clone() {
+            if let Err(error) = self.db.save_browser_diagnostic(
+                &record.id,
+                &node.id,
+                &diagnostics,
+                Utc::now() + chrono::Duration::days(7),
+            ) {
+                node_record.logs.push(bounded_log(format!(
+                    "Browser diagnostics could not be indexed for retention: {error}"
+                )));
+            }
+        }
         record.completed_at = Some(completed);
         record.duration_ms = Some((completed - started).num_milliseconds().max(0) as u64);
         self.publish(&record)?;
@@ -556,12 +601,16 @@ impl Engine {
         &self,
         node: &WorkflowNode,
         workflow: &Workflow,
+        execution_id: &str,
         trigger: &Value,
         outputs: &HashMap<String, Value>,
         cancellation: CancellationToken,
     ) -> Result<NodeResult, EngineError> {
         match node.node_type.as_str() {
-            "manual_trigger" | "schedule_trigger" | "file_watch_trigger" => Ok(NodeResult::new(
+            "manual_trigger"
+            | "schedule_trigger"
+            | "file_watch_trigger"
+            | "gmail_new_email_trigger" => Ok(NodeResult::new(
                 json!({"executionTime":Utc::now(),"workflowId":workflow.id,"triggerType":node.node_type,"event":trigger}),
             )),
             "condition" => execute_condition(node, trigger, outputs),
@@ -609,10 +658,119 @@ impl Engine {
             | "upload_file" | "close_browser" => {
                 self.execute_browser(node, workflow, trigger, outputs).await
             }
+            "gmail_get_email" | "gmail_create_draft" | "gmail_send_email" | "gmail_add_label"
+            | "discord_webhook" | "discord_embed" | "slack_webhook" => {
+                self.execute_integration(node, workflow, trigger, outputs)
+                    .await
+            }
+            "approval" => {
+                self.execute_approval(node, workflow, execution_id, trigger, outputs, cancellation)
+                    .await
+            }
             other => Err(EngineError::Node(format!(
                 "Node type '{other}' is not supported by this runner."
             ))),
         }
+    }
+
+    async fn execute_approval(
+        &self,
+        node: &WorkflowNode,
+        workflow: &Workflow,
+        execution_id: &str,
+        trigger: &Value,
+        outputs: &HashMap<String, Value>,
+        cancellation: CancellationToken,
+    ) -> Result<NodeResult, EngineError> {
+        let action = resolve_value(&node.configuration, trigger, outputs)?;
+        let expires_minutes = action
+            .get("expiresInMinutes")
+            .and_then(Value::as_i64)
+            .unwrap_or(60)
+            .clamp(1, 10_080);
+        let approval = PendingApproval {
+            id: Uuid::new_v4().to_string(),
+            execution_id: execution_id.to_string(),
+            workflow_id: workflow.id.clone(),
+            node_id: node.id.clone(),
+            action: redact_value(&action),
+            status: "pending".into(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::minutes(expires_minutes),
+            resolved_at: None,
+        };
+        self.db.save_pending_approval(&approval)?;
+        self.host.approval_requested(&approval).await?;
+        loop {
+            tokio::select! {
+                _ = cancellation.cancelled() => return Err(EngineError::Cancelled),
+                _ = tokio::time::sleep(Duration::from_millis(400)) => {}
+            }
+            let current = self.db.get_pending_approval(&approval.id)?.ok_or_else(|| {
+                EngineError::Node("The pending approval record was removed.".into())
+            })?;
+            match current.status.as_str() {
+                "approved" => return Ok(NodeResult::new(json!({"approved":true,"approvalId":current.id,"resolvedAt":current.resolved_at})).log("The local action was approved.")),
+                "rejected" => return Err(EngineError::Node("The proposed action was rejected locally.".into())),
+                _ if Utc::now() >= current.expires_at => return Err(EngineError::Node("The local approval expired before it was reviewed.".into())),
+                _ => {}
+            }
+        }
+    }
+
+    async fn execute_integration(
+        &self,
+        node: &WorkflowNode,
+        workflow: &Workflow,
+        trigger: &Value,
+        outputs: &HashMap<String, Value>,
+    ) -> Result<NodeResult, EngineError> {
+        let mut payload = resolve_value(&node.configuration, trigger, outputs)?;
+        let mutating = matches!(
+            node.node_type.as_str(),
+            "gmail_create_draft"
+                | "gmail_send_email"
+                | "gmail_add_label"
+                | "discord_webhook"
+                | "discord_embed"
+                | "slack_webhook"
+        );
+        if mutating
+            && !workflow
+                .settings
+                .permissions
+                .external_communication_permitted
+        {
+            return Err(EngineError::Permission(format!(
+                "{} requires external communication approval before it can run.",
+                node.name
+            )));
+        }
+        if node.node_type == "gmail_send_email"
+            && workflow
+                .settings
+                .permissions
+                .communication_approval_revision
+                .is_none()
+        {
+            return Err(EngineError::Permission(
+                "Send Email requires approval for this workflow version and recipient logic."
+                    .into(),
+            ));
+        }
+        let object = payload.as_object_mut().ok_or_else(|| {
+            EngineError::Node("Integration node configuration must be an object.".into())
+        })?;
+        object.insert("workflowId".into(), Value::String(workflow.id.clone()));
+        object.insert("nodeId".into(), Value::String(node.id.clone()));
+        let output = self
+            .host
+            .integration_operation(&node.node_type, payload)
+            .await?;
+        Ok(NodeResult::new(output).log(format!(
+            "{} completed through the secure integration host.",
+            node.name
+        )))
     }
 
     async fn execute_browser(
@@ -931,8 +1089,10 @@ fn browser_diagnostics_from_output(output: &Value) -> Option<crate::BrowserDiagn
         "locatorAttempts": output.get("locatorAttempts").cloned().unwrap_or_else(|| json!([])),
         "successfulLocator": output.get("successfulLocator").cloned().unwrap_or(Value::Null),
         "matchCount": output.get("matchCount").cloned().unwrap_or_else(|| json!(0)),
-        "consoleErrors": [],
-        "failedNetworkRequests": [],
+        "consoleErrors": output.get("consoleErrors").cloned().unwrap_or_else(|| json!([])),
+        "failedNetworkRequests": output.get("failedNetworkRequests").cloned().unwrap_or_else(|| json!([])),
+        "screenshotPath": if output.get("includedInHistory").and_then(Value::as_bool).unwrap_or(false) { output.get("path").cloned().unwrap_or(Value::Null) } else { Value::Null },
+        "tracePath": output.get("tracePath").cloned().unwrap_or(Value::Null),
         "unexpectedNavigation": output.get("navigated").cloned().unwrap_or_else(|| json!(false)),
         "rerecordAvailable": true
     }))

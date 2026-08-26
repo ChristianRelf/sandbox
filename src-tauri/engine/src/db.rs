@@ -66,6 +66,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/003_browser_integrations.sql"))
                 .map_err(storage)?;
         }
+        if version < 4 {
+            connection
+                .execute_batch(include_str!("../migrations/004_integration_polling.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         Ok(())
     }
@@ -86,9 +91,45 @@ impl Database {
                 workflow.settings.permissions.command_execution_permitted = false;
                 workflow.settings.permissions.approval_revision = None;
             }
+            if browser_fingerprint(old) != browser_fingerprint(&workflow) {
+                workflow.settings.permissions.browser_automation_permitted = false;
+            }
+            if communication_fingerprint(old) != communication_fingerprint(&workflow) {
+                workflow
+                    .settings
+                    .permissions
+                    .external_communication_permitted = false;
+                workflow
+                    .settings
+                    .permissions
+                    .communication_approval_revision = None;
+            }
         } else if workflow.nodes.iter().any(|n| n.node_type == "run_command") {
             workflow.settings.permissions.command_execution_permitted = false;
             workflow.settings.permissions.approval_revision = None;
+        }
+        if previous.is_none()
+            && workflow
+                .nodes
+                .iter()
+                .any(|node| is_browser_node(&node.node_type))
+        {
+            workflow.settings.permissions.browser_automation_permitted = false;
+        }
+        if previous.is_none()
+            && workflow
+                .nodes
+                .iter()
+                .any(|node| is_communication_node(&node.node_type))
+        {
+            workflow
+                .settings
+                .permissions
+                .external_communication_permitted = false;
+            workflow
+                .settings
+                .permissions
+                .communication_approval_revision = None;
         }
         workflow.updated_at = Utc::now();
         let trigger_type = workflow
@@ -135,8 +176,7 @@ impl Database {
             )
             .optional()
             .map_err(storage)?;
-        json.map(|value| decode_workflow(&value))
-            .transpose()
+        json.map(|value| decode_workflow(&value)).transpose()
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowSummary>, EngineError> {
@@ -229,9 +269,44 @@ impl Database {
         }
     }
 
-    pub fn clear_old_executions(&self, keep: usize) -> Result<usize, EngineError> {
-        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
-            .execute("DELETE FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?)", [keep as i64]).map_err(storage)
+    pub fn clear_old_executions(
+        &self,
+        keep: usize,
+    ) -> Result<(usize, Vec<String>), EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let paths = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE execution_id IN (SELECT id FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?))",
+                )
+                .map_err(storage)?;
+            let rows = statement
+                .query_map([keep as i64], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?
+                .into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>();
+            rows
+        };
+        let removed = transaction
+            .execute(
+                "DELETE FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?)",
+                [keep as i64],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok((removed, paths))
     }
 
     pub fn recover_unfinished(&self) -> Result<usize, EngineError> {
@@ -406,6 +481,30 @@ impl Database {
         values
     }
 
+    pub fn get_pending_approval(&self, id: &str) -> Result<Option<PendingApproval>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        connection.query_row("SELECT id,execution_id,workflow_id,node_id,action_json,status,created_at,expires_at,resolved_at FROM pending_approvals WHERE id=?", [id], |row| {
+            let action:String=row.get(4)?;let created:String=row.get(6)?;let expires:String=row.get(7)?;let resolved:Option<String>=row.get(8)?;
+            Ok(PendingApproval{id:row.get(0)?,execution_id:row.get(1)?,workflow_id:row.get(2)?,node_id:row.get(3)?,action:serde_json::from_str(&action).unwrap_or_default(),status:row.get(5)?,created_at:parse_time(&created),expires_at:parse_time(&expires),resolved_at:resolved.as_deref().map(parse_time)})
+        }).optional().map_err(storage)
+    }
+
+    pub fn resolve_pending_approval(&self, id: &str, status: &str) -> Result<bool, EngineError> {
+        if !matches!(status, "approved" | "rejected") {
+            return Err(EngineError::Validation(
+                "Approval status must be approved or rejected.".into(),
+            ));
+        }
+        let changed=self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "UPDATE pending_approvals SET status=?,resolved_at=? WHERE id=? AND status='pending' AND expires_at>?",
+            params![status,Utc::now().to_rfc3339(),id,Utc::now().to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(changed == 1)
+    }
+
     pub fn save_recording_draft(&self, draft: &RecordedWorkflowDraft) -> Result<(), EngineError> {
         self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
             "INSERT INTO recorded_workflow_drafts(id,workflow_id,profile_id,status,steps_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET workflow_id=excluded.workflow_id,status=excluded.status,steps_json=excluded.steps_json,updated_at=excluded.updated_at",
@@ -428,6 +527,43 @@ impl Database {
         Ok(())
     }
 
+    pub fn take_expired_browser_artifacts(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let paths = {
+            let mut statement = transaction
+                .prepare("SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE expires_at<=?")
+                .map_err(storage)?;
+            let rows = statement
+                .query_map([now.to_rfc3339()], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?
+                .into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>()
+        };
+        transaction
+            .execute(
+                "DELETE FROM browser_diagnostics WHERE expires_at<=?",
+                [now.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(paths)
+    }
+
     pub fn gmail_message_processed(
         &self,
         workflow_id: &str,
@@ -438,6 +574,36 @@ impl Database {
             params![workflow_id,message_id,Utc::now().to_rfc3339()]
         ).map_err(storage)?;
         Ok(changed == 0)
+    }
+
+    pub fn get_last_integration_poll(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<DateTime<Utc>>, EngineError> {
+        let value: Option<String> = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT last_polled_at FROM integration_poll_state WHERE workflow_id=?",
+                [workflow_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        Ok(value.as_deref().map(parse_time))
+    }
+
+    pub fn set_last_integration_poll(
+        &self,
+        workflow_id: &str,
+        value: DateTime<Utc>,
+    ) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO integration_poll_state(workflow_id,last_polled_at) VALUES(?,?) ON CONFLICT(workflow_id) DO UPDATE SET last_polled_at=excluded.last_polled_at",
+            params![workflow_id,value.to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(())
     }
 
     pub fn workflows_using_reference(&self, key: &str) -> Result<Vec<String>, EngineError> {
@@ -462,6 +628,56 @@ fn dangerous_fingerprint(workflow: &Workflow) -> String {
             .collect::<Vec<_>>(),
     )
     .unwrap_or_default()
+}
+fn browser_fingerprint(workflow: &Workflow) -> String {
+    serde_json::to_string(
+        &workflow
+            .nodes
+            .iter()
+            .filter(|node| is_browser_node(&node.node_type))
+            .map(|node| (&node.id, &node.node_type, &node.configuration))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_default()
+}
+fn communication_fingerprint(workflow: &Workflow) -> String {
+    serde_json::to_string(
+        &workflow
+            .nodes
+            .iter()
+            .filter(|node| is_communication_node(&node.node_type))
+            .map(|node| (&node.id, &node.node_type, &node.configuration))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_default()
+}
+fn is_browser_node(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "open_browser"
+            | "navigate"
+            | "click_element"
+            | "fill_field"
+            | "select_option"
+            | "press_key"
+            | "wait_for"
+            | "extract_data"
+            | "screenshot"
+            | "download_file"
+            | "upload_file"
+            | "close_browser"
+    )
+}
+fn is_communication_node(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "gmail_create_draft"
+            | "gmail_send_email"
+            | "gmail_add_label"
+            | "discord_webhook"
+            | "discord_embed"
+            | "slack_webhook"
+    )
 }
 fn storage(error: impl std::fmt::Display) -> EngineError {
     EngineError::Storage(error.to_string())
@@ -584,7 +800,9 @@ fn migrate_saved_workflows(connection: &Connection) -> Result<(), EngineError> {
             .prepare("SELECT id, definition_json FROM workflows WHERE schema_version < ?")
             .map_err(storage)?;
         let values = statement
-            .query_map([crate::model::CURRENT_SCHEMA_VERSION], |row| Ok((row.get(0)?, row.get(1)?)))
+            .query_map([crate::model::CURRENT_SCHEMA_VERSION], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
             .map_err(storage)?;
         values.collect::<Result<_, _>>().map_err(storage)?
     };
@@ -593,7 +811,11 @@ fn migrate_saved_workflows(connection: &Connection) -> Result<(), EngineError> {
         connection
             .execute(
                 "UPDATE workflows SET schema_version=?, definition_json=? WHERE id=?",
-                params![workflow.schema_version, serde_json::to_string(&workflow).map_err(storage)?, id],
+                params![
+                    workflow.schema_version,
+                    serde_json::to_string(&workflow).map_err(storage)?,
+                    id
+                ],
             )
             .map_err(storage)?;
     }
@@ -635,7 +857,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 3);
+            assert_eq!(db.schema_version().unwrap(), 4);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -671,5 +893,87 @@ mod tests {
                 .unwrap()
                 .recovered_after_crash
         );
+    }
+
+    #[test]
+    fn expires_browser_diagnostics_and_returns_owned_artifacts() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        let now = Utc::now();
+        let record = ExecutionRecord {
+            id: "browser-run".into(),
+            workflow_id: "w".into(),
+            workflow_version: 2,
+            trigger: json!({}),
+            status: ExecutionStatus::Failed,
+            started_at: now,
+            completed_at: Some(now),
+            duration_ms: Some(1),
+            node_executions: vec![],
+            error: None,
+            skip_reason: None,
+            recovered_after_crash: false,
+        };
+        db.save_execution(&record).unwrap();
+        let diagnostic = BrowserDiagnostics {
+            screenshot_path: Some("C:/app/artifacts/failure.png".into()),
+            trace_path: Some("C:/app/artifacts/trace.zip".into()),
+            ..BrowserDiagnostics::default()
+        };
+        db.save_browser_diagnostic(
+            "browser-run",
+            "browser",
+            &diagnostic,
+            now - chrono::Duration::seconds(1),
+        )
+        .unwrap();
+        let paths = db.take_expired_browser_artifacts(now).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().any(|path| path.ends_with("failure.png")));
+        assert!(db.take_expired_browser_artifacts(now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clearing_history_returns_artifacts_for_removed_executions_only() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        let now = Utc::now();
+        for (id, started_at) in [
+            ("old-browser-run", now - chrono::Duration::minutes(1)),
+            ("latest-browser-run", now),
+        ] {
+            db.save_execution(&ExecutionRecord {
+                id: id.into(),
+                workflow_id: "w".into(),
+                workflow_version: 2,
+                trigger: json!({}),
+                status: ExecutionStatus::Successful,
+                started_at,
+                completed_at: Some(started_at),
+                duration_ms: Some(1),
+                node_executions: vec![],
+                error: None,
+                skip_reason: None,
+                recovered_after_crash: false,
+            })
+            .unwrap();
+            db.save_browser_diagnostic(
+                id,
+                "browser",
+                &BrowserDiagnostics {
+                    screenshot_path: Some(format!("C:/app/artifacts/{id}.png")),
+                    ..BrowserDiagnostics::default()
+                },
+                now + chrono::Duration::days(1),
+            )
+            .unwrap();
+        }
+
+        let (removed, paths) = db.clear_old_executions(1).unwrap();
+
+        assert_eq!(removed, 1);
+        assert_eq!(paths, ["C:/app/artifacts/old-browser-run.png"]);
+        assert!(db.get_execution("old-browser-run").unwrap().is_none());
+        assert!(db.get_execution("latest-browser-run").unwrap().is_some());
     }
 }

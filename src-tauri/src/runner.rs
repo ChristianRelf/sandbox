@@ -12,16 +12,17 @@ use std::{
 use tauri::{
     menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    App, AppHandle, Manager,
+    App, AppHandle, Emitter, Manager,
 };
 use tokio_util::sync::CancellationToken;
 
 pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
     let open = MenuItemBuilder::with_id("open", "Open Sandbox").build(app)?;
+    let approvals = MenuItemBuilder::with_id("approvals", "Pending Approvals").build(app)?;
     let pause = CheckMenuItemBuilder::with_id("pause", "Pause Automations").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&open, &pause, &quit])
+        .items(&[&open, &approvals, &pause, &quit])
         .build()?;
     let paused = state.paused.clone();
     let quitting = state.quitting.clone();
@@ -33,6 +34,13 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
+                }
+            }
+            "approvals" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = app.emit("navigate", "approvals");
                 }
             }
             "pause" => {
@@ -60,6 +68,26 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
 }
 
 pub fn start_background_services(app: AppHandle, state: &AppState) {
+    let retention_engine = state.engine.clone();
+    let artifact_root = state.data_dir.join("artifacts");
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
+        loop {
+            interval.tick().await;
+            let Ok(paths) = retention_engine
+                .database()
+                .take_expired_browser_artifacts(Utc::now())
+            else {
+                continue;
+            };
+            for path in paths {
+                let candidate = std::path::PathBuf::from(path);
+                if candidate.is_file() && candidate.starts_with(&artifact_root) {
+                    let _ = tokio::fs::remove_file(candidate).await;
+                }
+            }
+        }
+    });
     let engine = state.engine.clone();
     let paused = state.paused.clone();
     let cancellations = state.cancellations.clone();
@@ -77,6 +105,72 @@ pub fn start_background_services(app: AppHandle, state: &AppState) {
                     workflow,
                     json!({"type":"schedule","scheduledAt":scheduled_at}),
                 );
+            }
+        }
+    });
+    let gmail_engine = state.engine.clone();
+    let gmail_paused = state.paused.clone();
+    let gmail_cancellations = state.cancellations.clone();
+    let gmail_vault = state.credential_vault.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            if gmail_paused.load(Ordering::SeqCst) {
+                continue;
+            }
+            let Ok(workflows) = gmail_engine.database().list_workflows() else {
+                continue;
+            };
+            for summary in workflows {
+                let workflow = summary.workflow;
+                if !workflow.enabled
+                    || !workflow.settings.permissions.background_execution_permitted
+                {
+                    continue;
+                }
+                let Some(trigger) = workflow.nodes.iter().find(|node| {
+                    node.id == workflow.trigger_node_id
+                        && node.node_type == "gmail_new_email_trigger"
+                }) else {
+                    continue;
+                };
+                let poll_minutes = trigger
+                    .configuration
+                    .get("pollIntervalMinutes")
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or(5)
+                    .clamp(1, 60);
+                let last = gmail_engine
+                    .database()
+                    .get_last_integration_poll(&workflow.id)
+                    .ok()
+                    .flatten();
+                if last.is_some_and(|value| {
+                    Utc::now() - value < chrono::Duration::minutes(poll_minutes)
+                }) {
+                    continue;
+                }
+                let _ = gmail_engine
+                    .database()
+                    .set_last_integration_poll(&workflow.id, Utc::now());
+                if let Ok(messages) = crate::integrations::poll_gmail(
+                    &workflow.id,
+                    &trigger.configuration,
+                    gmail_engine.database(),
+                    gmail_vault.clone(),
+                )
+                .await
+                {
+                    for message in messages {
+                        spawn_run(
+                            gmail_engine.clone(),
+                            gmail_cancellations.clone(),
+                            workflow.clone(),
+                            json!({"type":"gmail_new_email","email":message}),
+                        );
+                    }
+                }
             }
         }
     });
