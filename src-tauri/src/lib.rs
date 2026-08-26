@@ -221,6 +221,7 @@ pub fn run() {
             commands::clear_browser_profile_data,
             commands::open_browser_profile,
             commands::start_browser_recording,
+            commands::get_browser_recording,
             commands::stop_browser_recording,
             commands::test_browser_locator
         ])

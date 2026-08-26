@@ -27,6 +27,7 @@ export const api={
   deleteBrowserProfile:(id:string)=>tauri?invoke<void>("delete_browser_profile",{id}):previewApi.deleteBrowserProfile(id),
   openBrowserProfile:(id:string)=>invoke<Record<string,unknown>>("open_browser_profile",{id}),
   startBrowserRecording:(profileId:string,initialUrl?:string)=>invoke<{browserSession:{sessionId:string}}>("start_browser_recording",{profileId,initialUrl}),
+  getBrowserRecording:(sessionId:string)=>invoke<{steps:RecordedStep[]}>("get_browser_recording",{sessionId}),
   stopBrowserRecording:(sessionId:string)=>invoke<{steps:RecordedStep[]}>("stop_browser_recording",{sessionId}),
   testBrowserLocator:(sessionId:string,locator:StructuredLocator)=>invoke<Record<string,unknown>>("test_browser_locator",{sessionId,locator}),
   isDesktop:tauri,

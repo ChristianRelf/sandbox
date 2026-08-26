@@ -154,6 +154,7 @@ async function dispatch(operation: string, payload: Record<string, unknown>): Pr
       await startRecording(session);
       return { ...sessionOutput(session), recording: true };
     }
+    case "recorder_snapshot": return { ...sessionOutput(session), recording: true, steps: deduplicateRecorderEvents(recordings.get(session.sessionId) ?? []) };
     case "recorder_stop": {
       const steps = deduplicateRecorderEvents(recordings.get(session.sessionId) ?? []);
       recordings.delete(session.sessionId);

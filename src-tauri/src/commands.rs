@@ -406,6 +406,18 @@ pub async fn stop_browser_recording(
 }
 
 #[tauri::command]
+pub async fn get_browser_recording(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    state
+        .browser_sidecar
+        .request("recorder_snapshot", json!({"sessionId":session_id}))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
 pub async fn test_browser_locator(
     session_id: String,
     locator: StructuredLocator,
