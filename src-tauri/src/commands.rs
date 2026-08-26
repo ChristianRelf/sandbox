@@ -78,6 +78,31 @@ pub async fn run_workflow(
     result
 }
 #[tauri::command]
+pub async fn retry_failed_node(
+    execution_id: String,
+    node_id: String,
+    state: State<'_, AppState>,
+) -> Result<ExecutionRecord> {
+    let execution = state
+        .engine
+        .database()
+        .get_execution(&execution_id)
+        .map_err(err)?
+        .ok_or_else(|| "Execution no longer exists.".to_string())?;
+    let token = CancellationToken::new();
+    state
+        .cancellations
+        .lock()
+        .insert(execution.workflow_id.clone(), token.clone());
+    let result = state
+        .engine
+        .retry_failed_node(&execution_id, &node_id, token)
+        .await
+        .map_err(err);
+    state.cancellations.lock().remove(&execution.workflow_id);
+    result
+}
+#[tauri::command]
 pub fn cancel_execution(execution_id: String, state: State<'_, AppState>) -> Result<()> {
     let execution = state
         .engine

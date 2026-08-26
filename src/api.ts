@@ -10,6 +10,7 @@ export const api={
   deleteWorkflow:(id:string)=>tauri?invoke<void>("delete_workflow",{id}):previewApi.deleteWorkflow(id),
   validateWorkflow:(workflow:Workflow)=>tauri?invoke<ValidationIssue[]>("validate_workflow",{workflow}):previewApi.validateWorkflow(workflow),
   runWorkflow:(id:string)=>tauri?invoke<ExecutionRecord>("run_workflow",{id,trigger:{type:"manual"}}):previewApi.runWorkflow(id),
+  retryFailedNode:(executionId:string,nodeId:string)=>tauri?invoke<ExecutionRecord>("retry_failed_node",{executionId,nodeId}):previewApi.retryFailedNode(executionId,nodeId),
   cancelExecution:(executionId:string)=>tauri?invoke<void>("cancel_execution",{executionId}):previewApi.cancelExecution(),
   listExecutions:(workflowId?:string,limit=100)=>tauri?invoke<ExecutionRecord[]>("list_executions",{workflowId,limit}):previewApi.listExecutions(workflowId),
   getExecution:(id:string)=>tauri?invoke<ExecutionRecord|undefined>("get_execution",{id}):previewApi.getExecution(id),

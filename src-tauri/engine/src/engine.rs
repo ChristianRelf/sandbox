@@ -327,6 +327,180 @@ impl Engine {
         Ok(record)
     }
 
+    pub async fn retry_failed_node(
+        &self,
+        execution_id: &str,
+        node_id: &str,
+        cancellation: CancellationToken,
+    ) -> Result<ExecutionRecord, EngineError> {
+        let previous = self
+            .db
+            .get_execution(execution_id)?
+            .ok_or_else(|| EngineError::Node("Execution no longer exists.".into()))?;
+        let workflow = self
+            .db
+            .get_workflow(&previous.workflow_id)?
+            .ok_or_else(|| EngineError::Node("Workflow no longer exists.".into()))?;
+        {
+            let mut active = self.active.lock().await;
+            if !active.insert(workflow.id.clone()) {
+                return Err(EngineError::Node(
+                    "This workflow already has an active execution.".into(),
+                ));
+            }
+        }
+        let result = self
+            .retry_failed_node_inner(&workflow, &previous, node_id, cancellation)
+            .await;
+        self.active.lock().await.remove(&workflow.id);
+        result
+    }
+
+    async fn retry_failed_node_inner(
+        &self,
+        workflow: &Workflow,
+        previous: &ExecutionRecord,
+        node_id: &str,
+        cancellation: CancellationToken,
+    ) -> Result<ExecutionRecord, EngineError> {
+        let node = workflow
+            .nodes
+            .iter()
+            .find(|node| node.id == node_id)
+            .ok_or_else(|| EngineError::Node("The failed node no longer exists.".into()))?;
+        let previous_node = previous
+            .node_executions
+            .iter()
+            .find(|execution| execution.node_id == node_id)
+            .ok_or_else(|| EngineError::Node("The node was not part of this execution.".into()))?;
+        if previous_node.status != NodeStatus::Failed {
+            return Err(EngineError::Node(
+                "Only a failed node can be retried independently.".into(),
+            ));
+        }
+
+        let outputs: HashMap<String, Value> = previous
+            .node_executions
+            .iter()
+            .filter(|execution| execution.status == NodeStatus::Successful)
+            .map(|execution| (execution.node_id.clone(), execution.output.clone()))
+            .collect();
+        let dependencies: Map<String, Value> = workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.target_node_id == node_id)
+            .filter_map(|edge| {
+                outputs
+                    .get(&edge.source_node_id)
+                    .map(|value| (edge.source_node_id.clone(), value.clone()))
+            })
+            .collect();
+        let required_dependencies = workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.target_node_id == node_id)
+            .count();
+        if node_id != workflow.trigger_node_id && dependencies.len() != required_dependencies {
+            return Err(EngineError::Node(
+                "The failed node cannot be retried because an upstream dependency did not complete successfully. Retry the entire workflow instead.".into(),
+            ));
+        }
+
+        let started = Utc::now();
+        let input = redact_value(
+            &json!({"dependencies": dependencies, "trigger": previous.trigger.clone()}),
+        );
+        let mut record = ExecutionRecord {
+            id: Uuid::new_v4().to_string(),
+            workflow_id: workflow.id.clone(),
+            workflow_version: workflow.schema_version,
+            trigger: previous.trigger.clone(),
+            status: ExecutionStatus::Running,
+            started_at: started,
+            completed_at: None,
+            duration_ms: None,
+            node_executions: vec![NodeExecution {
+                node_id: node.id.clone(),
+                status: NodeStatus::Running,
+                started_at: Some(started),
+                completed_at: None,
+                duration_ms: None,
+                input,
+                output: Value::Null,
+                logs: vec![bounded_log(format!(
+                    "Retrying failed node from execution {}.",
+                    previous.id
+                ))],
+                retry_count: previous_node.retry_count.saturating_add(1),
+                error: None,
+                skip_reason: None,
+                branch_followed: None,
+            }],
+            error: None,
+            skip_reason: None,
+            recovered_after_crash: false,
+        };
+        self.publish(&record)?;
+        let _ = self.events.send(EngineEvent::NodeStarted {
+            execution_id: record.id.clone(),
+            node_id: node.id.clone(),
+        });
+
+        let instant = Instant::now();
+        let timeout_ms = node
+            .configuration
+            .get("timeoutMs")
+            .and_then(Value::as_u64)
+            .unwrap_or(workflow.settings.default_node_timeout_ms)
+            .clamp(100, 600_000);
+        let execution = tokio::select! {
+            _ = cancellation.cancelled() => Err(EngineError::Cancelled),
+            result = tokio::time::timeout(
+                Duration::from_millis(timeout_ms),
+                self.execute_node(node, workflow, &previous.trigger, &outputs, cancellation.clone())
+            ) => match result {
+                Ok(value) => value,
+                Err(_) => Err(EngineError::Node(format!(
+                    "{} exceeded its {}-second timeout.",
+                    node.name,
+                    timeout_ms as f64 / 1000.0
+                ))),
+            }
+        };
+        let completed = Utc::now();
+        let node_record = &mut record.node_executions[0];
+        node_record.completed_at = Some(completed);
+        node_record.duration_ms = Some(instant.elapsed().as_millis() as u64);
+        match execution {
+            Ok(result) => {
+                node_record.status = NodeStatus::Successful;
+                node_record.output = redact_value(&result.output);
+                node_record.logs.extend(result.logs.into_iter().map(bounded_log).take(99));
+                node_record.branch_followed = result.branch;
+                record.status = ExecutionStatus::Successful;
+            }
+            Err(error) => {
+                node_record.status = if matches!(error, EngineError::Cancelled) {
+                    NodeStatus::Cancelled
+                } else {
+                    NodeStatus::Failed
+                };
+                node_record.error = Some(error.execution_error());
+                node_record.logs.push(bounded_log(error.to_string()));
+                record.status = if matches!(error, EngineError::Cancelled) {
+                    ExecutionStatus::Cancelled
+                } else {
+                    ExecutionStatus::Failed
+                };
+                record.error = node_record.error.clone();
+            }
+        }
+        record.completed_at = Some(completed);
+        record.duration_ms = Some((completed - started).num_milliseconds().max(0) as u64);
+        self.publish(&record)?;
+        Ok(record)
+    }
+
     fn publish(&self, record: &ExecutionRecord) -> Result<(), EngineError> {
         self.db.save_execution(record)?;
         let _ = self.events.send(EngineEvent::ExecutionUpdated {

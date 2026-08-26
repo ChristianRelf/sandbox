@@ -98,6 +98,7 @@ pub fn run() {
             commands::create_workflow,
             commands::validate_workflow,
             commands::run_workflow,
+            commands::retry_failed_node,
             commands::cancel_execution,
             commands::list_executions,
             commands::get_execution,
