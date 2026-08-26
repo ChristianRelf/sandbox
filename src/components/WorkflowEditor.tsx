@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, type Connection, type Edge, type Node, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, type Connection, type Edge, type Node, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
 import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Command, History, LayoutGrid, Play, Save, ShieldCheck, TestTube2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
@@ -43,8 +43,10 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
       },
     },
   }));
+  const [displayNodes,setDisplayNodes,onDisplayNodesChange]=useNodesState<Node<WorkflowNodeData>>(flowNodes);
+  useEffect(()=>{setDisplayNodes(current=>flowNodes.map(node=>{const existing=current.find(item=>item.id===node.id);return existing?{...existing,...node}:node}))},[workflow.nodes,selectedNodeId,runningNode,run,issues,setDisplayNodes]);
   const flowEdges:Edge[]=workflow.edges.map(edge=>({id:edge.id,source:edge.sourceNodeId,target:edge.targetNodeId,sourceHandle:edge.sourceHandle,targetHandle:edge.targetHandle,type:"smoothstep",animated:Boolean(runningNode&&edge.sourceNodeId===runningNode),className:run?.nodeExecutions.find(n=>n.nodeId===edge.sourceNodeId)?.status==="successful"?"edge-success":""}));
-  const onNodesChange=(changes:NodeChange[])=>{let changed=false;const nodes=workflow.nodes.map(node=>{const change=changes.find(c=>"id" in c&&c.id===node.id);if(change?.type==="position"&&change.position){changed=true;return{...node,position:change.position}}if(change?.type==="select"&&change.selected)setSelectedNodeId(node.id);return node});if(changed)setWorkflow({...workflow,nodes})};
+  const onNodesChange=(changes:NodeChange<Node<WorkflowNodeData>>[])=>{onDisplayNodesChange(changes);let changed=false;const nodes=workflow.nodes.map(node=>{const change=changes.find(c=>"id" in c&&c.id===node.id);if(change?.type==="position"&&change.position){changed=true;return{...node,position:change.position}}if(change?.type==="select"&&change.selected)setSelectedNodeId(node.id);return node});if(changed)setWorkflow({...workflow,nodes})};
   const onConnect=(connection:Connection)=>{if(!connection.source||!connection.target||connection.source===connection.target)return;const target=workflow.nodes.find(n=>n.id===connection.target);if(target&&isTrigger(target.type))return;const exists=workflow.edges.some(e=>e.sourceNodeId===connection.source&&e.targetNodeId===connection.target&&e.sourceHandle===(connection.sourceHandle??"output"));if(exists)return;commit({...workflow,edges:[...workflow.edges,{id:`edge_${crypto.randomUUID().slice(0,8)}`,sourceNodeId:connection.source,sourceHandle:connection.sourceHandle??"output",targetNodeId:connection.target,targetHandle:connection.targetHandle??"input"}]})};
   return <main className="editor">
     <header className="editor-topbar">
@@ -61,7 +63,7 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
     </header>
     <div className={`editor-body ${selectedNode?"with-inspector":""}`}>
       <div className="canvas-wrap" onDoubleClick={event=>{if(!(event.target as HTMLElement).classList.contains("react-flow__pane"))return;const position=instance?.screenToFlowPosition({x:event.clientX,y:event.clientY})??{x:360,y:220};setPicker({open:true,position});}}>
-        <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} onInit={setInstance} onNodesChange={onNodesChange} onNodeClick={(_,node)=>setSelectedNodeId(node.id)} onPaneClick={()=>setSelectedNodeId(undefined)} onConnect={onConnect} isValidConnection={connection=>{const target=workflow.nodes.find(n=>n.id===connection.target);return connection.source!==connection.target&&!Boolean(target&&isTrigger(target.type));}} snapToGrid snapGrid={[20,20]} minZoom={0.45} maxZoom={1.8} defaultViewport={{x:80,y:80,zoom:.9}} deleteKeyCode={null} multiSelectionKeyCode="Shift" fitView>
+        <ReactFlow<Node<WorkflowNodeData>,Edge> nodes={displayNodes} edges={flowEdges} nodeTypes={nodeTypes} onInit={setInstance} onNodesChange={onNodesChange} onNodeClick={(_,node)=>setSelectedNodeId(node.id)} onPaneClick={()=>setSelectedNodeId(undefined)} onConnect={onConnect} isValidConnection={connection=>{const target=workflow.nodes.find(n=>n.id===connection.target);return connection.source!==connection.target&&!Boolean(target&&isTrigger(target.type));}} snapToGrid snapGrid={[20,20]} minZoom={0.45} maxZoom={1.8} defaultViewport={{x:80,y:80,zoom:.9}} deleteKeyCode={null} multiSelectionKeyCode="Shift" fitView>
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#292a2e"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor="#24252a" maskColor="rgba(8,8,9,.72)"/>
         </ReactFlow>
         <div className="canvas-hint"><Command size={13}/>Double-click canvas or press A to add a node</div>

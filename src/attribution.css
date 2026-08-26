@@ -1,0 +1,7 @@
+.react-flow__attribution {
+  display: block !important;
+  opacity: 0.45;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 8px !important;
+}
