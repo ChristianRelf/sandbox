@@ -172,7 +172,7 @@ pub struct StorageRequirements {
     pub temporary_bytes: u64,
     #[serde(default)]
     pub persistent_bytes: u64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retention_days: Option<u32>,
     #[serde(default)]
     pub isolate_by_major_version: bool,
@@ -213,7 +213,7 @@ pub struct Manifest {
     pub version: Version,
     pub publisher_id: String,
     pub minimum_host_version: VersionReq,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximum_host_version: Option<VersionReq>,
     pub homepage: String,
     pub documentation: String,
@@ -237,7 +237,7 @@ pub struct Manifest {
     pub package_integrity: String,
     pub signature: Signature,
     pub pricing: Pricing,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub privacy_policy: Option<String>,
 }
 
