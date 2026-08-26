@@ -1213,4 +1213,52 @@ mod tests {
         assert_eq!(run.status, ExecutionStatus::Failed);
         assert!(run.error.unwrap().message.contains("timeout"));
     }
+
+    #[tokio::test]
+    async fn retries_only_the_failed_node_with_recorded_inputs() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.txt");
+        let destination = directory.path().join("moved");
+        std::fs::write(&source, "retry me").unwrap();
+        std::fs::create_dir(&destination).unwrap();
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let mut wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "move",
+                    "move_file",
+                    json!({
+                        "source": source,
+                        "destinationFolder": destination,
+                        "overwrite": false
+                    }),
+                ),
+            ],
+            vec![edge("a", "trigger", "output", "move")],
+        );
+        wf.settings.permissions.approved_folders.clear();
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let first = engine
+            .run(
+                wf.clone(),
+                json!({"type":"manual"}),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status, ExecutionStatus::Failed);
+
+        wf.settings.permissions.approved_folders =
+            vec![directory.path().to_string_lossy().to_string()];
+        engine.database().save_workflow(wf).unwrap();
+        let retried = engine
+            .retry_failed_node(&first.id, "move", CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(retried.status, ExecutionStatus::Successful);
+        assert_eq!(retried.node_executions.len(), 1);
+        assert_eq!(retried.node_executions[0].retry_count, 1);
+        assert!(destination.join("source.txt").exists());
+    }
 }
