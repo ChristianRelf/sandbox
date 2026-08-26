@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sandbox",
+  "version": "0.1.0",
+  "identifier": "com.sandbox.automation",
+  "build": {
+    "beforeDevCommand": "npm.cmd run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm.cmd run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "Sandbox",
+      "width": 1440,
+      "height": 900,
+      "minWidth": 1040,
+      "minHeight": 680,
+      "decorations": true,
+      "transparent": false,
+      "backgroundColor": "#0a0a0b"
+    }],
+    "security": { "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https: http:; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:" }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "shortDescription": "Local-first visual workflow automation",
+    "category": "DeveloperTool",
+    "windows": { "wix": { "language": "en-US" }, "nsis": { "displayLanguageSelector": false } }
+  }
+}

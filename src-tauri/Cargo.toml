@@ -1,0 +1,33 @@
+[package]
+name = "sandbox-app"
+version = "0.1.0"
+description = "Local-first visual workflow automation"
+authors = ["Sandbox"]
+edition = "2021"
+
+[lib]
+name = "sandbox_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+sandbox-engine = { path = "engine" }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+async-trait = "0.1"
+notify = "8"
+globset = "0.4"
+
+[workspace]
+members = ["engine"]

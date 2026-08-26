@@ -1,0 +1,9 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+screenshots/
