@@ -475,7 +475,9 @@ impl Engine {
             Ok(result) => {
                 node_record.status = NodeStatus::Successful;
                 node_record.output = redact_value(&result.output);
-                node_record.logs.extend(result.logs.into_iter().map(bounded_log).take(99));
+                node_record
+                    .logs
+                    .extend(result.logs.into_iter().map(bounded_log).take(99));
                 node_record.branch_followed = result.branch;
                 record.status = ExecutionStatus::Successful;
             }
