@@ -66,7 +66,20 @@ export const workflowRevisionSchema = z.object({
   editorDeviceId: idSchema,
   updatedAt: z.string().datetime(),
   syncState: z.enum(["local", "synced", "conflicted", "deleted"]),
-  encryptedPayload: z.string().min(1)
+  encryption: z.object({ algorithm: z.literal("aes-256-gcm"), keyVersion: z.number().int().positive() }),
+  encryptedPayload: z.string().base64().min(20).max(3_000_000),
+  payloadKeyEnvelope: z.string().base64().min(20).max(1_024),
+  searchableMetadata: z.object({
+    name: z.string().trim().min(1).max(200),
+    folderId: idSchema.nullable(),
+    requiredPlugins: z.array(z.object({
+      pluginId: z.string().min(3).max(200),
+      version: z.string().min(1).max(50),
+      packageIntegrity: z.string().regex(/^sha256:[a-f0-9]{64}$/)
+    })).max(100),
+    permissionRequirements: z.array(z.string().min(1).max(200)).max(200),
+    runnerPolicy: z.record(z.string(), z.unknown())
+  })
 });
 export type WorkflowRevision = z.infer<typeof workflowRevisionSchema>;
 

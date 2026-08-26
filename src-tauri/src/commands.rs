@@ -1,6 +1,7 @@
 use crate::{
     account_auth, oauth,
     plugin_manager::{PackageTrustMetadata, PluginPackageInspection},
+    sync_crypto::EncryptedWorkflowRevision,
     templates, AppState,
 };
 use chrono::{DateTime, Utc};
@@ -123,6 +124,64 @@ pub fn set_plugin_enabled(
             enabled,
         )
         .map_err(err)
+}
+
+#[tauri::command]
+pub fn prepare_workflow_sync(
+    id: String,
+    parent_revision_id: Option<String>,
+    editor_device_id: String,
+    state: State<'_, AppState>,
+) -> Result<EncryptedWorkflowRevision> {
+    if !state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)
+        .map_err(err)?
+    {
+        return Err("Sign in before enabling workflow sync. Local workflows remain available without an account.".into());
+    }
+    let workflow = state
+        .engine
+        .database()
+        .get_workflow(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    let mut definition = serde_json::to_value(&workflow).map_err(err)?;
+    let mut required_connections = Vec::new();
+    let mut required_profiles = Vec::new();
+    let mut local_path_fields = Vec::new();
+    sanitize_export_definition(
+        &mut definition,
+        &state,
+        &mut required_connections,
+        &mut required_profiles,
+        &mut local_path_fields,
+    )?;
+    if contains_secret_material(&definition) {
+        return Err(
+            "Workflow sync stopped because the definition contains secret-shaped material.".into(),
+        );
+    }
+    let sanitized: Workflow = serde_json::from_value(definition).map_err(err)?;
+    state
+        .sync_crypto
+        .encrypt(&sanitized, parent_revision_id, editor_device_id)
+}
+
+#[tauri::command]
+pub fn import_synced_revision_copy(
+    revision: EncryptedWorkflowRevision,
+    state: State<'_, AppState>,
+) -> Result<Workflow> {
+    let mut workflow = state.sync_crypto.decrypt(&revision)?;
+    workflow.id = Uuid::new_v4().to_string();
+    workflow.name = format!("{} (synced conflict copy)", workflow.name);
+    workflow.enabled = false;
+    workflow.owner = Default::default();
+    workflow.settings.permissions = PermissionSummary::default();
+    workflow.created_at = Utc::now();
+    workflow.updated_at = Utc::now();
+    state.engine.database().save_workflow(workflow).map_err(err)
 }
 
 #[tauri::command]

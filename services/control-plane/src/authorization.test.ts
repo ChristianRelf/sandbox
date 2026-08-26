@@ -16,7 +16,8 @@ const session: AuthenticatedSession = {
 function repository(permissionByWorkspace: Record<string, Permission[]>): ControlPlaneRepository {
   return {
     permissions: vi.fn(async (_accountId, workspaceId) => new Set(permissionByWorkspace[workspaceId] ?? [])),
-    createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), appendWorkflowRevision: vi.fn(),
+    createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), createSyncedWorkflow: vi.fn(), appendWorkflowRevision: vi.fn(),
+    listWorkflowRevisions: vi.fn(), getWorkflowRevision: vi.fn(), resolveSyncConflict: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
 }

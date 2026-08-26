@@ -6,6 +6,7 @@ mod integrations;
 mod oauth;
 mod plugin_manager;
 mod runner;
+mod sync_crypto;
 mod templates;
 
 use async_trait::async_trait;
@@ -185,6 +186,7 @@ pub struct AppState {
     pub credential_vault: Arc<dyn CredentialVault>,
     pub data_dir: std::path::PathBuf,
     pub plugin_manager: plugin_manager::PluginManager,
+    pub sync_crypto: sync_crypto::WorkflowSyncCrypto,
 }
 
 pub fn run() {
@@ -208,6 +210,7 @@ pub fn run() {
                 data_dir.join("plugins").join("packages"),
             )
             .map_err(|error| error.to_string())?;
+            let sync_crypto = sync_crypto::WorkflowSyncCrypto::new(credential_vault.clone());
             let sidecar_for_verify = browser_sidecar.clone();
             tauri::async_runtime::block_on(async {
                 let _ = sidecar_for_verify.verify().await;
@@ -231,6 +234,7 @@ pub fn run() {
                 credential_vault,
                 data_dir,
                 plugin_manager,
+                sync_crypto,
             };
             runner::create_tray(app, &state)?;
             runner::start_background_services(app.handle().clone(), &state);
@@ -304,7 +308,9 @@ pub fn run() {
             commands::install_inspected_plugin,
             commands::list_installed_plugins,
             commands::approve_plugin_permissions,
-            commands::set_plugin_enabled
+            commands::set_plugin_enabled,
+            commands::prepare_workflow_sync,
+            commands::import_synced_revision_copy
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

@@ -16,6 +16,8 @@ const invitationInput = z.object({
   expiresInHours: z.number().int().min(1).max(168).default(72)
 });
 const acceptInvitationInput = z.object({ token: z.string().min(32).max(256) });
+const syncedWorkflowInput = z.object({ workflowId: z.string().uuid(), name: z.string().trim().min(1).max(200) });
+const syncConflictResolutionInput = z.object({ revisionId: z.string().uuid() });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -135,8 +137,45 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     await authorizer.require(session, workspaceId, "workflows.edit");
     const revision = workflowRevisionSchema.parse(request.body);
-    if (revision.encryptedPayload.length > 2 * 1024 * 1024) throw new DomainError("sync_payload_too_large", "Encrypted workflow payload exceeds 2 MB.", 413);
+    const payloadBytes = Buffer.byteLength(revision.encryptedPayload, "base64");
+    const envelopeBytes = Buffer.byteLength(revision.payloadKeyEnvelope, "base64");
+    if (payloadBytes > 2 * 1024 * 1024) throw new DomainError("sync_payload_too_large", "Encrypted workflow payload exceeds 2 MB.", 413);
+    if (envelopeBytes > 512) throw new DomainError("sync_key_envelope_too_large", "Workflow key envelope exceeds 512 bytes.", 413);
     return dependencies.repository.appendWorkflowRevision(session, workspaceId, revision, request.id);
+  });
+
+  app.post("/v1/workspaces/:workspaceId/sync/workflows", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.edit");
+    return dependencies.repository.createSyncedWorkflow(session, workspaceId, syncedWorkflowInput.parse(request.body), request.id);
+  });
+
+  app.get("/v1/workspaces/:workspaceId/sync/workflows/:workflowId/revisions", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId, workflowId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid() }).parse(request.params);
+    const { cursor, limit } = z.object({ cursor: z.string().uuid().nullable().default(null), limit: z.coerce.number().int().min(1).max(100).default(50) }).parse(request.query);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return dependencies.repository.listWorkflowRevisions(session, workspaceId, workflowId, cursor, limit);
+  });
+
+  app.get("/v1/workspaces/:workspaceId/sync/workflows/:workflowId/revisions/:revisionId", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId, workflowId, revisionId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid(), revisionId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    const revision = await dependencies.repository.getWorkflowRevision(session, workspaceId, workflowId, revisionId);
+    if (!revision) throw new DomainError("revision_not_found", "Workflow revision not found in this workspace.", 404);
+    return { revision };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/sync/workflows/:workflowId/conflicts/resolve", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, workflowId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.edit");
+    const { revisionId } = syncConflictResolutionInput.parse(request.body);
+    return dependencies.repository.resolveSyncConflict(session, workspaceId, workflowId, revisionId, request.id);
   });
 
   app.get("/v1/workspaces/:workspaceId/audit", async request => {

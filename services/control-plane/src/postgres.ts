@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AuditEvent, BuiltInRole, Permission, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, OrganisationInput, SyncWriteResult } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, OrganisationInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -106,20 +106,92 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async createSyncedWorkflow(actor: AuthenticatedSession, workspaceId: string, input: SyncedWorkflowInput, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      await client.query(
+        `INSERT INTO synced_workflows(id, owner_type, owner_id, workspace_id, name)
+         VALUES($1, 'workspace', $2, $2, $3)`,
+        [input.workflowId, workspaceId, input.name]
+      );
+      await appendAudit(client, actor, workspaceId, "workflow.sync_enabled", "workflow", input.workflowId, null, { name: input.name }, correlationId);
+      return { workflowId: input.workflowId, name: input.name, ownerType: "workspace" as const, ownerId: workspaceId };
+    });
+  }
+
   async appendWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, revision: WorkflowRevision, correlationId: string): Promise<SyncWriteResult> {
     return this.withAccount(actor.accountId, async client => {
       const workflow = await client.query<{ current_draft_revision_id: string | null }>(`SELECT current_draft_revision_id FROM synced_workflows WHERE id = $1 AND workspace_id = $2 FOR UPDATE`, [revision.workflowId, workspaceId]);
       if (!workflow.rowCount) throw new DomainError("workflow_not_found", "Workflow not found or not owned by this workspace.", 404);
       const current = workflow.rows[0].current_draft_revision_id;
-      const conflictRevisionId = current && current !== revision.parentRevisionId ? current : null;
+      const conflictRevisionId = detectSyncConflict(current, revision.parentRevisionId);
+      if (revision.parentRevisionId) {
+        const parent = await client.query(`SELECT 1 FROM workflow_revisions WHERE id = $1 AND workflow_id = $2`, [revision.parentRevisionId, revision.workflowId]);
+        if (!parent.rowCount) throw new DomainError("sync_parent_not_found", "The parent revision does not belong to this workflow. Refresh revision history and retry.", 409);
+      }
+      const existing = await client.query<{ content_hash: string }>(`SELECT content_hash FROM workflow_revisions WHERE id = $1`, [revision.revisionId]);
+      if (existing.rowCount) {
+        if (existing.rows[0].content_hash !== revision.contentHash) throw new DomainError("sync_revision_id_reused", "A revision ID cannot be reused for different content.", 409);
+        return { revision: { ...revision, syncState: conflictRevisionId ? "conflicted" : "synced" }, conflictRevisionId };
+      }
       await client.query(
-        `INSERT INTO workflow_revisions(id, workflow_id, parent_revision_id, schema_version, content_hash, encrypted_payload, payload_key_envelope, editor_device_id, updated_by, updated_at, publish_status)
-         VALUES($1,$2,$3,$4,$5,decode($6,'base64'),decode($7,'base64'),$8,$9,$10,'draft')`,
-        [revision.revisionId, revision.workflowId, revision.parentRevisionId, revision.schemaVersion, revision.contentHash, revision.encryptedPayload, revision.encryptedPayload.slice(0, 64), revision.editorDeviceId, actor.accountId, revision.updatedAt]
+        `INSERT INTO workflow_revisions(id, workflow_id, parent_revision_id, schema_version, content_hash, encrypted_payload, payload_key_envelope, searchable_metadata, plugin_requirements, permission_requirements, runner_policy, editor_device_id, updated_by, updated_at, publish_status, encryption_algorithm, encryption_key_version, sync_state)
+         VALUES($1,$2,$3,$4,$5,decode($6,'base64'),decode($7,'base64'),$8,$9,$10,$11,$12,$13,$14,'draft',$15,$16,$17)`,
+        [revision.revisionId, revision.workflowId, revision.parentRevisionId, revision.schemaVersion, revision.contentHash, revision.encryptedPayload, revision.payloadKeyEnvelope, { name: revision.searchableMetadata.name, folderId: revision.searchableMetadata.folderId }, revision.searchableMetadata.requiredPlugins, revision.searchableMetadata.permissionRequirements, revision.searchableMetadata.runnerPolicy, revision.editorDeviceId, actor.accountId, revision.updatedAt, revision.encryption.algorithm, revision.encryption.keyVersion, conflictRevisionId ? "conflicted" : "synced"]
       );
       if (!conflictRevisionId) await client.query(`UPDATE synced_workflows SET current_draft_revision_id = $1 WHERE id = $2`, [revision.revisionId, revision.workflowId]);
       await appendAudit(client, actor, workspaceId, conflictRevisionId ? "workflow.sync_conflict" : "workflow.revision_saved", "workflow_revision", revision.revisionId, null, { workflowId: revision.workflowId, parentRevisionId: revision.parentRevisionId, conflictRevisionId }, correlationId);
       return { revision: { ...revision, syncState: conflictRevisionId ? "conflicted" : "synced" }, conflictRevisionId };
+    });
+  }
+
+  async listWorkflowRevisions(actor: AuthenticatedSession, workspaceId: string, workflowId: string, cursor: string | null, limit: number) {
+    return this.withAccount(actor.accountId, async client => {
+      const values: unknown[] = [workflowId, workspaceId, limit + 1];
+      const cursorClause = cursor ? "AND (r.updated_at, r.id) < (SELECT updated_at, id FROM workflow_revisions WHERE id = $4 AND workflow_id = $1)" : "";
+      if (cursor) values.push(cursor);
+      const result = await client.query<WorkflowRevisionRow>(
+        `SELECT r.id, r.workflow_id, r.parent_revision_id, r.schema_version, r.content_hash,
+                encode(r.encrypted_payload,'base64') AS encrypted_payload,
+                encode(r.payload_key_envelope,'base64') AS payload_key_envelope,
+                r.searchable_metadata, r.plugin_requirements, r.permission_requirements, r.runner_policy,
+                r.editor_device_id, r.updated_at, r.encryption_algorithm, r.encryption_key_version, r.sync_state
+           FROM workflow_revisions r
+           JOIN synced_workflows w ON w.id = r.workflow_id
+          WHERE r.workflow_id = $1 AND w.workspace_id = $2 ${cursorClause}
+          ORDER BY r.updated_at DESC, r.id DESC LIMIT $3`,
+        values
+      );
+      const page = result.rows.slice(0, limit);
+      return { items: page.map(workflowRevisionFromRow), nextCursor: result.rows.length > limit ? page.at(-1)!.id : null };
+    });
+  }
+
+  async getWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<WorkflowRevisionRow>(
+        `SELECT r.id, r.workflow_id, r.parent_revision_id, r.schema_version, r.content_hash,
+                encode(r.encrypted_payload,'base64') AS encrypted_payload,
+                encode(r.payload_key_envelope,'base64') AS payload_key_envelope,
+                r.searchable_metadata, r.plugin_requirements, r.permission_requirements, r.runner_policy,
+                r.editor_device_id, r.updated_at, r.encryption_algorithm, r.encryption_key_version, r.sync_state
+           FROM workflow_revisions r JOIN synced_workflows w ON w.id = r.workflow_id
+          WHERE r.id = $1 AND r.workflow_id = $2 AND w.workspace_id = $3`,
+        [revisionId, workflowId, workspaceId]
+      );
+      return result.rowCount ? workflowRevisionFromRow(result.rows[0]) : null;
+    });
+  }
+
+  async resolveSyncConflict(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const workflow = await client.query<{ current_draft_revision_id: string | null }>(`SELECT current_draft_revision_id FROM synced_workflows WHERE id = $1 AND workspace_id = $2 FOR UPDATE`, [workflowId, workspaceId]);
+      if (!workflow.rowCount) throw new DomainError("workflow_not_found", "Workflow not found or not owned by this workspace.", 404);
+      const selected = await client.query(`SELECT 1 FROM workflow_revisions WHERE id = $1 AND workflow_id = $2`, [revisionId, workflowId]);
+      if (!selected.rowCount) throw new DomainError("revision_not_found", "The selected revision does not belong to this workflow.", 404);
+      await client.query(`UPDATE synced_workflows SET current_draft_revision_id = $1 WHERE id = $2`, [revisionId, workflowId]);
+      await client.query(`UPDATE workflow_revisions SET sync_state = CASE WHEN id = $1 THEN 'synced' ELSE sync_state END WHERE workflow_id = $2`, [revisionId, workflowId]);
+      await appendAudit(client, actor, workspaceId, "workflow.sync_conflict_resolved", "workflow_revision", revisionId, { previousDraftRevisionId: workflow.rows[0].current_draft_revision_id }, { selectedRevisionId: revisionId }, correlationId);
+      return { selectedRevisionId: revisionId };
     });
   }
 
@@ -192,6 +264,52 @@ export class PostgresRepository implements ControlPlaneRepository {
       client.release();
     }
   }
+}
+
+interface WorkflowRevisionRow {
+  id: string;
+  workflow_id: string;
+  parent_revision_id: string | null;
+  schema_version: number;
+  content_hash: string;
+  encrypted_payload: string;
+  payload_key_envelope: string;
+  searchable_metadata: { name?: string; folderId?: string | null };
+  plugin_requirements: WorkflowRevision["searchableMetadata"]["requiredPlugins"];
+  permission_requirements: string[];
+  runner_policy: Record<string, unknown>;
+  editor_device_id: string;
+  updated_at: Date;
+  encryption_algorithm: "aes-256-gcm";
+  encryption_key_version: number;
+  sync_state: WorkflowRevision["syncState"];
+}
+
+function workflowRevisionFromRow(row: WorkflowRevisionRow): WorkflowRevision {
+  return {
+    workflowId: row.workflow_id,
+    revisionId: row.id,
+    parentRevisionId: row.parent_revision_id,
+    schemaVersion: row.schema_version,
+    contentHash: row.content_hash,
+    editorDeviceId: row.editor_device_id,
+    updatedAt: row.updated_at.toISOString(),
+    syncState: row.sync_state,
+    encryption: { algorithm: row.encryption_algorithm, keyVersion: row.encryption_key_version },
+    encryptedPayload: row.encrypted_payload.replace(/\s/g, ""),
+    payloadKeyEnvelope: row.payload_key_envelope.replace(/\s/g, ""),
+    searchableMetadata: {
+      name: row.searchable_metadata.name ?? "Encrypted workflow",
+      folderId: row.searchable_metadata.folderId ?? null,
+      requiredPlugins: row.plugin_requirements,
+      permissionRequirements: row.permission_requirements,
+      runnerPolicy: row.runner_policy
+    }
+  };
+}
+
+export function detectSyncConflict(currentRevisionId: string | null, parentRevisionId: string | null): string | null {
+  return currentRevisionId && currentRevisionId !== parentRevisionId ? currentRevisionId : null;
 }
 
 async function appendAudit(client: PoolClient, actor: AuthenticatedSession, workspaceId: string, action: string, resourceType: string, resourceId: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null, correlationId: string) {

@@ -20,13 +20,18 @@ export interface WorkspaceRecord { id: string; organisationId: string; name: str
 export interface InvitationInput { workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: Date; tokenHash: Buffer }
 export interface InvitationRecord { id: string; organisationId: string; workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: string; status: string }
 export interface SyncWriteResult { revision: WorkflowRevision; conflictRevisionId: string | null }
+export interface SyncedWorkflowInput { workflowId: string; name: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
   createOrganisation(actor: AuthenticatedSession, input: OrganisationInput, correlationId: string): Promise<{ organisation: OrganisationRecord; workspace: WorkspaceRecord }>;
   createInvitation(actor: AuthenticatedSession, workspaceId: string, input: InvitationInput, correlationId: string): Promise<InvitationRecord>;
   acceptInvitation(actor: AuthenticatedSession, rawToken: string, correlationId: string): Promise<{ organisationId: string; workspaceIds: string[] }>;
+  createSyncedWorkflow(actor: AuthenticatedSession, workspaceId: string, input: SyncedWorkflowInput, correlationId: string): Promise<{ workflowId: string; name: string; ownerType: "workspace"; ownerId: string }>;
   appendWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, revision: WorkflowRevision, correlationId: string): Promise<SyncWriteResult>;
+  listWorkflowRevisions(actor: AuthenticatedSession, workspaceId: string, workflowId: string, cursor: string | null, limit: number): Promise<{ items: WorkflowRevision[]; nextCursor: string | null }>;
+  getWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string): Promise<WorkflowRevision | null>;
+  resolveSyncConflict(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<{ selectedRevisionId: string }>;
   listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number): Promise<{ items: AuditEvent[]; nextCursor: string | null }>;
   exportAccountData(actor: AuthenticatedSession): Promise<Record<string, unknown>>;
   requestAccountDeletion(actor: AuthenticatedSession, correlationId: string): Promise<void>;
