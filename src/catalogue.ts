@@ -1,0 +1,20 @@
+import { Bell, Braces, Clock3, Code2, FileClock, FileOutput, GitBranch, Globe2, Hand, type LucideIcon } from "lucide-react";
+import type { NodeType, WorkflowNode } from "./types";
+
+export type NodeGroup = "Triggers" | "Logic" | "Data" | "Network" | "System";
+export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string }
+export const NODE_DEFINITIONS:NodeDefinition[] = [
+  {type:"manual_trigger",name:"Manual Trigger",description:"Run from the toolbar",group:"Triggers",icon:Hand,defaults:{},summary:()=>"Starts on demand"},
+  {type:"schedule_trigger",name:"Schedule Trigger",description:"Run on a local schedule",group:"Triggers",icon:Clock3,defaults:{scheduleType:"minutes",every:15,time:"09:00",cron:"0 */15 * * *"},summary:c=>c.scheduleType==="minutes"?`Every ${c.every ?? 15} minutes`:c.scheduleType==="daily"?`Daily at ${c.time ?? "09:00"}`:c.scheduleType==="hourly"?"Every hour":String(c.cron ?? "Advanced schedule")},
+  {type:"file_watch_trigger",name:"File Watch Trigger",description:"Watch an approved folder",group:"Triggers",icon:FileClock,defaults:{folder:"",events:["created"],pattern:""},summary:c=>c.folder?`Watch ${String(c.folder).split(/[\\/]/).pop()}`:"Choose a folder"},
+  {type:"condition",name:"Condition",description:"Follow a true or false branch",group:"Logic",icon:GitBranch,defaults:{left:"",operator:"equals",right:""},summary:c=>c.left?`${String(c.left)} · ${String(c.operator).replaceAll("_"," ")}`:"Configure comparison"},
+  {type:"set_data",name:"Set Data",description:"Construct a structured object",group:"Data",icon:Braces,defaults:{values:{key:"value"}},summary:c=>`${Object.keys((c.values as object) ?? {}).length} field(s)`},
+  {type:"delay",name:"Delay",description:"Wait without blocking the runner",group:"Logic",icon:Clock3,defaults:{amount:1,unit:"seconds"},summary:c=>`${c.amount ?? 1} ${c.unit ?? "seconds"}`},
+  {type:"http_request",name:"HTTP Request",description:"Call an HTTP endpoint",group:"Network",icon:Globe2,defaults:{method:"GET",url:"",query:{},headers:{},body:null,timeoutMs:30000,retryCount:0},summary:c=>c.url?`${c.method ?? "GET"} ${c.url}`:"Enter a URL"},
+  {type:"desktop_notification",name:"Desktop Notification",description:"Show a native notification",group:"System",icon:Bell,defaults:{title:"Sandbox",message:"Workflow completed"},summary:c=>String(c.title || "Configure notification")},
+  {type:"move_file",name:"Move File",description:"Move within approved folders",group:"System",icon:FileOutput,defaults:{source:"",destinationFolder:"",renameTo:"",overwrite:false},summary:c=>c.destinationFolder?`Move to ${String(c.destinationFolder).split(/[\\/]/).pop()}`:"Choose destination"},
+  {type:"run_command",name:"Run Command",description:"Execute an explicitly approved process",group:"System",icon:Code2,defaults:{executable:"",arguments:[],workingDirectory:"",timeoutMs:30000},summary:c=>String(c.executable || "Approval required")},
+];
+export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)!;
+export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false}};
+export const isTrigger=(type:NodeType)=>["manual_trigger","schedule_trigger","file_watch_trigger"].includes(type);
