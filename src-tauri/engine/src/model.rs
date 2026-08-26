@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +56,14 @@ pub struct PermissionSummary {
     pub background_execution_permitted: bool,
     #[serde(default)]
     pub approval_revision: Option<String>,
+    #[serde(default)]
+    pub approved_browser_profile_ids: Vec<String>,
+    #[serde(default)]
+    pub browser_automation_permitted: bool,
+    #[serde(default)]
+    pub external_communication_permitted: bool,
+    #[serde(default)]
+    pub communication_approval_revision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -155,6 +163,8 @@ pub struct NodeExecution {
     pub error: Option<ExecutionError>,
     pub skip_reason: Option<String>,
     pub branch_followed: Option<String>,
+    #[serde(default)]
+    pub browser_diagnostics: Option<BrowserDiagnostics>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -181,4 +191,214 @@ pub struct WorkflowSummary {
     pub workflow: Workflow,
     pub last_execution: Option<ExecutionRecord>,
     pub next_run_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserProfileSettings {
+    #[serde(default = "default_viewport_width")]
+    pub viewport_width: u32,
+    #[serde(default = "default_viewport_height")]
+    pub viewport_height: u32,
+    #[serde(default)]
+    pub download_folder: Option<String>,
+    #[serde(default)]
+    pub proxy: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+}
+fn default_viewport_width() -> u32 {
+    1280
+}
+fn default_viewport_height() -> u32 {
+    800
+}
+impl Default for BrowserProfileSettings {
+    fn default() -> Self {
+        Self {
+            viewport_width: default_viewport_width(),
+            viewport_height: default_viewport_height(),
+            download_folder: None,
+            proxy: None,
+            user_agent: None,
+            permissions: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserProfile {
+    pub id: String,
+    pub name: String,
+    pub persistent: bool,
+    pub data_path: String,
+    #[serde(default)]
+    pub settings: BrowserProfileSettings,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserSession {
+    pub session_id: String,
+    pub profile_id: String,
+    pub context_id: String,
+    pub page_id: String,
+    pub current_url: String,
+    pub started_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    Role,
+    Label,
+    Placeholder,
+    TestId,
+    Text,
+    Attribute,
+    Css,
+    XPath,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocatorCandidate {
+    pub kind: LocatorKind,
+    pub value: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub exact: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StructuredLocator {
+    pub primary: LocatorCandidate,
+    #[serde(default)]
+    pub alternatives: Vec<LocatorCandidate>,
+    #[serde(default)]
+    pub element_role: Option<String>,
+    #[serde(default)]
+    pub accessible_name: Option<String>,
+    pub tag: String,
+    #[serde(default)]
+    pub stable_attributes: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub frame_path: Vec<String>,
+    pub recording_url: String,
+    #[serde(default)]
+    pub nearby_text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LocatorAttempt {
+    pub kind: String,
+    pub value: String,
+    pub match_count: usize,
+    pub succeeded: bool,
+    #[serde(default)]
+    pub weak_fallback: bool,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDiagnostics {
+    #[serde(default)]
+    pub current_url: String,
+    #[serde(default)]
+    pub page_title: String,
+    #[serde(default)]
+    pub locator_attempts: Vec<LocatorAttempt>,
+    #[serde(default)]
+    pub successful_locator: Option<LocatorCandidate>,
+    #[serde(default)]
+    pub match_count: usize,
+    #[serde(default)]
+    pub console_errors: Vec<String>,
+    #[serde(default)]
+    pub failed_network_requests: Vec<String>,
+    #[serde(default)]
+    pub screenshot_path: Option<String>,
+    #[serde(default)]
+    pub trace_path: Option<String>,
+    #[serde(default)]
+    pub playwright_error: Option<String>,
+    #[serde(default)]
+    pub unexpected_navigation: bool,
+    #[serde(default)]
+    pub rerecord_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionStatus {
+    Connected,
+    Expired,
+    Revoked,
+    Error,
+    SetupRequired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionMetadata {
+    pub id: String,
+    pub provider: String,
+    pub display_name: String,
+    pub account_identifier: Option<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub status: ConnectionStatus,
+    #[serde(default)]
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingApproval {
+    pub id: String,
+    pub execution_id: String,
+    pub workflow_id: String,
+    pub node_id: String,
+    pub action: Value,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordedStep {
+    pub id: String,
+    pub action: String,
+    pub name: String,
+    pub configuration: Value,
+    #[serde(default)]
+    pub sensitive_input_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordedWorkflowDraft {
+    pub id: String,
+    pub workflow_id: Option<String>,
+    pub profile_id: String,
+    pub status: String,
+    #[serde(default)]
+    pub steps: Vec<RecordedStep>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }

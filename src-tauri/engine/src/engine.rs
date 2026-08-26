@@ -155,6 +155,7 @@ impl Engine {
                     error: None,
                     skip_reason: None,
                     branch_followed: None,
+                    browser_diagnostics: None,
                 })
                 .collect(),
             error: None,
@@ -435,6 +436,7 @@ impl Engine {
                 error: None,
                 skip_reason: None,
                 branch_followed: None,
+                browser_diagnostics: None,
             }],
             error: None,
             skip_reason: None,
