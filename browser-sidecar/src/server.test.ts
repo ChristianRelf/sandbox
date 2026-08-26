@@ -14,7 +14,7 @@ let profilePath: string;
 beforeEach(async () => {
   profilePath = await mkdtemp(path.join(tmpdir(), "sandbox-browser-test-"));
   child = spawn(process.execPath, [path.resolve("dist/server.js")], {
-    env: { ...process.env, SANDBOX_IPC_TOKEN: token }, stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, SANDBOX_IPC_TOKEN: token, PLAYWRIGHT_BROWSERS_PATH: path.resolve("browsers") }, stdio: ["pipe", "pipe", "pipe"],
   });
   lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 });
@@ -24,12 +24,19 @@ afterEach(async () => {
 
 async function request(operation: string, payload: Record<string, unknown> = {}, suppliedToken = token) {
   const id = crypto.randomUUID();
+  const response = new Promise<any>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Sidecar did not respond before the timeout.")), 20_000);
+    const onLine = (line: string) => {
+      const value = JSON.parse(line);
+      if (value.id !== id) return;
+      clearTimeout(timer);
+      lines.off("line", onLine);
+      resolve(value);
+    };
+    lines.on("line", onLine);
+  });
   child.stdin.write(`${JSON.stringify({ id, token: suppliedToken, protocolVersion: 1, operation, payload })}\n`);
-  for await (const line of lines) {
-    const response = JSON.parse(line);
-    if (response.id === id) return response;
-  }
-  throw new Error("Sidecar closed before responding.");
+  return response;
 }
 
 describe("authenticated protocol", () => {

@@ -2,7 +2,7 @@ import type { RecordedStep } from "./types.js";
 
 export function isSensitiveField(input: { type?: string; autocomplete?: string; name?: string; label?: string }): boolean {
   const value = `${input.type ?? ""} ${input.autocomplete ?? ""} ${input.name ?? ""} ${input.label ?? ""}`.toLowerCase();
-  return input.type === "password" || /(password|passwd|passcode|credit.?card|card.?number|cvv|cvc|security.?code)/.test(value);
+  return input.type === "password" || /(password|passwd|passcode|credit.?card|card.?number|cc-number|cc-csc|cvv|cvc|security.?code)/.test(value);
 }
 
 export function deduplicateRecorderEvents(steps: RecordedStep[]): RecordedStep[] {
