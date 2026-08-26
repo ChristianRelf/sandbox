@@ -5,6 +5,7 @@ use sandbox_engine::{
 };
 use serde::Serialize;
 use serde_json::json;
+use std::collections::hash_map::Entry;
 use std::sync::atomic::Ordering;
 use tauri::State;
 use tokio_util::sync::CancellationToken;
@@ -61,10 +62,16 @@ pub async fn run_workflow(
         .map_err(err)?
         .ok_or_else(|| "Workflow no longer exists.".to_string())?;
     let token = CancellationToken::new();
-    state
-        .cancellations
-        .lock()
-        .insert(workflow.id.clone(), token.clone());
+    let owns_token = {
+        let mut active = state.cancellations.lock();
+        match active.entry(workflow.id.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(token.clone());
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
+    };
     let result = state
         .engine
         .run(
@@ -74,7 +81,9 @@ pub async fn run_workflow(
         )
         .await
         .map_err(err);
-    state.cancellations.lock().remove(&id);
+    if owns_token {
+        state.cancellations.lock().remove(&id);
+    }
     result
 }
 #[tauri::command]
@@ -90,16 +99,24 @@ pub async fn retry_failed_node(
         .map_err(err)?
         .ok_or_else(|| "Execution no longer exists.".to_string())?;
     let token = CancellationToken::new();
-    state
-        .cancellations
-        .lock()
-        .insert(execution.workflow_id.clone(), token.clone());
+    let owns_token = {
+        let mut active = state.cancellations.lock();
+        match active.entry(execution.workflow_id.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(token.clone());
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
+    };
     let result = state
         .engine
         .retry_failed_node(&execution_id, &node_id, token)
         .await
         .map_err(err);
-    state.cancellations.lock().remove(&execution.workflow_id);
+    if owns_token {
+        state.cancellations.lock().remove(&execution.workflow_id);
+    }
     result
 }
 #[tauri::command]

@@ -369,10 +369,17 @@ mod tests {
     }
     #[test]
     fn migrations_and_persistence_work() {
-        let db = Database::in_memory().unwrap();
-        assert_eq!(db.schema_version().unwrap(), 2);
-        db.save_workflow(workflow()).unwrap();
-        assert_eq!(db.get_workflow("w").unwrap().unwrap().name, "Saved");
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("sandbox.db");
+        {
+            let db = Database::open(&path).unwrap();
+            assert_eq!(db.schema_version().unwrap(), 2);
+            db.save_workflow(workflow()).unwrap();
+        }
+        let reopened = Database::open(&path).unwrap();
+        let saved = reopened.get_workflow("w").unwrap().unwrap();
+        assert_eq!(saved.name, "Saved");
+        assert_eq!(saved.schema_version, 1);
     }
     #[test]
     fn recovers_running_records() {
