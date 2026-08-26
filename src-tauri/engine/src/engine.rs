@@ -41,6 +41,9 @@ pub enum EngineEvent {
 #[async_trait]
 pub trait HostServices: Send + Sync {
     async fn desktop_notification(&self, title: &str, message: &str) -> Result<(), EngineError>;
+    async fn browser_operation(&self, _operation: &str, _payload: Value) -> Result<Value, EngineError> {
+        Err(EngineError::Node("The managed browser engine is unavailable on this host.".into()))
+    }
 }
 
 pub struct LocalHost;
@@ -277,6 +280,7 @@ impl Engine {
                     node_record.output = redact_value(&result.output);
                     node_record.logs = result.logs.into_iter().map(bounded_log).take(100).collect();
                     node_record.retry_count = result.retry_count;
+                    node_record.browser_diagnostics = result.browser_diagnostics;
                     if let Some(branch) = result.branch {
                         node_record.branch_followed = Some(branch.clone());
                         for edge in workflow
@@ -296,6 +300,9 @@ impl Engine {
                         NodeStatus::Failed
                     };
                     node_record.error = Some(error.execution_error());
+                    if let EngineError::Browser { diagnostics, .. } = &error {
+                        node_record.browser_diagnostics = diagnostics.clone();
+                    }
                     node_record.logs.push(bounded_log(error.to_string()));
                 }
             }
@@ -481,6 +488,7 @@ impl Engine {
                     .logs
                     .extend(result.logs.into_iter().map(bounded_log).take(99));
                 node_record.branch_followed = result.branch;
+                node_record.browser_diagnostics = result.browser_diagnostics;
                 record.status = ExecutionStatus::Successful;
             }
             Err(error) => {
@@ -490,6 +498,9 @@ impl Engine {
                     NodeStatus::Failed
                 };
                 node_record.error = Some(error.execution_error());
+                if let EngineError::Browser { diagnostics, .. } = &error {
+                    node_record.browser_diagnostics = diagnostics.clone();
+                }
                 node_record.logs.push(bounded_log(error.to_string()));
                 record.status = if matches!(error, EngineError::Cancelled) {
                     ExecutionStatus::Cancelled
@@ -565,9 +576,60 @@ impl Engine {
             }
             "move_file" => execute_move(node, workflow, trigger, outputs).await,
             "run_command" => execute_command(node, workflow, trigger, outputs, cancellation).await,
+            "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option"
+            | "press_key" | "wait_for" | "extract_data" | "screenshot" | "download_file"
+            | "upload_file" | "close_browser" => {
+                self.execute_browser(node, workflow, trigger, outputs).await
+            }
             other => Err(EngineError::Node(format!(
                 "Node type '{other}' is not supported by this runner."
             ))),
+        }
+    }
+
+    async fn execute_browser(
+        &self,
+        node: &WorkflowNode,
+        workflow: &Workflow,
+        trigger: &Value,
+        outputs: &HashMap<String, Value>,
+    ) -> Result<NodeResult, EngineError> {
+        if !workflow.settings.permissions.browser_automation_permitted {
+            return Err(EngineError::Permission(
+                "Browser automation requires approval before this workflow can run.".into(),
+            ));
+        }
+        let mut payload = resolve_value(&node.configuration, trigger, outputs)?;
+        let object = payload.as_object_mut().ok_or_else(|| EngineError::Node("Browser node configuration must be an object.".into()))?;
+        object.insert("workflowId".into(), Value::String(workflow.id.clone()));
+        object.insert("nodeId".into(), Value::String(node.id.clone()));
+        if node.node_type == "open_browser" {
+            let profile_id = object.get("profileId").and_then(Value::as_str).ok_or_else(|| EngineError::Node("Open Browser requires a browser profile.".into()))?;
+            if !workflow.settings.permissions.approved_browser_profile_ids.iter().any(|approved| approved == profile_id) {
+                return Err(EngineError::Permission(format!("Browser profile '{profile_id}' has not been approved for this workflow.")));
+            }
+        } else {
+            let session_id = browser_session_id(object.get("sessionNodeId").and_then(Value::as_str), outputs)?;
+            object.insert("sessionId".into(), Value::String(session_id));
+        }
+        if node.node_type == "download_file" {
+            if let Some(folder) = object.get("destinationFolder").and_then(Value::as_str) {
+                require_path(Path::new(folder), &workflow.settings.permissions)?;
+            }
+        }
+        if node.node_type == "upload_file" {
+            if let Some(file) = object.get("file").and_then(Value::as_str) {
+                require_path(Path::new(file), &workflow.settings.permissions)?;
+            }
+        }
+        match self.host.browser_operation(&node.node_type, payload).await {
+            Ok(output) => {
+                let diagnostics = browser_diagnostics_from_output(&output);
+                Ok(NodeResult::new(output)
+                    .with_browser_diagnostics(diagnostics)
+                    .log(format!("{} completed through the managed Chromium sidecar.", node.name)))
+            }
+            Err(error) => Err(error),
         }
     }
 
@@ -691,6 +753,7 @@ struct NodeResult {
     logs: Vec<String>,
     retry_count: u32,
     branch: Option<String>,
+    browser_diagnostics: Option<crate::BrowserDiagnostics>,
 }
 impl NodeResult {
     fn new(output: Value) -> Self {
@@ -699,10 +762,15 @@ impl NodeResult {
             logs: vec![],
             retry_count: 0,
             branch: None,
+            browser_diagnostics: None,
         }
     }
     fn log(mut self, message: impl Into<String>) -> Self {
         self.logs.push(message.into());
+        self
+    }
+    fn with_browser_diagnostics(mut self, diagnostics: Option<crate::BrowserDiagnostics>) -> Self {
+        self.browser_diagnostics = diagnostics;
         self
     }
 }
@@ -754,6 +822,7 @@ fn execute_condition(
         )],
         retry_count: 0,
         branch: Some(branch),
+        browser_diagnostics: None,
     })
 }
 fn contains(left: &Value, right: &Value) -> bool {
