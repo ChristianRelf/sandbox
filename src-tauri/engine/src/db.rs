@@ -1,7 +1,7 @@
 use crate::{
     BrowserDiagnostics, BrowserProfile, ConnectionMetadata, ConnectionStatus, EngineError,
-    ExecutionError, ExecutionRecord, ExecutionStatus, PendingApproval, RecordedWorkflowDraft,
-    Workflow, WorkflowSummary,
+    ExecutionError, ExecutionRecord, ExecutionStatus, InstalledPlugin, PendingApproval,
+    PluginInstallState, PluginRevocation, RecordedWorkflowDraft, Workflow, WorkflowSummary,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -72,6 +72,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/004_integration_polling.sql"))
                 .map_err(storage)?;
         }
+        if version < 5 {
+            connection
+                .execute_batch(include_str!("../migrations/005_plugin_installations.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         Ok(())
     }
@@ -123,6 +128,263 @@ impl Database {
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .execute("DELETE FROM settings WHERE key=?", [key])
             .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn save_installed_plugin(&self, plugin: &InstalledPlugin) -> Result<(), EngineError> {
+        if !matches!(plugin.owner_type.as_str(), "personal" | "workspace") {
+            return Err(EngineError::Validation(
+                "Plugin owner type must be personal or workspace.".into(),
+            ));
+        }
+        if !matches!(
+            plugin.source.as_str(),
+            "marketplace" | "private" | "development"
+        ) {
+            return Err(EngineError::Validation(
+                "Plugin source must be marketplace, private, or development.".into(),
+            ));
+        }
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "INSERT INTO installed_plugins(plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                params![
+                    plugin.plugin_id,
+                    plugin.version,
+                    plugin.package_integrity,
+                    plugin.publisher_id,
+                    plugin.publisher_key_id,
+                    plugin.owner_type,
+                    plugin.owner_id,
+                    plugin.source,
+                    plugin.development,
+                    plugin_install_state_str(plugin.state),
+                    serde_json::to_string(&plugin.manifest).map_err(storage)?,
+                    serde_json::to_string(&plugin.requested_permissions).map_err(storage)?,
+                    serde_json::to_string(&plugin.approved_permissions).map_err(storage)?,
+                    plugin.update_requires_review,
+                    plugin.package_path,
+                    plugin.installed_at.to_rfc3339(),
+                    plugin.updated_at.to_rfc3339(),
+                ],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn list_installed_plugins(
+        &self,
+        owner_type: &str,
+        owner_id: &str,
+    ) -> Result<Vec<InstalledPlugin>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection
+            .prepare("SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at FROM installed_plugins WHERE owner_type=? AND owner_id=? ORDER BY plugin_id,installed_at DESC")
+            .map_err(storage)?;
+        let values = statement
+            .query_map(params![owner_type, owner_id], parse_installed_plugin)
+            .map_err(storage)?
+            .map(|row| row.map_err(storage))
+            .collect();
+        values
+    }
+
+    pub fn get_installed_plugin(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        integrity: &str,
+        owner_type: &str,
+        owner_id: &str,
+    ) -> Result<Option<InstalledPlugin>, EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at FROM installed_plugins WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=?",
+                params![plugin_id, version, integrity, owner_type, owner_id],
+                parse_installed_plugin,
+            )
+            .optional()
+            .map_err(storage)
+    }
+
+    pub fn approve_plugin_permissions(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        integrity: &str,
+        owner_type: &str,
+        owner_id: &str,
+    ) -> Result<InstalledPlugin, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let (previous, requested): (String, String) = transaction
+            .query_row(
+                "SELECT approved_permissions_json,requested_permissions_json FROM installed_plugins WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=? AND state!='revoked'",
+                params![plugin_id, version, integrity, owner_type, owner_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(storage)?
+            .ok_or_else(|| EngineError::Validation("The exact plugin version is not available for permission approval.".into()))?;
+        let now = Utc::now();
+        transaction
+            .execute(
+                "UPDATE installed_plugins SET approved_permissions_json=requested_permissions_json,update_requires_review=0,updated_at=? WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=?",
+                params![now.to_rfc3339(), plugin_id, version, integrity, owner_type, owner_id],
+            )
+            .map_err(storage)?;
+        transaction
+            .execute(
+                "INSERT INTO plugin_permission_audit(id,plugin_id,version,package_integrity,owner_type,owner_id,previous_permissions_json,approved_permissions_json,approved_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                params![uuid::Uuid::new_v4().to_string(), plugin_id, version, integrity, owner_type, owner_id, previous, requested, now.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        drop(connection);
+        self.get_installed_plugin(plugin_id, version, integrity, owner_type, owner_id)?
+            .ok_or_else(|| {
+                EngineError::Storage("Approved plugin disappeared from the registry.".into())
+            })
+    }
+
+    pub fn set_plugin_enabled(
+        &self,
+        plugin_id: &str,
+        version: &str,
+        integrity: &str,
+        owner_type: &str,
+        owner_id: &str,
+        enabled: bool,
+    ) -> Result<InstalledPlugin, EngineError> {
+        let plugin = self
+            .get_installed_plugin(plugin_id, version, integrity, owner_type, owner_id)?
+            .ok_or_else(|| {
+                EngineError::Validation("The exact plugin version is not installed.".into())
+            })?;
+        if plugin.state == PluginInstallState::Revoked {
+            return Err(EngineError::Validation(
+                "This package version was revoked and cannot be enabled.".into(),
+            ));
+        }
+        if enabled && plugin.requested_permissions != plugin.approved_permissions {
+            return Err(EngineError::Validation(
+                "Review and approve the plugin permissions before enabling it.".into(),
+            ));
+        }
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "UPDATE installed_plugins SET state=?,updated_at=? WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=?",
+                params![if enabled { "enabled" } else { "disabled" }, Utc::now().to_rfc3339(), plugin_id, version, integrity, owner_type, owner_id],
+            )
+            .map_err(storage)?;
+        self.get_installed_plugin(plugin_id, version, integrity, owner_type, owner_id)?
+            .ok_or_else(|| {
+                EngineError::Storage("Updated plugin disappeared from the registry.".into())
+            })
+    }
+
+    pub fn save_plugin_revocation(&self, revocation: &PluginRevocation) -> Result<(), EngineError> {
+        if revocation.version.is_none() && revocation.package_integrity.is_none() {
+            return Err(EngineError::Validation(
+                "A revocation must identify an exact version or package integrity.".into(),
+            ));
+        }
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        transaction
+            .execute(
+                "INSERT INTO plugin_revocations(id,plugin_id,version,package_integrity,reason,security_notice_url,revoked_at) VALUES(?,?,?,?,?,?,?)",
+                params![uuid::Uuid::new_v4().to_string(), revocation.plugin_id, revocation.version, revocation.package_integrity, revocation.reason, revocation.security_notice_url, revocation.revoked_at.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction
+            .execute(
+                "UPDATE installed_plugins SET state='revoked',updated_at=? WHERE plugin_id=? AND ((? IS NOT NULL AND version=?) OR (? IS NOT NULL AND package_integrity=?))",
+                params![Utc::now().to_rfc3339(), revocation.plugin_id, revocation.version, revocation.version, revocation.package_integrity, revocation.package_integrity],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn list_plugin_revocations(&self) -> Result<Vec<PluginRevocation>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection
+            .prepare("SELECT plugin_id,version,package_integrity,reason,security_notice_url,revoked_at FROM plugin_revocations ORDER BY revoked_at DESC")
+            .map_err(storage)?;
+        let values = statement
+            .query_map([], |row| {
+                let revoked_at: String = row.get(5)?;
+                Ok(PluginRevocation {
+                    plugin_id: row.get(0)?,
+                    version: row.get(1)?,
+                    package_integrity: row.get(2)?,
+                    reason: row.get(3)?,
+                    security_notice_url: row.get(4)?,
+                    revoked_at: parse_time(&revoked_at),
+                })
+            })
+            .map_err(storage)?
+            .map(|row| row.map_err(storage))
+            .collect();
+        values
+    }
+
+    pub fn verify_workflow_plugin_pins(&self, workflow: &Workflow) -> Result<(), EngineError> {
+        for node in &workflow.nodes {
+            let Some(pin) = &node.plugin else { continue };
+            let plugin = self
+                .get_installed_plugin(
+                    &pin.plugin_id,
+                    &pin.plugin_version,
+                    &pin.package_integrity,
+                    &workflow.owner.owner_type,
+                    &workflow.owner.owner_id,
+                )?
+                .ok_or_else(|| EngineError::Validation(format!(
+                    "Node '{}' is pinned to {} {} ({}), which is not installed for this workflow owner.",
+                    node.name, pin.plugin_id, pin.plugin_version, pin.package_integrity
+                )))?;
+            match plugin.state {
+                PluginInstallState::Enabled => {}
+                PluginInstallState::Revoked => {
+                    return Err(EngineError::Validation(format!(
+                        "Node '{}' cannot execute because {} {} was revoked.",
+                        node.name, pin.plugin_id, pin.plugin_version
+                    )))
+                }
+                PluginInstallState::Disabled => {
+                    return Err(EngineError::Validation(format!(
+                        "Node '{}' requires {} {}, which is installed but disabled.",
+                        node.name, pin.plugin_id, pin.plugin_version
+                    )))
+                }
+            }
+            if plugin.publisher_id != pin.publisher_id {
+                return Err(EngineError::Validation(format!(
+                    "Node '{}' publisher pin does not match the verified package publisher.",
+                    node.name
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -312,10 +574,7 @@ impl Database {
         }
     }
 
-    pub fn clear_old_executions(
-        &self,
-        keep: usize,
-    ) -> Result<(usize, Vec<String>), EngineError> {
+    pub fn clear_old_executions(&self, keep: usize) -> Result<(usize, Vec<String>), EngineError> {
         let mut connection = self
             .connection
             .lock()
@@ -790,6 +1049,46 @@ fn connection_status_str(status: &ConnectionStatus) -> &'static str {
     }
 }
 
+fn plugin_install_state_str(state: PluginInstallState) -> &'static str {
+    match state {
+        PluginInstallState::Disabled => "disabled",
+        PluginInstallState::Enabled => "enabled",
+        PluginInstallState::Revoked => "revoked",
+    }
+}
+
+fn parse_installed_plugin(row: &rusqlite::Row) -> rusqlite::Result<InstalledPlugin> {
+    let state: String = row.get(9)?;
+    let manifest: String = row.get(10)?;
+    let requested: String = row.get(11)?;
+    let approved: String = row.get(12)?;
+    let installed_at: String = row.get(15)?;
+    let updated_at: String = row.get(16)?;
+    Ok(InstalledPlugin {
+        plugin_id: row.get(0)?,
+        version: row.get(1)?,
+        package_integrity: row.get(2)?,
+        publisher_id: row.get(3)?,
+        publisher_key_id: row.get(4)?,
+        owner_type: row.get(5)?,
+        owner_id: row.get(6)?,
+        source: row.get(7)?,
+        development: row.get(8)?,
+        state: match state.as_str() {
+            "enabled" => PluginInstallState::Enabled,
+            "revoked" => PluginInstallState::Revoked,
+            _ => PluginInstallState::Disabled,
+        },
+        manifest: serde_json::from_str(&manifest).unwrap_or_default(),
+        requested_permissions: serde_json::from_str(&requested).unwrap_or_default(),
+        approved_permissions: serde_json::from_str(&approved).unwrap_or_default(),
+        update_requires_review: row.get(13)?,
+        package_path: row.get(14)?,
+        installed_at: parse_time(&installed_at),
+        updated_at: parse_time(&updated_at),
+    })
+}
+
 fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata> {
     let scopes: String = row.get(4)?;
     let created: String = row.get(5)?;
@@ -820,7 +1119,7 @@ fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata>
 fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
     match workflow.schema_version {
         crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
-        1 => {
+        1 | 2 => {
             workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
             Ok(workflow)
         }
@@ -875,6 +1174,7 @@ mod tests {
         Workflow {
             id: "w".into(),
             schema_version: 1,
+            owner: Default::default(),
             name: "Saved".into(),
             description: "".into(),
             enabled: true,
@@ -887,6 +1187,7 @@ mod tests {
                 position: Position { x: 0., y: 0. },
                 configuration: json!({}),
                 disabled: false,
+                plugin: None,
             }],
             edges: vec![],
             settings: WorkflowSettings::default(),
@@ -900,7 +1201,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 4);
+            assert_eq!(db.schema_version().unwrap(), 5);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();

@@ -103,6 +103,7 @@ impl Engine {
         trigger: Value,
         cancellation: CancellationToken,
     ) -> Result<ExecutionRecord, EngineError> {
+        self.db.verify_workflow_plugin_pins(&workflow)?;
         {
             let mut active = self.active.lock().await;
             if !active.insert(workflow.id.clone()) {
@@ -1296,6 +1297,7 @@ mod tests {
             position: Position { x: 0., y: 0. },
             configuration: config,
             disabled: false,
+            plugin: None,
         }
     }
     fn edge(id: &str, s: &str, handle: &str, t: &str) -> WorkflowEdge {
@@ -1312,6 +1314,7 @@ mod tests {
         Workflow {
             id: Uuid::new_v4().to_string(),
             schema_version: crate::model::CURRENT_SCHEMA_VERSION,
+            owner: Default::default(),
             name: "Test".into(),
             description: "".into(),
             enabled: true,

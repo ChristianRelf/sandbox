@@ -8,15 +8,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if arguments.len() != 6 {
         return Err("usage: verify_package <package> <publisher-id> <key-id> <raw-public-key-base64> <host-version>".into());
     }
-    let key_bytes: [u8; 32] = BASE64.decode(&arguments[4])?.try_into().map_err(|_| "Ed25519 public key must contain 32 bytes")?;
+    let key_bytes: [u8; 32] = BASE64
+        .decode(&arguments[4])?
+        .try_into()
+        .map_err(|_| "Ed25519 public key must contain 32 bytes")?;
     let mut trust = PackageTrustStore::default();
-    trust.insert(&arguments[2], &arguments[3], VerifyingKey::from_bytes(&key_bytes)?);
+    trust.insert(
+        &arguments[2],
+        &arguments[3],
+        VerifyingKey::from_bytes(&key_bytes)?,
+    );
     let verified = VerifiedPackage::from_bytes(
         &std::fs::read(&arguments[1])?,
         &trust,
         &RevocationList::default(),
         &Version::parse(&arguments[5])?,
     )?;
-    println!("{}@{} {}", verified.manifest.plugin_id, verified.manifest.version, verified.digest);
+    println!(
+        "{}@{} {}",
+        verified.manifest.plugin_id, verified.manifest.version, verified.digest
+    );
     Ok(())
 }

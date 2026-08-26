@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +24,76 @@ pub struct WorkflowNode {
     pub configuration: Value,
     #[serde(default)]
     pub disabled: bool,
+    /// Present only for third-party nodes. Built-in v0.1/v0.2 nodes keep this
+    /// field absent and therefore require no migration choice from the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginNodePin>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginNodePin {
+    pub plugin_id: String,
+    pub plugin_version: String,
+    pub package_integrity: String,
+    pub publisher_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowOwner {
+    pub owner_type: String,
+    pub owner_id: String,
+}
+
+impl Default for WorkflowOwner {
+    fn default() -> Self {
+        Self {
+            owner_type: "personal".into(),
+            owner_id: "local".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginInstallState {
+    Disabled,
+    Enabled,
+    Revoked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledPlugin {
+    pub plugin_id: String,
+    pub version: String,
+    pub package_integrity: String,
+    pub publisher_id: String,
+    pub publisher_key_id: String,
+    pub owner_type: String,
+    pub owner_id: String,
+    pub source: String,
+    pub development: bool,
+    pub state: PluginInstallState,
+    pub manifest: Value,
+    pub requested_permissions: Vec<String>,
+    pub approved_permissions: Vec<String>,
+    pub update_requires_review: bool,
+    pub package_path: String,
+    pub installed_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginRevocation {
+    pub plugin_id: String,
+    pub version: Option<String>,
+    pub package_integrity: Option<String>,
+    pub reason: String,
+    pub security_notice_url: Option<String>,
+    pub revoked_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -97,6 +167,8 @@ impl Default for WorkflowSettings {
 pub struct Workflow {
     pub id: String,
     pub schema_version: u32,
+    #[serde(default)]
+    pub owner: WorkflowOwner,
     pub name: String,
     #[serde(default)]
     pub description: String,

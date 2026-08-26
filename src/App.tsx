@@ -7,7 +7,9 @@ import { Sidebar } from "./components/Sidebar";
 import { WorkflowEditor } from "./components/WorkflowEditor";
 import { SettingsView } from "./components/SettingsView";
 import { PendingApprovalsView } from "./components/PendingApprovalsView";
+import { InstalledPluginsView } from "./components/InstalledPluginsView";
 import { useAppStore } from "./store";
+import "./plugins.css";
 
 export default function App() {
   const { view, activeWorkflow, createWorkflow, setView } = useAppStore();
@@ -38,6 +40,7 @@ export default function App() {
       {view === "history" && <HistoryView />}
       {view === "settings" && <SettingsView />}
       {view === "approvals" && <PendingApprovalsView />}
+      {view === "plugins" && <InstalledPluginsView />}
       {view === "editor" && activeWorkflow && <WorkflowEditor />}
     </div>
     <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} onCreate={() => createWorkflow()} />

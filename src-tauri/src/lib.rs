@@ -4,6 +4,7 @@ mod commands;
 mod credential_vault;
 mod integrations;
 mod oauth;
+mod plugin_manager;
 mod runner;
 mod templates;
 
@@ -183,6 +184,7 @@ pub struct AppState {
     pub browser_sidecar: BrowserSidecar,
     pub credential_vault: Arc<dyn CredentialVault>,
     pub data_dir: std::path::PathBuf,
+    pub plugin_manager: plugin_manager::PluginManager,
 }
 
 pub fn run() {
@@ -201,6 +203,11 @@ pub fn run() {
             let browser_sidecar =
                 BrowserSidecar::new(app.handle()).map_err(|error| error.to_string())?;
             let credential_vault: Arc<dyn CredentialVault> = Arc::new(OsCredentialVault::new());
+            let plugin_manager = plugin_manager::PluginManager::new(
+                database.clone(),
+                data_dir.join("plugins").join("packages"),
+            )
+            .map_err(|error| error.to_string())?;
             let sidecar_for_verify = browser_sidecar.clone();
             tauri::async_runtime::block_on(async {
                 let _ = sidecar_for_verify.verify().await;
@@ -209,7 +216,7 @@ pub fn run() {
                 database.clone(),
                 Arc::new(TauriHost {
                     app: app.handle().clone(),
-                    database,
+                    database: database.clone(),
                     browser_sidecar: browser_sidecar.clone(),
                     data_dir: data_dir.clone(),
                     credential_vault: credential_vault.clone(),
@@ -223,6 +230,7 @@ pub fn run() {
                 browser_sidecar,
                 credential_vault,
                 data_dir,
+                plugin_manager,
             };
             runner::create_tray(app, &state)?;
             runner::start_background_services(app.handle().clone(), &state);
@@ -291,7 +299,12 @@ pub fn run() {
             commands::start_account_auth,
             commands::sign_out_account,
             commands::list_pending_approvals,
-            commands::resolve_pending_approval
+            commands::resolve_pending_approval,
+            commands::inspect_plugin_package,
+            commands::install_inspected_plugin,
+            commands::list_installed_plugins,
+            commands::approve_plugin_permissions,
+            commands::set_plugin_enabled
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

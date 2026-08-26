@@ -1,9 +1,14 @@
-use crate::{account_auth, oauth, templates, AppState};
+use crate::{
+    account_auth, oauth,
+    plugin_manager::{PackageTrustMetadata, PluginPackageInspection},
+    templates, AppState,
+};
 use chrono::{DateTime, Utc};
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
     BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ConnectionStatus, ExecutionRecord,
-    PendingApproval, PermissionSummary, StructuredLocator, Workflow, WorkflowSummary,
+    InstalledPlugin, PendingApproval, PermissionSummary, StructuredLocator, Workflow,
+    WorkflowSummary,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -19,6 +24,105 @@ use uuid::Uuid;
 type Result<T> = std::result::Result<T, String>;
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+#[tauri::command]
+pub async fn inspect_plugin_package(
+    trust: PackageTrustMetadata,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<PluginPackageInspection>> {
+    let selection = tokio::task::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Inspect signed plugin package")
+            .add_filter("Sandbox plugin", &["sandbox-plugin"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(err)?;
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let path = selection.into_path().map_err(err)?;
+    state
+        .plugin_manager
+        .inspect_path(&path, trust)
+        .map(Some)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn install_inspected_plugin(
+    inspection_id: String,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .plugin_manager
+        .install_inspected(&inspection_id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn list_installed_plugins(
+    owner_type: Option<String>,
+    owner_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<InstalledPlugin>> {
+    state
+        .engine
+        .database()
+        .list_installed_plugins(
+            owner_type.as_deref().unwrap_or("personal"),
+            owner_id.as_deref().unwrap_or("local"),
+        )
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn approve_plugin_permissions(
+    plugin_id: String,
+    version: String,
+    package_integrity: String,
+    owner_type: String,
+    owner_id: String,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .engine
+        .database()
+        .approve_plugin_permissions(
+            &plugin_id,
+            &version,
+            &package_integrity,
+            &owner_type,
+            &owner_id,
+        )
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn set_plugin_enabled(
+    plugin_id: String,
+    version: String,
+    package_integrity: String,
+    owner_type: String,
+    owner_id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .engine
+        .database()
+        .set_plugin_enabled(
+            &plugin_id,
+            &version,
+            &package_integrity,
+            &owner_type,
+            &owner_id,
+            enabled,
+        )
+        .map_err(err)
 }
 
 #[tauri::command]

@@ -36,6 +36,12 @@ rand = "0.9"
 zeroize = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 url = "2"
+semver = "1"
+
+[dev-dependencies]
+ed25519-dalek = { version = "3", features = ["pem", "rand_core"] }
+tempfile = "3"
+zip = { version = "8.6.0", default-features = false }
 
 [workspace]
 members = ["engine", "plugin-runtime"]

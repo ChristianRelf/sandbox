@@ -8,11 +8,13 @@ export type NodeType =
 export type NodeStatus = "idle" | "waiting" | "running" | "successful" | "failed" | "skipped" | "cancelled";
 export type ExecutionStatus = "queued" | "running" | "successful" | "failed" | "skipped" | "cancelled";
 export interface Position { x:number; y:number }
-export interface WorkflowNode { id:string; type:NodeType; version:number; name:string; position:Position; configuration:Record<string,unknown>; disabled:boolean }
+export interface PluginNodePin { pluginId:string; pluginVersion:string; packageIntegrity:string; publisherId:string }
+export interface WorkflowOwner { ownerType:"personal"|"workspace"; ownerId:string }
+export interface WorkflowNode { id:string; type:NodeType; version:number; name:string; position:Position; configuration:Record<string,unknown>; disabled:boolean; plugin?:PluginNodePin }
 export interface WorkflowEdge { id:string; sourceNodeId:string; sourceHandle:string; targetNodeId:string; targetHandle:string }
 export interface PermissionSummary { approvedFolders:string[]; approvedNetworkDomains:string[]; commandExecutionPermitted:boolean; backgroundExecutionPermitted:boolean; approvalRevision?:string|null; approvedBrowserProfileIds:string[]; browserAutomationPermitted:boolean; externalCommunicationPermitted:boolean; communicationApprovalRevision?:string|null }
 export interface WorkflowSettings { defaultNodeTimeoutMs:number; maxConcurrentNodes:number; permissions:PermissionSummary }
-export interface Workflow { id:string; schemaVersion:number; name:string; description:string; enabled:boolean; triggerNodeId:string; nodes:WorkflowNode[]; edges:WorkflowEdge[]; settings:WorkflowSettings; createdAt:string; updatedAt:string }
+export interface Workflow { id:string; schemaVersion:number; owner?:WorkflowOwner; name:string; description:string; enabled:boolean; triggerNodeId:string; nodes:WorkflowNode[]; edges:WorkflowEdge[]; settings:WorkflowSettings; createdAt:string; updatedAt:string }
 export interface ExecutionError { code:string; message:string; detail?:string; suggestion?:string }
 export interface LocatorCandidate { kind:"role"|"label"|"placeholder"|"test_id"|"text"|"attribute"|"css"|"xpath"; value:string; name?:string; exact?:boolean }
 export interface StructuredLocator { primary:LocatorCandidate; alternatives:LocatorCandidate[]; elementRole?:string; accessibleName?:string; tag:string; stableAttributes:Record<string,string>; framePath:string[]; recordingUrl:string; nearbyText?:string }
@@ -31,3 +33,8 @@ export type ConnectionStatus="connected"|"expired"|"revoked"|"error"|"setup_requ
 export interface ConnectionMetadata { id:string; provider:string; displayName:string; accountIdentifier?:string; scopes:string[]; createdAt:string; lastUsedAt?:string; expiresAt?:string; status:ConnectionStatus; metadata:Record<string,unknown> }
 export interface PendingApproval { id:string; executionId:string; workflowId:string; nodeId:string; action:Record<string,unknown>; status:string; createdAt:string; expiresAt:string; resolvedAt?:string }
 export interface RecordedStep { id:string; action:string; name:string; configuration:Record<string,unknown>; sensitiveInputRequired:boolean }
+export type PluginInstallState="disabled"|"enabled"|"revoked";
+export interface InstalledPlugin { pluginId:string; version:string; packageIntegrity:string; publisherId:string; publisherKeyId:string; ownerType:"personal"|"workspace"; ownerId:string; source:"marketplace"|"private"|"development"; development:boolean; state:PluginInstallState; manifest:PluginManifest; requestedPermissions:string[]; approvedPermissions:string[]; updateRequiresReview:boolean; packagePath:string; installedAt:string; updatedAt:string }
+export interface PluginManifest { pluginId:string; name:string; description:string; version:string; publisherId:string; nodes:Array<{nodeType:string;nodeVersion:number;displayName:string;description:string;category:string;riskLevel:string}>; networkDomains:Array<{domain:string;methods:string[]}>; pricing:{model:string}; [key:string]:unknown }
+export interface PluginPackageInspection { inspectionId:string; manifest:PluginManifest; requestedPermissions:string[]; permissionExpansion:string[]; expiresAt:string; development:boolean; signedAndVerified:boolean }
+export interface PackageTrustMetadata { publisherId:string; keyId:string; publisherPublicKeyPem:string; ownerType:"personal"|"workspace"; ownerId:string; source:"marketplace"|"private"|"development" }

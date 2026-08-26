@@ -1,6 +1,8 @@
 use crate::{manifest::canonical_manifest, manifest::safe_relative_path, Manifest, PluginError};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use ed25519_dalek::{Signature as Ed25519Signature, Verifier, VerifyingKey};
+use ed25519_dalek::{
+    pkcs8::DecodePublicKey, Signature as Ed25519Signature, Verifier, VerifyingKey,
+};
 use semver::Version;
 use sha2::{Digest, Sha256};
 use std::{
@@ -26,6 +28,19 @@ impl PackageTrustStore {
         key: VerifyingKey,
     ) {
         self.keys.insert((publisher_id.into(), key_id.into()), key);
+    }
+
+    pub fn insert_public_key_pem(
+        &mut self,
+        publisher_id: impl Into<String>,
+        key_id: impl Into<String>,
+        pem: &str,
+    ) -> Result<(), PluginError> {
+        let key = VerifyingKey::from_public_key_pem(pem).map_err(|_| {
+            PluginError::Package("Publisher public key is not valid Ed25519 PEM.".into())
+        })?;
+        self.insert(publisher_id, key_id, key);
+        Ok(())
     }
 
     fn key(&self, publisher_id: &str, key_id: &str) -> Option<&VerifyingKey> {
