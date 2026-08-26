@@ -1,7 +1,8 @@
 use crate::{templates, AppState};
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
-    ExecutionRecord, PermissionSummary, Workflow, WorkflowSummary,
+    BrowserProfile, BrowserProfileSettings, ExecutionRecord, PermissionSummary, StructuredLocator,
+    Workflow, WorkflowSummary,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -190,4 +191,241 @@ pub fn runner_status(state: State<'_, AppState>) -> RunnerStatus {
         active_workflow_ids: state.cancellations.lock().keys().cloned().collect(),
         local_schedules_stop_on_quit: true,
     }
+}
+
+#[tauri::command]
+pub async fn browser_engine_status(
+    state: State<'_, AppState>,
+) -> Result<crate::browser_sidecar::BrowserEngineStatus> {
+    Ok(state.browser_sidecar.status().await)
+}
+
+#[tauri::command]
+pub async fn restart_browser_engine(
+    state: State<'_, AppState>,
+) -> Result<crate::browser_sidecar::BrowserEngineStatus> {
+    state.browser_sidecar.restart().await
+}
+
+#[tauri::command]
+pub fn list_browser_profiles(state: State<'_, AppState>) -> Result<Vec<BrowserProfile>> {
+    state.engine.database().list_browser_profiles().map_err(err)
+}
+
+#[tauri::command]
+pub fn create_browser_profile(
+    name: String,
+    persistent: Option<bool>,
+    settings: Option<BrowserProfileSettings>,
+    state: State<'_, AppState>,
+) -> Result<BrowserProfile> {
+    let name = name.trim();
+    if name.is_empty() || name.len() > 80 {
+        return Err("Browser profile name must contain 1 to 80 characters.".into());
+    }
+    let id = Uuid::new_v4().to_string();
+    let path = state.data_dir.join("browser-profiles").join(&id);
+    std::fs::create_dir_all(&path).map_err(err)?;
+    let profile = BrowserProfile {
+        id,
+        name: name.into(),
+        persistent: persistent.unwrap_or(true),
+        data_path: path.to_string_lossy().to_string(),
+        settings: settings.unwrap_or_default(),
+        created_at: chrono::Utc::now(),
+        last_used_at: None,
+    };
+    state
+        .engine
+        .database()
+        .save_browser_profile(&profile)
+        .map_err(err)?;
+    Ok(profile)
+}
+
+#[tauri::command]
+pub fn update_browser_profile(
+    id: String,
+    name: String,
+    persistent: bool,
+    settings: BrowserProfileSettings,
+    state: State<'_, AppState>,
+) -> Result<BrowserProfile> {
+    let mut profile = state
+        .engine
+        .database()
+        .get_browser_profile(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Browser profile no longer exists.".to_string())?;
+    if name.trim().is_empty() || name.len() > 80 {
+        return Err("Browser profile name must contain 1 to 80 characters.".into());
+    }
+    profile.name = name.trim().into();
+    profile.persistent = persistent;
+    profile.settings = settings;
+    state
+        .engine
+        .database()
+        .save_browser_profile(&profile)
+        .map_err(err)?;
+    Ok(profile)
+}
+
+#[tauri::command]
+pub fn duplicate_browser_profile(id: String, state: State<'_, AppState>) -> Result<BrowserProfile> {
+    let source = state
+        .engine
+        .database()
+        .get_browser_profile(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Browser profile no longer exists.".to_string())?;
+    let new_id = Uuid::new_v4().to_string();
+    let path = state.data_dir.join("browser-profiles").join(&new_id);
+    std::fs::create_dir_all(&path).map_err(err)?;
+    let profile = BrowserProfile {
+        id: new_id,
+        name: format!("{} copy", source.name),
+        persistent: source.persistent,
+        data_path: path.to_string_lossy().to_string(),
+        settings: source.settings,
+        created_at: chrono::Utc::now(),
+        last_used_at: None,
+    };
+    state
+        .engine
+        .database()
+        .save_browser_profile(&profile)
+        .map_err(err)?;
+    Ok(profile)
+}
+
+#[tauri::command]
+pub async fn clear_browser_profile_data(id: String, state: State<'_, AppState>) -> Result<()> {
+    let profile = state
+        .engine
+        .database()
+        .get_browser_profile(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Browser profile no longer exists.".to_string())?;
+    state
+        .browser_sidecar
+        .request("close_all", json!({}))
+        .await
+        .map_err(err)?;
+    let path = checked_profile_path(&state, &profile)?;
+    if path.exists() {
+        std::fs::remove_dir_all(&path).map_err(err)?;
+    }
+    std::fs::create_dir_all(&path).map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_browser_profile(id: String, state: State<'_, AppState>) -> Result<()> {
+    let profile = state
+        .engine
+        .database()
+        .get_browser_profile(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Browser profile no longer exists.".to_string())?;
+    let used = state
+        .engine
+        .database()
+        .workflows_using_reference(&id)
+        .map_err(err)?;
+    if !used.is_empty() {
+        return Err(format!("This browser profile is used by {} workflow(s). Remove those references before deleting it.",used.len()));
+    }
+    state
+        .browser_sidecar
+        .request("close_all", json!({}))
+        .await
+        .map_err(err)?;
+    let path = checked_profile_path(&state, &profile)?;
+    if path.exists() {
+        std::fs::remove_dir_all(&path).map_err(err)?;
+    }
+    state
+        .engine
+        .database()
+        .delete_browser_profile(&id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub async fn open_browser_profile(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    let profile = state
+        .engine
+        .database()
+        .get_browser_profile(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Browser profile no longer exists.".to_string())?;
+    state.browser_sidecar.request("open_browser",json!({"profileId":profile.id,"profilePath":profile.data_path,"persistent":profile.persistent,"headed":true,"viewport":{"width":profile.settings.viewport_width,"height":profile.settings.viewport_height},"userAgent":profile.settings.user_agent,"proxy":profile.settings.proxy,"closeAutomatically":false})).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn start_browser_recording(
+    profile_id: String,
+    initial_url: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    let opened = open_browser_profile(profile_id, state.clone()).await?;
+    let session_id = opened
+        .get("browserSession")
+        .and_then(|value| value.get("sessionId"))
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "The browser recorder did not receive a session.".to_string())?;
+    state
+        .browser_sidecar
+        .request(
+            "recorder_start",
+            json!({"sessionId":session_id,"initialUrl":initial_url}),
+        )
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub async fn stop_browser_recording(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    let result = state
+        .browser_sidecar
+        .request("recorder_stop", json!({"sessionId":session_id}))
+        .await
+        .map_err(err)?;
+    let _ = state
+        .browser_sidecar
+        .request("close_browser", json!({"sessionId":session_id}))
+        .await;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn test_browser_locator(
+    session_id: String,
+    locator: StructuredLocator,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value> {
+    state
+        .browser_sidecar
+        .request(
+            "test_locator",
+            json!({"sessionId":session_id,"locator":locator}),
+        )
+        .await
+        .map_err(err)
+}
+
+fn checked_profile_path(state: &AppState, profile: &BrowserProfile) -> Result<std::path::PathBuf> {
+    let root = state.data_dir.join("browser-profiles");
+    let path = std::path::PathBuf::from(&profile.data_path);
+    if !path.starts_with(&root) || path == root {
+        return Err("Browser profile path failed its safety check.".into());
+    }
+    Ok(path)
 }

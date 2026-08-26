@@ -1,7 +1,7 @@
-import { Bell, Braces, Clock3, Code2, FileClock, FileOutput, GitBranch, Globe2, Hand, type LucideIcon } from "lucide-react";
+import { Bell, Braces, Camera, Clock3, Code2, Download, FileClock, FileOutput, GitBranch, Globe2, Hand, Keyboard, LogIn, MousePointerClick, Navigation, ScanSearch, Upload, X, type LucideIcon } from "lucide-react";
 import type { NodeType, WorkflowNode } from "./types";
 
-export type NodeGroup = "Triggers" | "Logic" | "Data" | "Network" | "System";
+export type NodeGroup = "Triggers" | "Logic" | "Data" | "Browser" | "Network" | "Communication" | "System";
 export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string }
 export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"manual_trigger",name:"Manual Trigger",description:"Run from the toolbar",group:"Triggers",icon:Hand,defaults:{},summary:()=>"Starts on demand"},
@@ -14,7 +14,20 @@ export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"desktop_notification",name:"Desktop Notification",description:"Show a native notification",group:"System",icon:Bell,defaults:{title:"Sandbox",message:"Workflow completed"},summary:c=>String(c.title || "Configure notification")},
   {type:"move_file",name:"Move File",description:"Move within approved folders",group:"System",icon:FileOutput,defaults:{source:"",destinationFolder:"",renameTo:"",overwrite:false},summary:c=>c.destinationFolder?`Move to ${String(c.destinationFolder).split(/[\\/]/).pop()}`:"Choose destination"},
   {type:"run_command",name:"Run Command",description:"Execute an explicitly approved process",group:"System",icon:Code2,defaults:{executable:"",arguments:[],workingDirectory:"",timeoutMs:30000},summary:c=>String(c.executable || "Approval required")},
+  {type:"open_browser",name:"Open Browser",description:"Start a managed Chromium session",group:"Browser",icon:Globe2,defaults:{profileId:"",headed:true,initialUrl:"",viewport:{width:1280,height:800},defaultTimeoutMs:30000,closeAutomatically:true,keepOpenAfterManualTest:false,maximumDurationMs:1800000},summary:c=>c.profileId?`${c.headed===false?"Headless":"Headed"} · managed profile`:"Choose a browser profile"},
+  {type:"navigate",name:"Navigate",description:"Load a URL in the active session",group:"Browser",icon:Navigation,defaults:{url:"",waitCondition:"dom_ready",timeoutMs:30000},summary:c=>String(c.url||"Enter a URL")},
+  {type:"click_element",name:"Click Element",description:"Click a recorded element",group:"Browser",icon:MousePointerClick,defaults:{locator:null,clickType:"normal",mouseButton:"left",modifiers:[],waitAfterMs:0,timeoutMs:30000},summary:c=>locatorSummary(c,"Choose a target")},
+  {type:"fill_field",name:"Fill Field",description:"Enter static or protected data",group:"Browser",icon:LogIn,defaults:{locator:null,value:"",clearExisting:true,inputDelayMs:0,sensitive:false,timeoutMs:30000},summary:c=>locatorSummary(c,c.sensitive?"Protected value":"Configure field")},
+  {type:"select_option",name:"Select Option",description:"Choose an option by value, label or index",group:"Browser",icon:MousePointerClick,defaults:{locator:null,selectBy:"value",option:"",timeoutMs:30000},summary:c=>`${String(c.selectBy??"value")}: ${String(c.option??"")||"choose option"}`},
+  {type:"press_key",name:"Press Key",description:"Send a validated key combination",group:"Browser",icon:Keyboard,defaults:{key:"Enter",timeoutMs:30000},summary:c=>String(c.key||"Enter")},
+  {type:"wait_for",name:"Wait For",description:"Wait for page state or an element",group:"Browser",icon:Clock3,defaults:{waitFor:"element_visible",locator:null,delayMs:1000,timeoutMs:30000},summary:c=>String(c.waitFor??"element visible").replaceAll("_"," ")},
+  {type:"extract_data",name:"Extract Data",description:"Extract structured values from the page",group:"Browser",icon:ScanSearch,defaults:{locator:null,extract:"text",fieldName:"value",repeated:false,fields:{},timeoutMs:30000},summary:c=>`${String(c.fieldName??"value")} · ${String(c.extract??"text").replaceAll("_"," ")}`},
+  {type:"screenshot",name:"Screenshot",description:"Capture viewport, page or element",group:"Browser",icon:Camera,defaults:{mode:"viewport",includeInHistory:true,maximumBytes:10485760,timeoutMs:30000},summary:c=>String(c.mode??"viewport").replaceAll("_"," ")},
+  {type:"download_file",name:"Download File",description:"Save a browser download safely",group:"Browser",icon:Download,defaults:{locator:null,destinationFolder:"",filename:"",collisionBehaviour:"rename",maximumBytes:104857600,timeoutMs:60000},summary:c=>c.destinationFolder?`Save to ${String(c.destinationFolder).split(/[\\/]/).pop()}`:"Choose destination"},
+  {type:"upload_file",name:"Upload File",description:"Upload an approved local file",group:"Browser",icon:Upload,defaults:{locator:null,file:"",timeoutMs:30000},summary:c=>c.file?String(c.file).split(/[\\/]/).pop()!:"Choose an approved file"},
+  {type:"close_browser",name:"Close Browser",description:"Close the active managed session",group:"Browser",icon:X,defaults:{},summary:()=>"Close browser session"},
 ];
 export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)!;
 export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false}};
 export const isTrigger=(type:NodeType)=>["manual_trigger","schedule_trigger","file_watch_trigger"].includes(type);
+const locatorSummary=(config:Record<string,unknown>,fallback:string)=>{const locator=config.locator as {accessibleName?:string;primary?:{name?:string;value?:string}}|undefined;return locator?.accessibleName||locator?.primary?.name||locator?.primary?.value||fallback};

@@ -167,22 +167,23 @@ impl BrowserSidecar {
     pub async fn shutdown(&self) {
         let mut process = self.inner.lock().await;
         if process.child.is_some() {
-            let _ = self
-                .send_locked(&mut process, "close_all", json!({}))
-                .await;
+            let _ = self.send_locked(&mut process, "close_all", json!({})).await;
         }
         self.stop_locked(&mut process).await;
     }
 
     async fn start_locked(&self, process: &mut SidecarProcess) -> Result<(), String> {
-        let node = self.root.join("runtime").join(if cfg!(windows) {
-            "node.exe"
-        } else {
-            "node"
-        });
+        let node = self
+            .root
+            .join("runtime")
+            .join(if cfg!(windows) { "node.exe" } else { "node" });
         let script = self.root.join("dist").join("server.js");
         let browsers = self.root.join("browsers");
-        for (label, path) in [("Node runtime", &node), ("sidecar script", &script), ("managed browser", &browsers)] {
+        for (label, path) in [
+            ("Node runtime", &node),
+            ("sidecar script", &script),
+            ("managed browser", &browsers),
+        ] {
             if !path.exists() {
                 return Err(format!("Browser engine unavailable: {label} was not packaged at '{}'. Run npm.cmd run browser:prepare before building.", path.display()));
             }
@@ -198,8 +199,14 @@ impl BrowserSidecar {
             .kill_on_drop(true)
             .spawn()
             .map_err(|error| format!("Browser engine could not start: {error}"))?;
-        let stdin = child.stdin.take().ok_or_else(|| "Browser engine stdin was unavailable.".to_string())?;
-        let stdout = child.stdout.take().ok_or_else(|| "Browser engine stdout was unavailable.".to_string())?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Browser engine stdin was unavailable.".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Browser engine stdout was unavailable.".to_string())?;
         if let Some(stderr) = child.stderr.take() {
             tauri::async_runtime::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
@@ -214,37 +221,86 @@ impl BrowserSidecar {
         Ok(())
     }
 
-    async fn send_locked(&self, process: &mut SidecarProcess, operation: &str, payload: Value) -> Result<Value, String> {
+    async fn send_locked(
+        &self,
+        process: &mut SidecarProcess,
+        operation: &str,
+        payload: Value,
+    ) -> Result<Value, String> {
         let id = Uuid::new_v4().to_string();
-        let request = SidecarRequest { id: id.clone(), token: &self.token, protocol_version: PROTOCOL_VERSION, operation, payload };
+        let request = SidecarRequest {
+            id: id.clone(),
+            token: &self.token,
+            protocol_version: PROTOCOL_VERSION,
+            operation,
+            payload,
+        };
         let line = serde_json::to_string(&request).map_err(|error| error.to_string())?;
-        let stdin = process.stdin.as_mut().ok_or_else(|| "Browser engine stdin is closed.".to_string())?;
-        stdin.write_all(line.as_bytes()).await.map_err(|error| format!("Browser engine request failed: {error}"))?;
-        stdin.write_all(b"\n").await.map_err(|error| error.to_string())?;
+        let stdin = process
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "Browser engine stdin is closed.".to_string())?;
+        stdin
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|error| format!("Browser engine request failed: {error}"))?;
+        stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|error| error.to_string())?;
         stdin.flush().await.map_err(|error| error.to_string())?;
-        let stdout = process.stdout.as_mut().ok_or_else(|| "Browser engine stdout is closed.".to_string())?;
+        let stdout = process
+            .stdout
+            .as_mut()
+            .ok_or_else(|| "Browser engine stdout is closed.".to_string())?;
         loop {
             let mut line = String::new();
-            if stdout.read_line(&mut line).await.map_err(|error| error.to_string())? == 0 {
+            if stdout
+                .read_line(&mut line)
+                .await
+                .map_err(|error| error.to_string())?
+                == 0
+            {
                 return Err("Browser engine stopped before responding.".into());
             }
-            let response: SidecarResponse = serde_json::from_str(&line).map_err(|error| format!("Browser engine returned invalid data: {error}"))?;
-            if response.id != id { continue; }
-            if response.protocol_version != PROTOCOL_VERSION || response.sidecar_version != EXPECTED_SIDECAR_VERSION {
+            let response: SidecarResponse = serde_json::from_str(&line)
+                .map_err(|error| format!("Browser engine returned invalid data: {error}"))?;
+            if response.id != id {
+                continue;
+            }
+            if response.protocol_version != PROTOCOL_VERSION
+                || response.sidecar_version != EXPECTED_SIDECAR_VERSION
+            {
                 return Err("Browser engine protocol or version mismatch.".into());
             }
-            if response.ok { return Ok(response.result.unwrap_or(Value::Null)); }
-            let error = response.error.unwrap_or(SidecarError { code:"browser_operation_failed".into(), message:"Browser operation failed without details.".into(), details:None });
-            return Err(serde_json::to_string(&json!({"code":error.code,"message":error.message,"details":error.details})).unwrap_or(error.message));
+            if response.ok {
+                return Ok(response.result.unwrap_or(Value::Null));
+            }
+            let error = response.error.unwrap_or(SidecarError {
+                code: "browser_operation_failed".into(),
+                message: "Browser operation failed without details.".into(),
+                details: None,
+            });
+            return Err(serde_json::to_string(
+                &json!({"code":error.code,"message":error.message,"details":error.details}),
+            )
+            .unwrap_or(error.message));
         }
     }
 
     async fn stop_locked(&self, process: &mut SidecarProcess) {
-        process.stdin.take(); process.stdout.take();
-        if let Some(mut child) = process.child.take() { let _ = child.kill().await; let _ = child.wait().await; }
+        process.stdin.take();
+        process.stdout.take();
+        if let Some(mut child) = process.child.take() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
     }
 
     async fn set_error(&self, error: String) {
-        *self.status.write().await = BrowserEngineStatus { error: Some(error), ..BrowserEngineStatus::default() };
+        *self.status.write().await = BrowserEngineStatus {
+            error: Some(error),
+            ..BrowserEngineStatus::default()
+        };
     }
 }

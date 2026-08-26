@@ -32,6 +32,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../browser-sidecar/dist/": "browser-sidecar/dist/",
+      "../browser-sidecar/runtime/": "browser-sidecar/runtime/",
+      "../browser-sidecar/browsers/": "browser-sidecar/browsers/",
+      "../browser-sidecar/node_modules/playwright/": "browser-sidecar/node_modules/playwright/",
+      "../browser-sidecar/node_modules/playwright-core/": "browser-sidecar/node_modules/playwright-core/"
+    },
     "shortDescription": "Local-first visual workflow automation",
     "category": "DeveloperTool",
     "windows": { "wix": { "language": "en-US" }, "nsis": { "displayLanguageSelector": false } }

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ExecutionRecord, PermissionSummary, RunnerStatus, ValidationIssue, Workflow, WorkflowSummary } from "./types";
+import type { BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ExecutionRecord, PermissionSummary, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
 import { previewApi } from "./previewApi";
 const tauri=typeof window!=="undefined"&&"__TAURI_INTERNALS__" in window;
 export const api={
@@ -17,5 +17,17 @@ export const api={
   clearExecutionHistory:(keep=0)=>tauri?invoke<number>("clear_execution_history",{keep}):previewApi.clearExecutionHistory(),
   approvePermissions:(id:string,permissions:PermissionSummary)=>invoke<Workflow>("approve_permissions",{id,permissions}),
   runnerStatus:()=>tauri?invoke<RunnerStatus>("runner_status"):Promise.resolve({paused:false,activeWorkflowIds:[],localSchedulesStopOnQuit:true}),
+  browserEngineStatus:()=>tauri?invoke<BrowserEngineStatus>("browser_engine_status"):Promise.resolve({available:true,protocolVersion:1,sidecarVersion:"0.2.0",browserName:"chromium",browserVersion:"140.0.7339.16"}),
+  restartBrowserEngine:()=>invoke<BrowserEngineStatus>("restart_browser_engine"),
+  listBrowserProfiles:()=>tauri?invoke<BrowserProfile[]>("list_browser_profiles"):previewApi.listBrowserProfiles(),
+  createBrowserProfile:(name:string,persistent=true,settings?:BrowserProfileSettings)=>tauri?invoke<BrowserProfile>("create_browser_profile",{name,persistent,settings}):previewApi.createBrowserProfile(name,persistent,settings),
+  updateBrowserProfile:(id:string,name:string,persistent:boolean,settings:BrowserProfileSettings)=>tauri?invoke<BrowserProfile>("update_browser_profile",{id,name,persistent,settings}):previewApi.updateBrowserProfile(id,name,persistent,settings),
+  duplicateBrowserProfile:(id:string)=>tauri?invoke<BrowserProfile>("duplicate_browser_profile",{id}):previewApi.duplicateBrowserProfile(id),
+  clearBrowserProfileData:(id:string)=>invoke<void>("clear_browser_profile_data",{id}),
+  deleteBrowserProfile:(id:string)=>tauri?invoke<void>("delete_browser_profile",{id}):previewApi.deleteBrowserProfile(id),
+  openBrowserProfile:(id:string)=>invoke<Record<string,unknown>>("open_browser_profile",{id}),
+  startBrowserRecording:(profileId:string,initialUrl?:string)=>invoke<{browserSession:{sessionId:string}}>("start_browser_recording",{profileId,initialUrl}),
+  stopBrowserRecording:(sessionId:string)=>invoke<{steps:RecordedStep[]}>("stop_browser_recording",{sessionId}),
+  testBrowserLocator:(sessionId:string,locator:StructuredLocator)=>invoke<Record<string,unknown>>("test_browser_locator",{sessionId,locator}),
   isDesktop:tauri,
 };

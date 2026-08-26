@@ -34,6 +34,7 @@ function sessionOutput(session: ManagedSession) {
     },
     page: { pageId: session.pageId },
     currentUrl: session.page.url(),
+    closeAutomatically: session.closeAutomatically,
   };
 }
 
@@ -147,7 +148,12 @@ async function dispatch(operation: string, payload: Record<string, unknown>): Pr
       await resolved.locator.highlight();
       return { ...sessionOutput(session), locatorAttempts: resolved.attempts, successfulLocator: resolved.candidate, matchCount: 1 };
     }
-    case "recorder_start": { await startRecording(session); return { ...sessionOutput(session), recording: true }; }
+    case "recorder_start": {
+      const initialUrl = optionalString(payload.initialUrl);
+      if (initialUrl) await page.goto(initialUrl, { waitUntil: "domcontentloaded", timeout: timeout(payload) });
+      await startRecording(session);
+      return { ...sessionOutput(session), recording: true };
+    }
     case "recorder_stop": {
       const steps = deduplicateRecorderEvents(recordings.get(session.sessionId) ?? []);
       recordings.delete(session.sessionId);

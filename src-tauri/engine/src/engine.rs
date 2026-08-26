@@ -41,8 +41,14 @@ pub enum EngineEvent {
 #[async_trait]
 pub trait HostServices: Send + Sync {
     async fn desktop_notification(&self, title: &str, message: &str) -> Result<(), EngineError>;
-    async fn browser_operation(&self, _operation: &str, _payload: Value) -> Result<Value, EngineError> {
-        Err(EngineError::Node("The managed browser engine is unavailable on this host.".into()))
+    async fn browser_operation(
+        &self,
+        _operation: &str,
+        _payload: Value,
+    ) -> Result<Value, EngineError> {
+        Err(EngineError::Node(
+            "The managed browser engine is unavailable on this host.".into(),
+        ))
     }
 }
 
@@ -307,6 +313,28 @@ impl Engine {
                 }
             }
             self.publish(&record)?;
+        }
+        let sessions_to_close: HashSet<String> = outputs
+            .values()
+            .filter(|output| {
+                output
+                    .get("closeAutomatically")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true)
+            })
+            .filter_map(|output| {
+                output
+                    .get("browserSession")?
+                    .get("sessionId")?
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .collect();
+        for session_id in sessions_to_close {
+            let _ = self
+                .host
+                .browser_operation("close_browser", json!({"sessionId":session_id}))
+                .await;
         }
         let completed = Utc::now();
         record.completed_at = Some(completed);
@@ -600,16 +628,46 @@ impl Engine {
             ));
         }
         let mut payload = resolve_value(&node.configuration, trigger, outputs)?;
-        let object = payload.as_object_mut().ok_or_else(|| EngineError::Node("Browser node configuration must be an object.".into()))?;
+        let object = payload.as_object_mut().ok_or_else(|| {
+            EngineError::Node("Browser node configuration must be an object.".into())
+        })?;
         object.insert("workflowId".into(), Value::String(workflow.id.clone()));
         object.insert("nodeId".into(), Value::String(node.id.clone()));
         if node.node_type == "open_browser" {
-            let profile_id = object.get("profileId").and_then(Value::as_str).ok_or_else(|| EngineError::Node("Open Browser requires a browser profile.".into()))?;
-            if !workflow.settings.permissions.approved_browser_profile_ids.iter().any(|approved| approved == profile_id) {
-                return Err(EngineError::Permission(format!("Browser profile '{profile_id}' has not been approved for this workflow.")));
+            let profile_id = object
+                .get("profileId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    EngineError::Node("Open Browser requires a browser profile.".into())
+                })?;
+            if !workflow
+                .settings
+                .permissions
+                .approved_browser_profile_ids
+                .iter()
+                .any(|approved| approved == profile_id)
+            {
+                return Err(EngineError::Permission(format!(
+                    "Browser profile '{profile_id}' has not been approved for this workflow."
+                )));
+            }
+            if !object.contains_key("headed") {
+                object.insert(
+                    "headed".into(),
+                    Value::Bool(trigger.get("type").and_then(Value::as_str) == Some("manual")),
+                );
+            }
+            if object
+                .get("keepOpenAfterManualTest")
+                .and_then(Value::as_bool)
+                == Some(true)
+                && trigger.get("type").and_then(Value::as_str) == Some("manual")
+            {
+                object.insert("closeAutomatically".into(), Value::Bool(false));
             }
         } else {
-            let session_id = browser_session_id(object.get("sessionNodeId").and_then(Value::as_str), outputs)?;
+            let session_id =
+                browser_session_id(object.get("sessionNodeId").and_then(Value::as_str), outputs)?;
             object.insert("sessionId".into(), Value::String(session_id));
         }
         if node.node_type == "download_file" {
@@ -627,7 +685,10 @@ impl Engine {
                 let diagnostics = browser_diagnostics_from_output(&output);
                 Ok(NodeResult::new(output)
                     .with_browser_diagnostics(diagnostics)
-                    .log(format!("{} completed through the managed Chromium sidecar.", node.name)))
+                    .log(format!(
+                        "{} completed through the managed Chromium sidecar.",
+                        node.name
+                    )))
             }
             Err(error) => Err(error),
         }
@@ -725,6 +786,7 @@ impl Engine {
                         )],
                         retry_count: attempt,
                         branch: None,
+                        browser_diagnostics: None,
                     });
                 }
                 Err(error) => {
@@ -831,6 +893,50 @@ fn contains(left: &Value, right: &Value) -> bool {
         (Value::Array(a), b) => a.contains(b),
         _ => false,
     }
+}
+
+fn browser_session_id(
+    selected_node_id: Option<&str>,
+    outputs: &HashMap<String, Value>,
+) -> Result<String, EngineError> {
+    let candidates: Vec<_> = outputs
+        .iter()
+        .filter(|(node_id, _)| selected_node_id.is_none_or(|selected| selected == node_id.as_str()))
+        .filter_map(|(_, output)| {
+            output
+                .get("browserSession")
+                .and_then(|session| session.get("sessionId"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .collect();
+    match candidates.as_slice() {
+        [session_id] => Ok(session_id.clone()),
+        [] => Err(EngineError::Node(
+            "This browser node has no active upstream browser session. Connect it after Open Browser or another browser node.".into(),
+        )),
+        _ => Err(EngineError::Node(
+            "Multiple browser sessions are available. Select the session source in this node's configuration.".into(),
+        )),
+    }
+}
+
+fn browser_diagnostics_from_output(output: &Value) -> Option<crate::BrowserDiagnostics> {
+    if output.get("locatorAttempts").is_none() && output.get("currentUrl").is_none() {
+        return None;
+    }
+    serde_json::from_value(json!({
+        "currentUrl": output.get("currentUrl").cloned().unwrap_or_else(|| json!("")),
+        "pageTitle": output.get("pageTitle").cloned().unwrap_or_else(|| json!("")),
+        "locatorAttempts": output.get("locatorAttempts").cloned().unwrap_or_else(|| json!([])),
+        "successfulLocator": output.get("successfulLocator").cloned().unwrap_or(Value::Null),
+        "matchCount": output.get("matchCount").cloned().unwrap_or_else(|| json!(0)),
+        "consoleErrors": [],
+        "failedNetworkRequests": [],
+        "unexpectedNavigation": output.get("navigated").cloned().unwrap_or_else(|| json!(false)),
+        "rerecordAvailable": true
+    }))
+    .ok()
 }
 fn strings<'a>(left: &'a Value, right: &'a Value) -> Option<(&'a str, &'a str)> {
     Some((left.as_str()?, right.as_str()?))
