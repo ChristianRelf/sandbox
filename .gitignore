@@ -1,4 +1,8 @@
 node_modules/
+browser-sidecar/node_modules/
+browser-sidecar/runtime/
+browser-sidecar/browsers/
+browser-sidecar/dist/
 dist/
 target/
 src-tauri/target/

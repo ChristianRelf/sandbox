@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "npm run build && vitest run",
     "install:chromium": "playwright install chromium"
   },
   "dependencies": {

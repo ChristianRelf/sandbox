@@ -28,7 +28,8 @@ export function candidateLocator(page: Page, candidate: LocatorCandidate): Locat
       const [attribute, ...rest] = candidate.value.split("=");
       const value = rest.join("=");
       if (!attribute || !value) throw new Error("Attribute locators must use name=value.");
-      return page.locator(`[${CSS.escape(attribute)}=${JSON.stringify(value)}]`);
+      if (!/^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(attribute)) throw new Error("Attribute locator name is invalid.");
+      return page.locator(`[${attribute}=${JSON.stringify(value)}]`);
     }
     case "css": return page.locator(candidate.value);
     case "xpath": return page.locator(`xpath=${candidate.value}`);
