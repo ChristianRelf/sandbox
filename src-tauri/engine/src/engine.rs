@@ -1151,7 +1151,7 @@ mod tests {
         let now = Utc::now();
         Workflow {
             id: Uuid::new_v4().to_string(),
-            schema_version: 1,
+            schema_version: crate::model::CURRENT_SCHEMA_VERSION,
             name: "Test".into(),
             description: "".into(),
             enabled: true,

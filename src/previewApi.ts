@@ -5,7 +5,7 @@ const PROFILES="sandbox-preview-profiles";
 const now=()=>new Date().toISOString();
 const blank=(template="blank"):Workflow=>{
   const id=crypto.randomUUID(); const createdAt=now();
-  const base={id,schemaVersion:1,description:"",enabled:false,settings:{defaultNodeTimeoutMs:30000,maxConcurrentNodes:4,permissions:{approvedFolders:[],approvedNetworkDomains:[],approvedBrowserProfileIds:[],browserAutomationPermitted:false,externalCommunicationPermitted:false,commandExecutionPermitted:false,backgroundExecutionPermitted:false}},createdAt,updatedAt:createdAt};
+  const base={id,schemaVersion:2,description:"",enabled:false,settings:{defaultNodeTimeoutMs:30000,maxConcurrentNodes:4,permissions:{approvedFolders:[],approvedNetworkDomains:[],approvedBrowserProfileIds:[],browserAutomationPermitted:false,externalCommunicationPermitted:false,commandExecutionPermitted:false,backgroundExecutionPermitted:false}},createdAt,updatedAt:createdAt};
   if(template==="website-health")return{...base,name:"Website Health Monitor",triggerNodeId:"manual_trigger",settings:{...base.settings,permissions:{...base.settings.permissions,approvedNetworkDomains:["example.com"]}},nodes:[
     {id:"manual_trigger",type:"manual_trigger",version:1,name:"Manual Trigger",position:{x:60,y:220},configuration:{},disabled:false},
     {id:"http_request",type:"http_request",version:1,name:"HTTP Request",position:{x:340,y:220},configuration:{method:"GET",url:"https://example.com",timeoutMs:30000,retryCount:1,headers:{},query:{}},disabled:false},

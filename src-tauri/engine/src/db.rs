@@ -66,6 +66,7 @@ impl Database {
                 .execute_batch(include_str!("../migrations/003_browser_integrations.sql"))
                 .map_err(storage)?;
         }
+        migrate_saved_workflows(&connection)?;
         Ok(())
     }
 
@@ -77,7 +78,8 @@ impl Database {
             .map_err(storage)
     }
 
-    pub fn save_workflow(&self, mut workflow: Workflow) -> Result<Workflow, EngineError> {
+    pub fn save_workflow(&self, workflow: Workflow) -> Result<Workflow, EngineError> {
+        let mut workflow = migrate_workflow(workflow)?;
         let previous = self.get_workflow(&workflow.id)?;
         if let Some(old) = &previous {
             if dangerous_fingerprint(old) != dangerous_fingerprint(&workflow) {
@@ -133,7 +135,7 @@ impl Database {
             )
             .optional()
             .map_err(storage)?;
-        json.map(|value| serde_json::from_str(&value).map_err(storage))
+        json.map(|value| decode_workflow(&value))
             .transpose()
     }
 
@@ -149,7 +151,7 @@ impl Database {
             let rows = statement
                 .query_map([], |row| row.get::<_, String>(0))
                 .map_err(storage)?;
-            rows.map(|row| serde_json::from_str(&row.map_err(storage)?).map_err(storage))
+            rows.map(|row| decode_workflow(&row.map_err(storage)?))
                 .collect::<Result<_, _>>()?
         };
         workflows
@@ -556,6 +558,48 @@ fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata>
     })
 }
 
+fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
+    match workflow.schema_version {
+        crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
+        1 => {
+            workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
+            Ok(workflow)
+        }
+        version if version > crate::model::CURRENT_SCHEMA_VERSION => Err(EngineError::Validation(
+            format!("Workflow schema {version} was created by a newer version of Sandbox."),
+        )),
+        version => Err(EngineError::Validation(format!(
+            "Workflow schema {version} is not supported."
+        ))),
+    }
+}
+
+fn decode_workflow(json: &str) -> Result<Workflow, EngineError> {
+    migrate_workflow(serde_json::from_str(json).map_err(storage)?)
+}
+
+fn migrate_saved_workflows(connection: &Connection) -> Result<(), EngineError> {
+    let rows: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare("SELECT id, definition_json FROM workflows WHERE schema_version < ?")
+            .map_err(storage)?;
+        let values = statement
+            .query_map([crate::model::CURRENT_SCHEMA_VERSION], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(storage)?;
+        values.collect::<Result<_, _>>().map_err(storage)?
+    };
+    for (id, json) in rows {
+        let workflow = decode_workflow(&json)?;
+        connection
+            .execute(
+                "UPDATE workflows SET schema_version=?, definition_json=? WHERE id=?",
+                params![workflow.schema_version, serde_json::to_string(&workflow).map_err(storage)?, id],
+            )
+            .map_err(storage)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,7 +641,8 @@ mod tests {
         let reopened = Database::open(&path).unwrap();
         let saved = reopened.get_workflow("w").unwrap().unwrap();
         assert_eq!(saved.name, "Saved");
-        assert_eq!(saved.schema_version, 1);
+        assert_eq!(saved.schema_version, crate::model::CURRENT_SCHEMA_VERSION);
+        assert!(!saved.settings.permissions.browser_automation_permitted);
     }
     #[test]
     fn recovers_running_records() {
