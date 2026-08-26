@@ -8,6 +8,7 @@ import { WorkflowEditor } from "./components/WorkflowEditor";
 import { SettingsView } from "./components/SettingsView";
 import { PendingApprovalsView } from "./components/PendingApprovalsView";
 import { InstalledPluginsView } from "./components/InstalledPluginsView";
+import { MarketplaceView } from "./components/MarketplaceView";
 import { useAppStore } from "./store";
 import "./plugins.css";
 
@@ -41,6 +42,7 @@ export default function App() {
       {view === "settings" && <SettingsView />}
       {view === "approvals" && <PendingApprovalsView />}
       {view === "plugins" && <InstalledPluginsView />}
+      {view === "marketplace" && <MarketplaceView />}
       {view === "editor" && activeWorkflow && <WorkflowEditor />}
     </div>
     <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} onCreate={() => createWorkflow()} />

@@ -38,6 +38,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 url = "2"
 semver = "1"
 aes-gcm = "0.10"
+urlencoding = "2"
 
 [dev-dependencies]
 ed25519-dalek = { version = "3", features = ["pem", "rand_core"] }

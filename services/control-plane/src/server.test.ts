@@ -27,12 +27,12 @@ function dependencies(permissions: string[]) {
     getWorkflowRevision: vi.fn(),
     resolveSyncConflict: vi.fn(),
     createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), publishPluginVersion: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
-    searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(),
+    searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
-  const packageStorage = { createUpload: vi.fn(), inspect: vi.fn() };
+  const packageStorage = { createUpload: vi.fn(), createDownload: vi.fn(), inspect: vi.fn() };
   const packageScanner = { scan: vi.fn() };
   return { repository, sessions, email, packageStorage, packageScanner, webBaseUrl: "https://app.sandbox.test" };
 }
@@ -137,6 +137,19 @@ describe("control-plane API", () => {
     expect(deps.repository.searchMarketplace).toHaveBeenCalledWith(null, expect.objectContaining({ pricing: "free", verifiedOnly: true, visibility: "public" }));
     const privateResponse = await server.inject({ method: "GET", url: `/v1/marketplace/plugins?visibility=workspace&workspaceId=${workspaceId}` });
     expect(privateResponse.statusCode).toBe(401);
+    await server.close();
+  });
+
+  it("issues a short-lived free-package grant with the publisher verification key", async () => {
+    const deps = dependencies([]);
+    const der = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.alloc(32, 4)]).toString("base64");
+    vi.mocked(deps.repository.getMarketplacePackage).mockResolvedValue({ pluginId: "com.example.weather", version: "1.0.0", packageIntegrity: `sha256:${"c".repeat(64)}`, packageSize: 1024, packageObjectKey: "plugins/weather", publisherPublicId: "com.example.publisher", publisherKeyId: "release-1", publisherPublicKeyDerBase64: der, pricingModel: "free" });
+    vi.mocked(deps.packageStorage.createDownload).mockResolvedValue({ downloadUrl: "https://objects.example/download?signature=short-lived", expiresAt: new Date(Date.now()+300_000).toISOString() });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "GET", url: "/v1/marketplace/plugins/com.example.weather/install" });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().publisher.publicKeyPem).toContain("BEGIN PUBLIC KEY");
+    expect(response.json().download.downloadUrl).toContain("signature=short-lived");
     await server.close();
   });
 });

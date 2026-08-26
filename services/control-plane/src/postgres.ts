@@ -3,7 +3,7 @@ import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, WorkflowR
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -368,6 +368,27 @@ export class PostgresRepository implements ControlPlaneRepository {
   async getMarketplaceListing(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null) {
     const result = await this.searchMarketplace(actor, { search: pluginId, category: null, pricing: "all", verifiedOnly: false, visibility: workspaceId ? "all" : "public", workspaceId, teamApprovedOnly: false, sort: "recent", cursor: null, limit: 1, hostVersion: "0.3.0" });
     return result.items.find(item => item.pluginId === pluginId) ?? null;
+  }
+
+  async getMarketplacePackage(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null): Promise<MarketplacePackage | null> {
+    if (!await this.getMarketplaceListing(actor, pluginId, workspaceId)) return null;
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{
+        plugin_id: string; version: string; package_integrity: string; package_size: string | number; package_object_key: string;
+        publisher_public_id: string; publisher_key_id: string; publisher_public_key_der_base64: string; pricing_model: string;
+      }>(`SELECT pv.plugin_id,pv.version,pv.package_integrity,pv.package_size,pv.package_object_key,p.public_id AS publisher_public_id,
+                 pv.publisher_key_id,encode(psk.public_key,'base64') AS publisher_public_key_der_base64,l.pricing->>'model' AS pricing_model
+            FROM plugin_listings l JOIN plugin_versions pv ON pv.id=l.current_version_id JOIN plugins pl ON pl.id=pv.plugin_id
+            JOIN publishers p ON p.id=pl.publisher_id JOIN publisher_signing_keys psk ON psk.publisher_id=p.id AND psk.key_id=pv.publisher_key_id
+            JOIN plugin_reviews pr ON pr.plugin_version_id=pv.id
+           WHERE pv.plugin_id=$1 AND pr.status='published' AND pv.revoked_at IS NULL AND psk.revoked_at IS NULL AND l.suspended_at IS NULL AND l.removed_at IS NULL`, [pluginId]);
+      if (!result.rowCount) return null;
+      const row = result.rows[0];
+      return { pluginId: row.plugin_id, version: row.version, packageIntegrity: row.package_integrity, packageSize: Number(row.package_size), packageObjectKey: row.package_object_key, publisherPublicId: row.publisher_public_id, publisherKeyId: row.publisher_key_id, publisherPublicKeyDerBase64: row.publisher_public_key_der_base64.replace(/\s/g, ""), pricingModel: row.pricing_model };
+    } finally {
+      client.release();
+    }
   }
 
   async listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number) {

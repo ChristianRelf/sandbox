@@ -77,6 +77,10 @@ pub fn configured() -> Result<(), String> {
     configuration().map(|_| ())
 }
 
+pub fn control_plane_url() -> Result<String, String> {
+    configuration().map(|configuration| configuration.api_base_url)
+}
+
 pub fn start(
     redirect_uri: String,
     create_account: bool,

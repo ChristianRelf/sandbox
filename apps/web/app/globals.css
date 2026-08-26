@@ -66,10 +66,6 @@ nav {
 nav a:first-child {
   color: var(--text);
 }
-nav a[aria-disabled] {
-  opacity: 0.45;
-  pointer-events: none;
-}
 .trust-mark {
   margin-left: auto;
   display: flex;
@@ -146,8 +142,7 @@ button {
   align-items: center;
   padding: 0 8px;
 }
-.search-form button,
-.detail-head button {
+.search-form button {
   height: 36px;
   border: 0;
   border-radius: 6px;
@@ -349,9 +344,13 @@ button {
   font-size: 9px;
   color: var(--dim);
 }
-.detail-head button {
+.action-note {
   margin-top: 8px;
-  opacity: 0.55;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 .detail-summary {
   font-size: 17px;

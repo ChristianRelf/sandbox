@@ -3,6 +3,7 @@ mod browser_sidecar;
 mod commands;
 mod credential_vault;
 mod integrations;
+mod marketplace;
 mod oauth;
 mod plugin_manager;
 mod runner;
@@ -311,6 +312,8 @@ pub fn run() {
             commands::set_plugin_enabled,
             commands::prepare_workflow_sync,
             commands::import_synced_revision_copy
+            ,commands::search_marketplace
+            ,commands::inspect_marketplace_plugin
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

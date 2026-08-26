@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AccountStatus, BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, InstalledPlugin, PackageTrustMetadata, PendingApproval, PermissionSummary, PluginPackageInspection, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
+import type { AccountStatus, BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, InstalledPlugin, MarketplacePage, PackageTrustMetadata, PendingApproval, PermissionSummary, PluginPackageInspection, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
 import { previewApi } from "./previewApi";
 const tauri=typeof window!=="undefined"&&"__TAURI_INTERNALS__" in window;
 export const api={
@@ -53,5 +53,7 @@ export const api={
   listInstalledPlugins:(ownerType="personal",ownerId="local")=>tauri?invoke<InstalledPlugin[]>("list_installed_plugins",{ownerType,ownerId}):Promise.resolve([]),
   approvePluginPermissions:(plugin:InstalledPlugin)=>tauri?invoke<InstalledPlugin>("approve_plugin_permissions",{pluginId:plugin.pluginId,version:plugin.version,packageIntegrity:plugin.packageIntegrity,ownerType:plugin.ownerType,ownerId:plugin.ownerId}):Promise.reject(new Error("Plugin permissions require the desktop application.")),
   setPluginEnabled:(plugin:InstalledPlugin,enabled:boolean)=>tauri?invoke<InstalledPlugin>("set_plugin_enabled",{pluginId:plugin.pluginId,version:plugin.version,packageIntegrity:plugin.packageIntegrity,ownerType:plugin.ownerType,ownerId:plugin.ownerId,enabled}):Promise.reject(new Error("Plugin enablement requires the desktop application.")),
+  searchMarketplace:(query:{search?:string;pricing?:string;verifiedOnly?:boolean;sort?:string;cursor?:string;limit?:number})=>tauri?invoke<MarketplacePage>("search_marketplace",{query}):Promise.resolve({items:[],nextCursor:null}),
+  inspectMarketplacePlugin:(pluginId:string)=>tauri?invoke<PluginPackageInspection>("inspect_marketplace_plugin",{pluginId}):Promise.reject(new Error("Marketplace package inspection requires the desktop application.")),
   isDesktop:tauri,
 };

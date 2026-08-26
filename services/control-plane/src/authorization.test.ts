@@ -20,7 +20,7 @@ function repository(permissionByWorkspace: Record<string, Permission[]>): Contro
     createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), createSyncedWorkflow: vi.fn(), appendWorkflowRevision: vi.fn(),
     listWorkflowRevisions: vi.fn(), getWorkflowRevision: vi.fn(), resolveSyncConflict: vi.fn(),
     createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), publishPluginVersion: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
-    searchMarketplace: vi.fn(), getMarketplaceListing: vi.fn(),
+    searchMarketplace: vi.fn(), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
 }

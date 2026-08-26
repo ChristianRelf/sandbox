@@ -6,6 +6,7 @@ export interface PackageObjectMetadata {
 
 export interface ImmutablePackageStorage {
   createUpload(objectKey: string, size: number, sha256: string): Promise<{ uploadUrl: string; expiresAt: string }>;
+  createDownload(objectKey: string): Promise<{ downloadUrl: string; expiresAt: string }>;
   inspect(objectKey: string): Promise<PackageObjectMetadata>;
 }
 
@@ -35,6 +36,9 @@ export class HttpImmutablePackageStorage implements ImmutablePackageStorage {
   }
   async inspect(objectKey: string) {
     return this.request<PackageObjectMetadata>("/v1/objects/inspect", { objectKey });
+  }
+  async createDownload(objectKey: string) {
+    return this.request<{ downloadUrl: string; expiresAt: string }>("/v1/downloads", { objectKey, expiresInSeconds: 300 });
   }
   private async request<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}${path}`, { method: "POST", headers: { authorization: `Bearer ${this.bearerToken}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });

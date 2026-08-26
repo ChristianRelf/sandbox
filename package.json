@@ -25,6 +25,8 @@
     "contracts:build": "npm.cmd run build --workspace @sandbox/contracts",
     "control-plane:build": "npm.cmd run build --workspace @sandbox/control-plane",
     "control-plane:test": "npm.cmd run test --workspace @sandbox/control-plane",
+    "web:dev": "npm.cmd run dev --workspace @sandbox/web",
+    "web:build": "npm.cmd run build --workspace @sandbox/web",
     "test:all": "npm.cmd test && npm.cmd run browser:test && npm.cmd run test:rust && npm.cmd run control-plane:test"
   },
   "dependencies": {

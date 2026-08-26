@@ -31,6 +31,7 @@ export interface PluginSubmissionInput {
 export interface PluginSubmissionRecord { reviewId: string; pluginVersionId: string; publisherPublicId: string; publisherKeyId: string; pluginId: string; version: string; packageIntegrity: string; packageSize: number; packageObjectKey: string; status: string }
 export interface PublisherInput { publicId: string; ownerType: "personal" | "organisation"; ownerId: string; publicName: string; slug: string; description: string; website: string | null; supportContact: string; securityContact: string }
 export interface MarketplaceQuery { search: string | null; category: string | null; pricing: "all" | "free" | "paid"; verifiedOnly: boolean; visibility: "public" | "workspace" | "all"; workspaceId: string | null; teamApprovedOnly: boolean; sort: "recent" | "installs" | "rating"; cursor: string | null; limit: number; hostVersion: string }
+export interface MarketplacePackage { pluginId: string; version: string; packageIntegrity: string; packageSize: number; packageObjectKey: string; publisherPublicId: string; publisherKeyId: string; publisherPublicKeyDerBase64: string; pricingModel: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -52,6 +53,7 @@ export interface ControlPlaneRepository {
   revokePluginVersion(actor: AuthenticatedSession, pluginVersionId: string, reason: string, securityNoticeUrl: string, correlationId: string): Promise<void>;
   searchMarketplace(actor: AuthenticatedSession | null, query: MarketplaceQuery): Promise<{ items: MarketplaceListing[]; nextCursor: string | null }>;
   getMarketplaceListing(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null): Promise<MarketplaceListing | null>;
+  getMarketplacePackage(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null): Promise<MarketplacePackage | null>;
   listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number): Promise<{ items: AuditEvent[]; nextCursor: string | null }>;
   exportAccountData(actor: AuthenticatedSession): Promise<Record<string, unknown>>;
   requestAccountDeletion(actor: AuthenticatedSession, correlationId: string): Promise<void>;

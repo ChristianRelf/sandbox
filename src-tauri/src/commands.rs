@@ -1,5 +1,5 @@
 use crate::{
-    account_auth, oauth,
+    account_auth, marketplace, oauth,
     plugin_manager::{PackageTrustMetadata, PluginPackageInspection},
     sync_crypto::EncryptedWorkflowRevision,
     templates, AppState,
@@ -182,6 +182,21 @@ pub fn import_synced_revision_copy(
     workflow.created_at = Utc::now();
     workflow.updated_at = Utc::now();
     state.engine.database().save_workflow(workflow).map_err(err)
+}
+
+#[tauri::command]
+pub async fn search_marketplace(
+    query: marketplace::MarketplaceSearch,
+) -> Result<marketplace::MarketplacePage> {
+    marketplace::search(query).await
+}
+
+#[tauri::command]
+pub async fn inspect_marketplace_plugin(
+    plugin_id: String,
+    state: State<'_, AppState>,
+) -> Result<PluginPackageInspection> {
+    marketplace::inspect_for_install(&plugin_id, &state.plugin_manager).await
 }
 
 #[tauri::command]

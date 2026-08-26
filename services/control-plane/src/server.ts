@@ -95,6 +95,21 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { listing };
   });
 
+  app.get("/v1/marketplace/plugins/:pluginId/install", async request => {
+    const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid().nullable().default(null) }).parse(request.query);
+    const session = await authenticateOptional(request, dependencies.sessions);
+    if (workspaceId) {
+      if (!session) throw new DomainError("authentication_required", "Sign in to install a private workspace plugin.", 401);
+      await authorizer.require(session, workspaceId, "plugins.manage");
+    }
+    const packageRecord = await dependencies.repository.getMarketplacePackage(session, pluginId, workspaceId);
+    if (!packageRecord) throw new DomainError("package_not_available", "The current signed package is unavailable, incompatible, suspended, or revoked.", 404);
+    if (packageRecord.pricingModel !== "free") throw new DomainError("entitlement_required", "Purchase or assign an active entitlement before installing this paid plugin.", 402);
+    const download = await dependencies.packageStorage.createDownload(packageRecord.packageObjectKey);
+    return { pluginId: packageRecord.pluginId, version: packageRecord.version, packageIntegrity: packageRecord.packageIntegrity, packageSize: packageRecord.packageSize, publisher: { publicId: packageRecord.publisherPublicId, keyId: packageRecord.publisherKeyId, publicKeyPem: publicKeyPem(packageRecord.publisherPublicKeyDerBase64) }, download };
+  });
+
   app.get("/v1/account/export", async request => {
     const session = await authenticate(request, dependencies.sessions);
     return dependencies.repository.exportAccountData(session);
@@ -336,6 +351,11 @@ function requireFreshRequest(request: FastifyRequest): void {
 
 function requirePlatform(session: AuthenticatedSession, permission: string): void {
   if (!session.platformPermissions.includes(permission)) throw new DomainError("platform_permission_denied", `Platform permission '${permission}' is required.`, 403);
+}
+
+function publicKeyPem(derBase64: string): string {
+  const lines = derBase64.match(/.{1,64}/g)?.join("\n") ?? derBase64;
+  return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----`;
 }
 
 export function correlationId(): string {
