@@ -39,7 +39,8 @@ export class OidcSessionVerifier implements SessionVerifier {
         email,
         issuedAt: new Date(numberClaim(payload.iat, "iat") * 1_000),
         expiresAt: new Date(numberClaim(payload.exp, "exp") * 1_000),
-        authenticationMethods: Array.isArray(payload.amr) ? payload.amr.filter((item): item is string => typeof item === "string") : []
+        authenticationMethods: Array.isArray(payload.amr) ? payload.amr.filter((item): item is string => typeof item === "string") : [],
+        platformPermissions: Array.isArray(payload.sandbox_platform_permissions) ? payload.sandbox_platform_permissions.filter((item): item is string => typeof item === "string") : []
       };
     } catch (error) {
       if (error instanceof DomainError) throw error;

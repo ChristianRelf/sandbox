@@ -8,6 +8,7 @@ export interface AuthenticatedSession {
   issuedAt: Date;
   expiresAt: Date;
   authenticationMethods: string[];
+  platformPermissions: string[];
 }
 
 export interface SessionVerifier {
@@ -21,6 +22,13 @@ export interface InvitationInput { workspaceIds: string[]; email: string; role: 
 export interface InvitationRecord { id: string; organisationId: string; workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: string; status: string }
 export interface SyncWriteResult { revision: WorkflowRevision; conflictRevisionId: string | null }
 export interface SyncedWorkflowInput { workflowId: string; name: string }
+export interface PluginSubmissionInput {
+  publisherId: string; pluginId: string; name: string; summary: string; visibility: "public" | "organisation" | "selected_workspaces";
+  ownerType: "personal" | "organisation"; ownerId: string; version: string; manifestVersion: number; manifest: Record<string, unknown>;
+  packageIntegrity: string; packageSize: number; publisherKeyId: string; minimumHostVersion: string; maximumHostVersion: string | null;
+  capabilities: unknown[]; networkDomains: unknown[]; dependencyInventory: unknown[]; reproducibility: Record<string, unknown>;
+}
+export interface PluginSubmissionRecord { reviewId: string; pluginVersionId: string; publisherPublicId: string; publisherKeyId: string; pluginId: string; version: string; packageIntegrity: string; packageSize: number; packageObjectKey: string; status: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -32,6 +40,11 @@ export interface ControlPlaneRepository {
   listWorkflowRevisions(actor: AuthenticatedSession, workspaceId: string, workflowId: string, cursor: string | null, limit: number): Promise<{ items: WorkflowRevision[]; nextCursor: string | null }>;
   getWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string): Promise<WorkflowRevision | null>;
   resolveSyncConflict(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<{ selectedRevisionId: string }>;
+  createPluginSubmission(actor: AuthenticatedSession, input: PluginSubmissionInput, objectKey: string, correlationId: string): Promise<PluginSubmissionRecord>;
+  getPluginSubmission(actor: AuthenticatedSession, publisherId: string, reviewId: string): Promise<PluginSubmissionRecord | null>;
+  recordAutomatedPluginReview(actor: AuthenticatedSession, publisherId: string, reviewId: string, results: Record<string, unknown>, passed: boolean, rejectionReasons: string[], correlationId: string): Promise<PluginSubmissionRecord>;
+  decidePluginReview(actor: AuthenticatedSession, reviewId: string, decision: "approved" | "changes_requested" | "rejected", reasons: string[], correlationId: string): Promise<void>;
+  revokePluginVersion(actor: AuthenticatedSession, pluginVersionId: string, reason: string, securityNoticeUrl: string, correlationId: string): Promise<void>;
   listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number): Promise<{ items: AuditEvent[]; nextCursor: string | null }>;
   exportAccountData(actor: AuthenticatedSession): Promise<Record<string, unknown>>;
   requestAccountDeletion(actor: AuthenticatedSession, correlationId: string): Promise<void>;
