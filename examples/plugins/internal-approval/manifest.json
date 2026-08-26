@@ -1,0 +1,80 @@
+{
+  "manifestVersion": 1,
+  "pluginId": "com.sandbox.examples.internal-approval",
+  "name": "Internal Approval Connector",
+  "description": "Create idempotent approval requests through a credential-backed internal service.",
+  "version": "2.0.0",
+  "publisherId": "com.sandbox.examples",
+  "minimumHostVersion": ">=0.3.0",
+  "homepage": "https://example.com/internal-approval",
+  "documentation": "https://example.com/internal-approval/docs",
+  "supportUrl": "https://example.com/internal-approval/support",
+  "licence": "Proprietary",
+  "categories": ["communication", "approvals"],
+  "keywords": ["approval", "governance", "idempotency"],
+  "icon": "assets/icon.svg",
+  "nodes": [
+    {
+      "nodeType": "approval.request",
+      "nodeVersion": 1,
+      "displayName": "Request Approval (legacy)",
+      "description": "Creates an approval request using the v1 configuration shape.",
+      "category": "Communication",
+      "riskLevel": "high",
+      "inputSchema": { "type": "object" },
+      "outputSchema": { "type": "object" },
+      "configurationSchema": { "type": "object", "required": ["message"], "properties": { "message": { "type": "string" } }, "additionalProperties": false },
+      "credentialRequirements": ["internal_approval"],
+      "capabilities": ["workflow_input", "credential_operations:internal_approval", "external_communication", "structured_logging"],
+      "timeoutMs": 20000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/request-approval.md",
+      "migrationHandlers": ["approval-request-v1-v2"],
+      "executionEntrypoint": "main"
+    },
+    {
+      "nodeType": "approval.request",
+      "nodeVersion": 2,
+      "displayName": "Request Approval",
+      "description": "Creates an approval request with typed subject, details and idempotency key.",
+      "category": "Communication",
+      "riskLevel": "high",
+      "inputSchema": { "type": "object", "properties": { "idempotencyKey": { "type": "string" } } },
+      "outputSchema": { "type": "object", "required": ["requestId", "status"], "properties": { "requestId": { "type": "string" }, "status": { "type": "string" } } },
+      "configurationSchema": { "type": "object", "required": ["subject", "details", "credentialReference"], "properties": { "subject": { "type": "string", "maxLength": 200 }, "details": { "type": "string", "maxLength": 4000 }, "credentialReference": { "type": "string" } }, "additionalProperties": false },
+      "credentialRequirements": ["internal_approval"],
+      "capabilities": ["workflow_input", "credential_operations:internal_approval", "external_communication", "structured_logging"],
+      "timeoutMs": 20000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/request-approval.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main"
+    }
+  ],
+  "credentials": [{
+    "credentialType": "internal_approval",
+    "displayName": "Internal approval account",
+    "operations": ["approval.requests.create", "approval.requests.status"],
+    "scopes": ["approvals:create", "approvals:read"],
+    "configurationSchema": { "type": "object", "required": ["account"], "properties": { "account": { "type": "string" } }, "additionalProperties": false }
+  }],
+  "capabilities": [
+    { "type": "workflow_input" },
+    { "type": "credential_operations", "credentialType": "internal_approval", "operations": ["approval.requests.create", "approval.requests.status"] },
+    { "type": "external_communication" },
+    { "type": "structured_logging" }
+  ],
+  "networkDomains": [],
+  "storageRequirements": { "temporaryBytes": 0, "persistentBytes": 0, "isolateByMajorVersion": true },
+  "migrations": [{ "id": "approval-request-v1-v2", "fromNodeVersion": 1, "toNodeVersion": 2, "entrypoint": "migration-v1-v2" }],
+  "entrypoints": [
+    { "id": "main", "path": "components/main.wasm", "export": "execute" },
+    { "id": "migration-v1-v2", "path": "components/main.wasm", "export": "migrate_v1_to_v2" }
+  ],
+  "packageIntegrity": "",
+  "signature": { "algorithm": "ed25519", "keyId": "", "value": "" },
+  "pricing": { "model": "free" },
+  "privacyPolicy": "https://example.com/internal-approval/privacy"
+}

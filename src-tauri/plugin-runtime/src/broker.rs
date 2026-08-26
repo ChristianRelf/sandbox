@@ -107,7 +107,11 @@ pub struct HttpResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "operation", rename_all = "snake_case")]
+#[serde(
+    tag = "operation",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum HostRequest {
     HttpRequest(HttpRequest),
     CredentialOperation {
