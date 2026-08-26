@@ -31,6 +31,7 @@ const reviewDecisionInput = z.object({ decision: z.enum(["approved", "changes_re
 const revocationInput = z.object({ reason: z.string().trim().min(10).max(2_000), securityNoticeUrl: z.string().url().startsWith("https://") });
 const publisherInput = z.object({ publicId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/).max(200), ownerType: z.enum(["personal", "organisation"]), ownerId: z.string().uuid(), publicName: z.string().trim().min(2).max(120), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63), description: z.string().max(2_000).default(""), website: z.string().url().startsWith("https://").nullable(), supportContact: z.string().email(), securityContact: z.string().email() });
 const publisherKeyInput = z.object({ keyId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(120), algorithm: z.literal("ed25519"), publicKeyDerBase64: z.string().base64().max(256) });
+const marketplaceQuery = z.object({ search: z.string().trim().max(200).nullable().default(null), category: z.string().trim().max(80).nullable().default(null), pricing: z.enum(["all", "free", "paid"]).default("all"), verifiedOnly: z.stringbool().default(false), visibility: z.enum(["public", "workspace", "all"]).default("public"), workspaceId: z.string().uuid().nullable().default(null), teamApprovedOnly: z.stringbool().default(false), sort: z.enum(["recent", "installs", "rating"]).default("recent"), cursor: z.string().max(200).nullable().default(null), limit: z.coerce.number().int().min(1).max(50).default(24), hostVersion: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).default("0.3.0") });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -69,6 +70,30 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   });
 
   app.get("/health", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async () => ({ status: "ok", service: "sandbox-control-plane", execution: "local-only" }));
+
+  app.get("/v1/marketplace/plugins", async request => {
+    const query = marketplaceQuery.parse(request.query);
+    const session = await authenticateOptional(request, dependencies.sessions);
+    if (query.workspaceId) {
+      if (!session) throw new DomainError("authentication_required", "Sign in to browse workspace-approved or private plugins.", 401);
+      await authorizer.require(session, query.workspaceId, "workflows.view");
+    }
+    if ((query.visibility !== "public" || query.teamApprovedOnly) && !query.workspaceId) throw new DomainError("marketplace_workspace_required", "A workspace is required for team-approved or private plugin filters.", 400);
+    return dependencies.repository.searchMarketplace(session, query);
+  });
+
+  app.get("/v1/marketplace/plugins/:pluginId", async request => {
+    const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid().nullable().default(null) }).parse(request.query);
+    const session = await authenticateOptional(request, dependencies.sessions);
+    if (workspaceId) {
+      if (!session) throw new DomainError("authentication_required", "Sign in to inspect a private workspace plugin.", 401);
+      await authorizer.require(session, workspaceId, "workflows.view");
+    }
+    const listing = await dependencies.repository.getMarketplaceListing(session, pluginId, workspaceId);
+    if (!listing) throw new DomainError("listing_not_found", "Published compatible plugin listing not found.", 404);
+    return { listing };
+  });
 
   app.get("/v1/account/export", async request => {
     const session = await authenticate(request, dependencies.sessions);
@@ -248,6 +273,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { submission: updated, automatedReview: { passed, rejectionReasons: scan.rejectionReasons } };
   });
 
+  app.post("/v1/publishers/:publisherId/plugins/submissions/:reviewId/publish", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { publisherId, reviewId } = z.object({ publisherId: z.string().uuid(), reviewId: z.string().uuid() }).parse(request.params);
+    return dependencies.repository.publishPluginVersion(session, publisherId, reviewId, request.id);
+  });
+
   app.post("/v1/internal/plugin-reviews/:reviewId/decision", async request => {
     const session = await authenticate(request, dependencies.sessions);
     requireFreshRequest(request);
@@ -283,6 +315,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 async function authenticate(request: FastifyRequest, verifier: SessionVerifier): Promise<AuthenticatedSession> {
   const authorization = request.headers.authorization;
   if (!authorization?.startsWith("Bearer ")) throw new DomainError("authentication_required", "A bearer access token is required.", 401);
+  return verifier.verify(authorization.slice("Bearer ".length));
+}
+
+async function authenticateOptional(request: FastifyRequest, verifier: SessionVerifier): Promise<AuthenticatedSession | null> {
+  const authorization = request.headers.authorization;
+  if (!authorization) return null;
+  if (!authorization.startsWith("Bearer ")) throw new DomainError("authentication_required", "Bearer authentication is malformed.", 401);
   return verifier.verify(authorization.slice("Bearer ".length));
 }
 

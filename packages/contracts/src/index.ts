@@ -158,6 +158,15 @@ export const webhookEventSchema = z.object({
 });
 export type WebhookEvent = z.infer<typeof webhookEventSchema>;
 
+export const marketplaceListingSchema = z.object({
+  pluginId: z.string(), name: z.string(), summary: z.string(), publisher: z.object({ publicId: z.string(), publicName: z.string(), verified: z.boolean() }),
+  version: z.string(), packageIntegrity: z.string(), categories: z.array(z.string()), keywords: z.array(z.string()), pricing: z.record(z.string(), z.unknown()), licence: z.string(),
+  documentationUrl: z.string().url(), privacyPolicyUrl: z.string().url().nullable(), supportUrl: z.string().url(), screenshots: z.array(z.unknown()), securityNotices: z.array(z.unknown()),
+  capabilities: z.array(z.unknown()), networkDomains: z.array(z.unknown()), nodes: z.array(z.unknown()), minimumHostVersion: z.string(), maximumHostVersion: z.string().nullable(),
+  installCount: z.number().int().nonnegative(), ratingAverage: z.number().nullable(), ratingCount: z.number().int().nonnegative(), updatedAt: z.string().datetime(), visibility: z.enum(["public", "organisation", "selected_workspaces"])
+});
+export type MarketplaceListing = z.infer<typeof marketplaceListingSchema>;
+
 export interface Page<T> { items: T[]; nextCursor: string | null }
 
 export function hasPermission(role: BuiltInRole, permission: Permission): boolean {

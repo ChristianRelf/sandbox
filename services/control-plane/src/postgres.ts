@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { AuditEvent, BuiltInRole, Permission, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
+import { satisfies } from "semver";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -283,6 +284,33 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async publishPluginVersion(actor: AuthenticatedSession, publisherId: string, reviewId: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      await requirePublisherPermission(client, actor.accountId, publisherId, ["admin", "submit"]);
+      const reviewed = await client.query<{ plugin_version_id: string; plugin_id: string; version: string }>(
+        `SELECT pr.plugin_version_id, pv.plugin_id, pv.version FROM plugin_reviews pr
+          JOIN plugin_versions pv ON pv.id = pr.plugin_version_id JOIN plugins pl ON pl.id = pv.plugin_id
+         WHERE pr.id = $1 AND pl.publisher_id = $2 AND pr.status = 'approved' AND pv.revoked_at IS NULL FOR UPDATE`, [reviewId, publisherId]
+      );
+      if (!reviewed.rowCount) throw new DomainError("review_not_publishable", "Only an approved, non-revoked version owned by this publisher can be published.", 409);
+      const item = reviewed.rows[0];
+      await client.query(
+        `INSERT INTO plugin_listings(plugin_id,current_version_id,categories,keywords,pricing,licence,documentation_url,privacy_policy_url,support_url)
+         SELECT pv.plugin_id,pv.id,
+                ARRAY(SELECT jsonb_array_elements_text(COALESCE(pv.manifest->'categories','[]'::jsonb))),
+                ARRAY(SELECT jsonb_array_elements_text(COALESCE(pv.manifest->'keywords','[]'::jsonb))),
+                COALESCE(pv.manifest->'pricing','{"model":"free"}'::jsonb),
+                pv.manifest->>'licence',pv.manifest->>'documentation',pv.manifest->>'privacyPolicy',pv.manifest->>'supportUrl'
+           FROM plugin_versions pv WHERE pv.id = $1
+         ON CONFLICT(plugin_id) DO UPDATE SET current_version_id=excluded.current_version_id,categories=excluded.categories,keywords=excluded.keywords,pricing=excluded.pricing,licence=excluded.licence,documentation_url=excluded.documentation_url,privacy_policy_url=excluded.privacy_policy_url,support_url=excluded.support_url,updated_at=now(),suspended_at=NULL,removed_at=NULL`,
+        [item.plugin_version_id]
+      );
+      await client.query(`UPDATE plugin_reviews SET status='published',published_at=now(),updated_at=now() WHERE id=$1`, [reviewId]);
+      await appendPlatformAudit(client, actor, "plugin.version_published", "plugin_version", item.plugin_version_id, { pluginId: item.plugin_id, version: item.version }, correlationId);
+      return { pluginId: item.plugin_id, version: item.version, status: "published" as const };
+    });
+  }
+
   async decidePluginReview(actor: AuthenticatedSession, reviewId: string, decision: "approved" | "changes_requested" | "rejected", reasons: string[], correlationId: string): Promise<void> {
     await this.withAccount(actor.accountId, async client => {
       const result = await client.query(`UPDATE plugin_reviews SET status = $1, rejection_reasons = $2, assigned_reviewer = $3, decided_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE decided_at END, updated_at = now() WHERE id = $4 AND status IN ('manual_review','changes_requested')`, [decision, reasons, actor.accountId, reviewId]);
@@ -299,6 +327,47 @@ export class PostgresRepository implements ControlPlaneRepository {
       await client.query(`UPDATE plugin_listings SET security_notices = security_notices || $1::jsonb, suspended_at = CASE WHEN current_version_id = $2 THEN now() ELSE suspended_at END WHERE plugin_id = $3`, [JSON.stringify([{ versionId: pluginVersionId, reason, url: securityNoticeUrl, publishedAt: new Date().toISOString() }]), pluginVersionId, version.rows[0].plugin_id]);
       await appendPlatformAudit(client, actor, "plugin.version_revoked", "plugin_version", pluginVersionId, { reason, securityNoticeUrl }, correlationId);
     });
+  }
+
+  async searchMarketplace(actor: AuthenticatedSession | null, query: MarketplaceQuery) {
+    const client = await this.pool.connect();
+    try {
+      const order = marketplaceOrder(query.sort);
+      const cursorClause = query.cursor ? marketplaceCursorClause(query.sort) : "";
+      const result = await client.query<MarketplaceRow>(
+        `SELECT pl.id AS plugin_id, pl.name, pl.summary, pl.visibility, p.public_id AS publisher_public_id, p.public_name,
+                (p.verification_status = 'verified') AS publisher_verified, pv.version, pv.package_integrity,
+                l.categories, l.keywords, l.pricing, l.licence, l.documentation_url, l.privacy_policy_url, l.support_url,
+                l.screenshots, l.security_notices, pv.capabilities, pv.network_domains, pv.manifest->'nodes' AS nodes,
+                pv.minimum_host_version, pv.maximum_host_version, l.install_count, l.rating_average, l.rating_count, l.updated_at
+           FROM plugin_listings l JOIN plugins pl ON pl.id = l.plugin_id
+           JOIN plugin_versions pv ON pv.id = l.current_version_id JOIN plugin_reviews pr ON pr.plugin_version_id = pv.id
+           JOIN publishers p ON p.id = pl.publisher_id
+          WHERE pr.status = 'published' AND pv.revoked_at IS NULL AND l.suspended_at IS NULL AND l.removed_at IS NULL
+            AND ($1::text IS NULL OR pl.id = $1 OR pl.name ILIKE '%' || $1 || '%' OR pl.summary ILIKE '%' || $1 || '%' OR p.public_name ILIKE '%' || $1 || '%')
+            AND ($2::text IS NULL OR $2 = ANY(l.categories))
+            AND ($3::text = 'all' OR ($3 = 'free' AND l.pricing->>'model' = 'free') OR ($3 = 'paid' AND l.pricing->>'model' <> 'free'))
+            AND (NOT $4::boolean OR p.verification_status = 'verified')
+            AND (pl.visibility = 'public' OR ($5::text IN ('workspace','all') AND $6::uuid IS NOT NULL AND $7::uuid IS NOT NULL
+                 AND EXISTS(SELECT 1 FROM workspace_memberships wm WHERE wm.workspace_id = $6 AND wm.account_id = $7)
+                 AND ((pl.visibility = 'organisation' AND pl.owner_id = (SELECT organisation_id FROM workspaces WHERE id = $6))
+                      OR (pl.visibility = 'selected_workspaces' AND EXISTS(SELECT 1 FROM plugin_visibility_workspaces vw WHERE vw.plugin_id = pl.id AND vw.workspace_id = $6)))))
+            AND (NOT $8::boolean OR ($6::uuid IS NOT NULL AND EXISTS(SELECT 1 FROM governance_policies gp WHERE gp.workspace_id = $6 AND gp.policy_key = 'permitted_plugins' AND gp.policy_value->'pluginIds' ? pl.id)))
+            ${cursorClause}
+          ORDER BY ${order} LIMIT $10`,
+        [query.search, query.category, query.pricing, query.verifiedOnly, query.visibility, query.workspaceId, actor?.accountId ?? null, query.teamApprovedOnly, query.cursor, query.limit * 3 + 1]
+      );
+      const compatible = result.rows.filter(row => hostCompatible(query.hostVersion, row.minimum_host_version, row.maximum_host_version));
+      const page = compatible.slice(0, query.limit);
+      return { items: page.map(marketplaceFromRow), nextCursor: compatible.length > query.limit ? page.at(-1)!.plugin_id : null };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getMarketplaceListing(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null) {
+    const result = await this.searchMarketplace(actor, { search: pluginId, category: null, pricing: "all", verifiedOnly: false, visibility: workspaceId ? "all" : "public", workspaceId, teamApprovedOnly: false, sort: "recent", cursor: null, limit: 1, hostVersion: "0.3.0" });
+    return result.items.find(item => item.pluginId === pluginId) ?? null;
   }
 
   async listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number) {
@@ -421,6 +490,39 @@ export function detectSyncConflict(currentRevisionId: string | null, parentRevis
 interface SubmissionRow {
   review_id: string; plugin_version_id: string; publisher_public_id: string; publisher_key_id: string;
   plugin_id: string; version: string; package_integrity: string; package_size: number; package_object_key: string; status: string;
+}
+
+interface MarketplaceRow {
+  plugin_id: string; name: string; summary: string; visibility: MarketplaceListing["visibility"];
+  publisher_public_id: string; public_name: string; publisher_verified: boolean; version: string; package_integrity: string;
+  categories: string[]; keywords: string[]; pricing: Record<string, unknown>; licence: string; documentation_url: string;
+  privacy_policy_url: string | null; support_url: string; screenshots: unknown[]; security_notices: unknown[]; capabilities: unknown[];
+  network_domains: unknown[]; nodes: unknown[]; minimum_host_version: string; maximum_host_version: string | null;
+  install_count: string | number; rating_average: string | number | null; rating_count: string | number; updated_at: Date;
+}
+
+function marketplaceOrder(sort: MarketplaceQuery["sort"]): string {
+  if (sort === "installs") return "l.install_count DESC, pl.id DESC";
+  if (sort === "rating") return "l.rating_average DESC NULLS LAST, pl.id DESC";
+  return "l.updated_at DESC, pl.id DESC";
+}
+
+function marketplaceCursorClause(sort: MarketplaceQuery["sort"]): string {
+  if (sort === "installs") return "AND (l.install_count, pl.id) < (SELECT install_count, plugin_id FROM plugin_listings WHERE plugin_id = $9)";
+  if (sort === "rating") return "AND (COALESCE(l.rating_average, -1), pl.id) < (SELECT COALESCE(rating_average, -1), plugin_id FROM plugin_listings WHERE plugin_id = $9)";
+  return "AND (l.updated_at, pl.id) < (SELECT updated_at, plugin_id FROM plugin_listings WHERE plugin_id = $9)";
+}
+
+export function hostCompatible(hostVersion: string, minimum: string, maximum: string | null): boolean {
+  try {
+    return satisfies(hostVersion, minimum, { includePrerelease: true }) && (!maximum || satisfies(hostVersion, maximum, { includePrerelease: true }));
+  } catch {
+    return false;
+  }
+}
+
+function marketplaceFromRow(row: MarketplaceRow): MarketplaceListing {
+  return { pluginId: row.plugin_id, name: row.name, summary: row.summary, publisher: { publicId: row.publisher_public_id, publicName: row.public_name, verified: row.publisher_verified }, version: row.version, packageIntegrity: row.package_integrity, categories: row.categories, keywords: row.keywords, pricing: row.pricing, licence: row.licence, documentationUrl: row.documentation_url, privacyPolicyUrl: row.privacy_policy_url, supportUrl: row.support_url, screenshots: row.screenshots, securityNotices: row.security_notices, capabilities: row.capabilities, networkDomains: row.network_domains, nodes: row.nodes ?? [], minimumHostVersion: row.minimum_host_version, maximumHostVersion: row.maximum_host_version, installCount: Number(row.install_count), ratingAverage: row.rating_average === null ? null : Number(row.rating_average), ratingCount: Number(row.rating_count), updatedAt: row.updated_at.toISOString(), visibility: row.visibility };
 }
 
 function submissionFromRow(row: SubmissionRow): PluginSubmissionRecord {

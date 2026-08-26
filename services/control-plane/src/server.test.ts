@@ -26,7 +26,8 @@ function dependencies(permissions: string[]) {
     listWorkflowRevisions: vi.fn(),
     getWorkflowRevision: vi.fn(),
     resolveSyncConflict: vi.fn(),
-    createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
+    createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), publishPluginVersion: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
+    searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
@@ -125,6 +126,17 @@ describe("control-plane API", () => {
     expect(finalized.statusCode, finalized.body).toBe(200);
     expect(finalized.json().submission.status).toBe("manual_review");
     expect(deps.packageScanner.scan).toHaveBeenCalledWith(submission.packageObjectKey, integrity, "com.example.publisher", "release-1");
+    await server.close();
+  });
+
+  it("allows anonymous public discovery but requires workspace access for private filters", async () => {
+    const deps = dependencies(["workflows.view"]);
+    const server = await createServer(deps);
+    const publicResponse = await server.inject({ method: "GET", url: "/v1/marketplace/plugins?pricing=free&verifiedOnly=true&hostVersion=0.3.0" });
+    expect(publicResponse.statusCode, publicResponse.body).toBe(200);
+    expect(deps.repository.searchMarketplace).toHaveBeenCalledWith(null, expect.objectContaining({ pricing: "free", verifiedOnly: true, visibility: "public" }));
+    const privateResponse = await server.inject({ method: "GET", url: `/v1/marketplace/plugins?visibility=workspace&workspaceId=${workspaceId}` });
+    expect(privateResponse.statusCode).toBe(401);
     await server.close();
   });
 });
