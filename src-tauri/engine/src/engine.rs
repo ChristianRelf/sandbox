@@ -269,12 +269,15 @@ async fn execute_command(node:&WorkflowNode, workflow:&Workflow, trigger:&Value,
     if let Some(dir)=config.get("workingDirectory").and_then(Value::as_str).filter(|s|!s.is_empty()) { command.current_dir(require_path(Path::new(dir),&workflow.settings.permissions)?); }
     let mut child=command.spawn().map_err(|e|EngineError::Node(format!("Run Command could not start '{executable}': {e}")))?;
     let stdout=child.stdout.take().unwrap(); let stderr=child.stderr.take().unwrap();
+    let stdout_task=tokio::spawn(read_bounded(stdout));let stderr_task=tokio::spawn(read_bounded(stderr));
     let output=tokio::select! { _=cancellation.cancelled()=>{ let _=child.kill().await; return Err(EngineError::Cancelled); }, status=child.wait()=>status.map_err(|e|EngineError::Node(format!("Run Command could not wait for '{executable}': {e}")))? };
-    let mut out=Vec::new(); let mut err=Vec::new(); stdout.take(65_536).read_to_end(&mut out).await.ok(); stderr.take(65_536).read_to_end(&mut err).await.ok();
+    let out=stdout_task.await.unwrap_or_default();let err=stderr_task.await.unwrap_or_default();
     let stdout=String::from_utf8_lossy(&out).to_string(); let stderr=String::from_utf8_lossy(&err).to_string();
     if !output.success() { return Err(EngineError::Node(format!("Run Command exited with code {}. {}",output.code().map(|v|v.to_string()).unwrap_or_else(||"unknown".into()),bounded_log(&stderr)))); }
     Ok(NodeResult::new(json!({"exitCode":output.code(),"stdout":stdout,"stderr":stderr})).log(format!("Executed '{}' with {} argument(s).",executable,args.len())))
 }
+
+async fn read_bounded<R:tokio::io::AsyncRead+Unpin>(mut reader:R)->Vec<u8>{let mut kept=Vec::new();let mut chunk=[0u8;8192];loop{match reader.read(&mut chunk).await{Ok(0)|Err(_)=>break,Ok(count)=>{let remaining=65_536usize.saturating_sub(kept.len());kept.extend_from_slice(&chunk[..count.min(remaining)]);}}}kept}
 
 fn mark_node(node:&mut NodeExecution,status:NodeStatus,reason:&str) { let now=Utc::now(); node.status=status; node.completed_at=Some(now); node.duration_ms=Some(0); node.skip_reason=Some(reason.into()); }
 

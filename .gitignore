@@ -7,3 +7,6 @@ src-tauri/target/
 *.db-wal
 .DS_Store
 screenshots/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
