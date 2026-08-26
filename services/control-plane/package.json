@@ -6,6 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "migrate": "tsx src/migrate.ts",
     "build": "npm run build --workspace @sandbox/contracts && tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test": "vitest run"

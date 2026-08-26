@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AuditEvent, BuiltInRole, Permission, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, OrganisationInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -195,6 +195,112 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async createPublisher(actor: AuthenticatedSession, input: PublisherInput, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      if (input.ownerType === "personal" && input.ownerId !== actor.accountId) throw new DomainError("publisher_owner_invalid", "A personal publisher must be owned by the authenticated account.", 403);
+      if (input.ownerType === "organisation") {
+        const owner = await client.query(`SELECT 1 FROM memberships m JOIN roles r ON r.id = m.role_id WHERE m.organisation_id = $1 AND m.account_id = $2 AND m.status = 'active' AND r.role_key = 'owner'`, [input.ownerId, actor.accountId]);
+        if (!owner.rowCount) throw new DomainError("publisher_owner_invalid", "Only an organisation owner can create its publisher profile.", 403);
+      }
+      const result = await client.query<{ id: string }>(
+        `INSERT INTO publishers(public_id, owner_type, owner_id, public_name, slug, description, website, support_contact, security_contact)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [input.publicId, input.ownerType, input.ownerId, input.publicName, input.slug, input.description, input.website, input.supportContact, input.securityContact]
+      );
+      for (const permission of ["admin", "submit", "view", "manage_keys", "security"]) await client.query(`INSERT INTO publisher_members(publisher_id, account_id, permission) VALUES($1,$2,$3)`, [result.rows[0].id, actor.accountId, permission]);
+      await appendPlatformAudit(client, actor, "publisher.created", "publisher", result.rows[0].id, { publicId: input.publicId, ownerType: input.ownerType, ownerId: input.ownerId }, correlationId);
+      return { id: result.rows[0].id, publicId: input.publicId, slug: input.slug, verificationStatus: "unverified" as const };
+    });
+  }
+
+  async registerPublisherSigningKey(actor: AuthenticatedSession, publisherId: string, keyId: string, publicKeyDerBase64: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      await requirePublisherPermission(client, actor.accountId, publisherId, ["admin", "manage_keys"]);
+      await client.query(`INSERT INTO publisher_signing_keys(publisher_id, key_id, algorithm, public_key) VALUES($1,$2,'ed25519',decode($3,'base64'))`, [publisherId, keyId, publicKeyDerBase64]);
+      await appendPlatformAudit(client, actor, "publisher.signing_key_registered", "publisher_signing_key", `${publisherId}:${keyId}`, { publisherId, keyId, algorithm: "ed25519" }, correlationId);
+      return { publisherId, keyId, algorithm: "ed25519" as const };
+    });
+  }
+
+  async createPluginSubmission(actor: AuthenticatedSession, input: PluginSubmissionInput, objectKey: string, correlationId: string): Promise<PluginSubmissionRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const publisher = await requirePublisherPermission(client, actor.accountId, input.publisherId, ["admin", "submit"]);
+      const key = await client.query(`SELECT 1 FROM publisher_signing_keys WHERE publisher_id = $1 AND key_id = $2 AND revoked_at IS NULL`, [input.publisherId, input.publisherKeyId]);
+      if (!key.rowCount) throw new DomainError("publisher_key_not_active", "The manifest signing key is not registered or has been revoked.", 409);
+      if (input.manifest.publisherId !== publisher.public_id || input.manifest.pluginId !== input.pluginId || input.manifest.version !== input.version || input.manifest.packageIntegrity !== input.packageIntegrity) {
+        throw new DomainError("manifest_identity_mismatch", "Submission identity, version, integrity, and publisher must exactly match the manifest.", 400);
+      }
+      await client.query(
+        `INSERT INTO plugins(id, publisher_id, visibility, owner_type, owner_id, name, summary)
+         VALUES($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT(id) DO NOTHING`,
+        [input.pluginId, input.publisherId, input.visibility, input.ownerType, input.ownerId, input.name, input.summary]
+      );
+      const plugin = await client.query<{ publisher_id: string }>(`SELECT publisher_id FROM plugins WHERE id = $1`, [input.pluginId]);
+      if (!plugin.rowCount || plugin.rows[0].publisher_id !== input.publisherId) throw new DomainError("plugin_id_owned", "This immutable plugin ID belongs to another publisher.", 409);
+      const version = await client.query<{ id: string }>(
+        `INSERT INTO plugin_versions(plugin_id, version, manifest_version, manifest, package_integrity, package_object_key, package_size, publisher_key_id, minimum_host_version, maximum_host_version, capabilities, network_domains, dependency_inventory, reproducibility)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+        [input.pluginId, input.version, input.manifestVersion, input.manifest, input.packageIntegrity, objectKey, input.packageSize, input.publisherKeyId, input.minimumHostVersion, input.maximumHostVersion, input.capabilities, input.networkDomains, input.dependencyInventory, input.reproducibility]
+      ).catch(error => {
+        if ((error as { code?: string }).code === "23505") throw new DomainError("plugin_version_immutable", "This plugin version or package digest already exists and cannot be replaced.", 409);
+        throw error;
+      });
+      const review = await client.query<{ id: string }>(`INSERT INTO plugin_reviews(plugin_version_id, status) VALUES($1, 'draft') RETURNING id`, [version.rows[0].id]);
+      await appendPlatformAudit(client, actor, "plugin.submission_created", "plugin_review", review.rows[0].id, { pluginId: input.pluginId, version: input.version, integrity: input.packageIntegrity }, correlationId);
+      return { reviewId: review.rows[0].id, pluginVersionId: version.rows[0].id, publisherPublicId: publisher.public_id, publisherKeyId: input.publisherKeyId, pluginId: input.pluginId, version: input.version, packageIntegrity: input.packageIntegrity, packageSize: input.packageSize, packageObjectKey: objectKey, status: "draft" };
+    });
+  }
+
+  async getPluginSubmission(actor: AuthenticatedSession, publisherId: string, reviewId: string): Promise<PluginSubmissionRecord | null> {
+    return this.withAccount(actor.accountId, async client => {
+      await requirePublisherPermission(client, actor.accountId, publisherId, ["admin", "submit", "view"]);
+      const result = await client.query<SubmissionRow>(
+        `SELECT pr.id AS review_id, pv.id AS plugin_version_id, p.public_id AS publisher_public_id, pv.publisher_key_id,
+                pv.plugin_id, pv.version, pv.package_integrity, pv.package_size, pv.package_object_key, pr.status::text
+           FROM plugin_reviews pr JOIN plugin_versions pv ON pv.id = pr.plugin_version_id
+           JOIN plugins pl ON pl.id = pv.plugin_id JOIN publishers p ON p.id = pl.publisher_id
+          WHERE pr.id = $1 AND p.id = $2`, [reviewId, publisherId]
+      );
+      return result.rowCount ? submissionFromRow(result.rows[0]) : null;
+    });
+  }
+
+  async recordAutomatedPluginReview(actor: AuthenticatedSession, publisherId: string, reviewId: string, results: Record<string, unknown>, passed: boolean, rejectionReasons: string[], correlationId: string): Promise<PluginSubmissionRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      await requirePublisherPermission(client, actor.accountId, publisherId, ["admin", "submit"]);
+      const updated = await client.query<SubmissionRow>(
+        `UPDATE plugin_reviews pr SET status = $1, automated_results = $2, rejection_reasons = $3, submitted_at = COALESCE(submitted_at, now()), updated_at = now()
+          FROM plugin_versions pv, plugins pl, publishers p
+         WHERE pr.id = $4 AND pv.id = pr.plugin_version_id AND pl.id = pv.plugin_id AND p.id = pl.publisher_id AND p.id = $5 AND pr.status IN ('draft','submitted','automated_review','changes_requested')
+         RETURNING pr.id AS review_id, pv.id AS plugin_version_id, p.public_id AS publisher_public_id, pv.publisher_key_id,
+                   pv.plugin_id, pv.version, pv.package_integrity, pv.package_size, pv.package_object_key, pr.status::text`,
+        [passed ? "manual_review" : "changes_requested", results, rejectionReasons, reviewId, publisherId]
+      );
+      if (!updated.rowCount) throw new DomainError("review_state_invalid", "This review cannot be submitted from its current state.", 409);
+      await appendPlatformAudit(client, actor, passed ? "plugin.automated_review_passed" : "plugin.changes_requested", "plugin_review", reviewId, { rejectionReasons }, correlationId);
+      return submissionFromRow(updated.rows[0]);
+    });
+  }
+
+  async decidePluginReview(actor: AuthenticatedSession, reviewId: string, decision: "approved" | "changes_requested" | "rejected", reasons: string[], correlationId: string): Promise<void> {
+    await this.withAccount(actor.accountId, async client => {
+      const result = await client.query(`UPDATE plugin_reviews SET status = $1, rejection_reasons = $2, assigned_reviewer = $3, decided_at = CASE WHEN $1 IN ('approved','rejected') THEN now() ELSE decided_at END, updated_at = now() WHERE id = $4 AND status IN ('manual_review','changes_requested')`, [decision, reasons, actor.accountId, reviewId]);
+      if (!result.rowCount) throw new DomainError("review_state_invalid", "Only a manual-review submission can receive this decision.", 409);
+      await appendPlatformAudit(client, actor, `plugin.review_${decision}`, "plugin_review", reviewId, { reasons }, correlationId);
+    });
+  }
+
+  async revokePluginVersion(actor: AuthenticatedSession, pluginVersionId: string, reason: string, securityNoticeUrl: string, correlationId: string): Promise<void> {
+    await this.withAccount(actor.accountId, async client => {
+      const version = await client.query<{ plugin_id: string }>(`UPDATE plugin_versions SET revoked_at = now(), revocation_reason = $1 WHERE id = $2 AND revoked_at IS NULL RETURNING plugin_id`, [reason, pluginVersionId]);
+      if (!version.rowCount) throw new DomainError("plugin_version_not_found", "Plugin version not found or already revoked.", 404);
+      await client.query(`UPDATE plugin_reviews SET status = 'suspended', updated_at = now() WHERE plugin_version_id = $1`, [pluginVersionId]);
+      await client.query(`UPDATE plugin_listings SET security_notices = security_notices || $1::jsonb, suspended_at = CASE WHEN current_version_id = $2 THEN now() ELSE suspended_at END WHERE plugin_id = $3`, [JSON.stringify([{ versionId: pluginVersionId, reason, url: securityNoticeUrl, publishedAt: new Date().toISOString() }]), pluginVersionId, version.rows[0].plugin_id]);
+      await appendPlatformAudit(client, actor, "plugin.version_revoked", "plugin_version", pluginVersionId, { reason, securityNoticeUrl }, correlationId);
+    });
+  }
+
   async listAuditEvents(actor: AuthenticatedSession, workspaceId: string, cursor: string | null, limit: number) {
     return this.withAccount(actor.accountId, async client => {
       const values: unknown[] = [workspaceId, limit + 1];
@@ -310,6 +416,29 @@ function workflowRevisionFromRow(row: WorkflowRevisionRow): WorkflowRevision {
 
 export function detectSyncConflict(currentRevisionId: string | null, parentRevisionId: string | null): string | null {
   return currentRevisionId && currentRevisionId !== parentRevisionId ? currentRevisionId : null;
+}
+
+interface SubmissionRow {
+  review_id: string; plugin_version_id: string; publisher_public_id: string; publisher_key_id: string;
+  plugin_id: string; version: string; package_integrity: string; package_size: number; package_object_key: string; status: string;
+}
+
+function submissionFromRow(row: SubmissionRow): PluginSubmissionRecord {
+  return { reviewId: row.review_id, pluginVersionId: row.plugin_version_id, publisherPublicId: row.publisher_public_id, publisherKeyId: row.publisher_key_id, pluginId: row.plugin_id, version: row.version, packageIntegrity: row.package_integrity, packageSize: Number(row.package_size), packageObjectKey: row.package_object_key, status: row.status };
+}
+
+async function requirePublisherPermission(client: PoolClient, accountId: string, publisherId: string, accepted: string[]): Promise<{ public_id: string }> {
+  const result = await client.query<{ public_id: string }>(
+    `SELECT p.public_id FROM publishers p JOIN publisher_members pm ON pm.publisher_id = p.id
+      WHERE p.id = $1 AND pm.account_id = $2 AND pm.permission = ANY($3::text[]) LIMIT 1`,
+    [publisherId, accountId, accepted]
+  );
+  if (!result.rowCount) throw new DomainError("publisher_permission_denied", "You do not have the required permission for this publisher.", 403);
+  return result.rows[0];
+}
+
+async function appendPlatformAudit(client: PoolClient, actor: AuthenticatedSession, action: string, resourceType: string, resourceId: string, summary: Record<string, unknown>, correlationId: string) {
+  await client.query(`INSERT INTO platform_audit_events(actor_account_id, action, resource_type, resource_id, summary, correlation_id) VALUES($1,$2,$3,$4,$5,$6)`, [actor.accountId, action, resourceType, resourceId, redact(summary), correlationId]);
 }
 
 async function appendAudit(client: PoolClient, actor: AuthenticatedSession, workspaceId: string, action: string, resourceType: string, resourceId: string, before: Record<string, unknown> | null, after: Record<string, unknown> | null, correlationId: string) {

@@ -10,7 +10,8 @@ const session: AuthenticatedSession = {
   email: "one@example.com",
   issuedAt: new Date(),
   expiresAt: new Date(Date.now() + 60_000),
-  authenticationMethods: ["passkey"]
+  authenticationMethods: ["passkey"],
+  platformPermissions: []
 };
 const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
@@ -25,11 +26,14 @@ function dependencies(permissions: string[]) {
     listWorkflowRevisions: vi.fn(),
     getWorkflowRevision: vi.fn(),
     resolveSyncConflict: vi.fn(),
+    createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
-  return { repository, sessions, email, webBaseUrl: "https://app.sandbox.test" };
+  const packageStorage = { createUpload: vi.fn(), inspect: vi.fn() };
+  const packageScanner = { scan: vi.fn() };
+  return { repository, sessions, email, packageStorage, packageScanner, webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -96,6 +100,31 @@ describe("control-plane API", () => {
     expect(response.statusCode).toBe(200);
     expect(deps.repository.appendWorkflowRevision).toHaveBeenCalledWith(session, workspaceId, expect.objectContaining({ encryptedPayload, payloadKeyEnvelope }), expect.any(String));
     expect(payloadKeyEnvelope).not.toBe(encryptedPayload.slice(0, 64));
+    await server.close();
+  });
+
+  it("creates an immutable upload then runs deterministic automated review", async () => {
+    const deps = dependencies([]);
+    const publisherId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const reviewId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const versionId = "99999999-9999-4999-8999-999999999999";
+    const integrity = `sha256:${"b".repeat(64)}`;
+    const submission = { reviewId, pluginVersionId: versionId, publisherPublicId: "com.example.publisher", publisherKeyId: "release-1", pluginId: "com.example.weather", version: "1.0.0", packageIntegrity: integrity, packageSize: 1024, packageObjectKey: `plugins/${publisherId}/package`, status: "draft" };
+    vi.mocked(deps.repository.createPluginSubmission).mockResolvedValue(submission);
+    vi.mocked(deps.repository.getPluginSubmission).mockResolvedValue(submission);
+    vi.mocked(deps.repository.recordAutomatedPluginReview).mockResolvedValue({ ...submission, status: "manual_review" });
+    vi.mocked(deps.packageStorage.createUpload).mockResolvedValue({ uploadUrl: "https://objects.example/upload", expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    vi.mocked(deps.packageStorage.inspect).mockResolvedValue({ size: 1024, sha256: "b".repeat(64), immutable: true });
+    vi.mocked(deps.packageScanner.scan).mockResolvedValue({ passed: true, manifestValid: true, signatureValid: true, integrityValid: true, declaredContentsOnly: true, malwareScan: "clean", capabilityFindings: [], networkFindings: [], dependencyInventory: [], behaviourTests: [{ name: "sandbox", passed: true }], reproducibility: {}, rejectionReasons: [] });
+    const server = await createServer(deps);
+    const payload = { pluginId: "com.example.weather", name: "Weather", summary: "Weather data", visibility: "public", ownerType: "personal", ownerId: session.accountId, version: "1.0.0", manifestVersion: 1, manifest: { publisherId: "com.example.publisher", pluginId: "com.example.weather", version: "1.0.0", packageIntegrity: integrity }, packageIntegrity: integrity, packageSize: 1024, publisherKeyId: "release-1", minimumHostVersion: ">=0.3.0", maximumHostVersion: null, capabilities: [], networkDomains: [], dependencyInventory: [], reproducibility: {} };
+    const initiated = await server.inject({ method: "POST", url: `/v1/publishers/${publisherId}/plugins/submissions`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload });
+    expect(initiated.statusCode, initiated.body).toBe(200);
+    expect(initiated.json().upload.uploadUrl).toContain("objects.example");
+    const finalized = await server.inject({ method: "POST", url: `/v1/publishers/${publisherId}/plugins/submissions/${reviewId}/submit`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() } });
+    expect(finalized.statusCode, finalized.body).toBe(200);
+    expect(finalized.json().submission.status).toBe("manual_review");
+    expect(deps.packageScanner.scan).toHaveBeenCalledWith(submission.packageObjectKey, integrity, "com.example.publisher", "release-1");
     await server.close();
   });
 });

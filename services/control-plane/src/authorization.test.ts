@@ -11,6 +11,7 @@ const session: AuthenticatedSession = {
   issuedAt: new Date(),
   expiresAt: new Date(Date.now() + 60_000),
   authenticationMethods: ["passkey"]
+  ,platformPermissions: []
 };
 
 function repository(permissionByWorkspace: Record<string, Permission[]>): ControlPlaneRepository {
@@ -18,6 +19,7 @@ function repository(permissionByWorkspace: Record<string, Permission[]>): Contro
     permissions: vi.fn(async (_accountId, workspaceId) => new Set(permissionByWorkspace[workspaceId] ?? [])),
     createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), createSyncedWorkflow: vi.fn(), appendWorkflowRevision: vi.fn(),
     listWorkflowRevisions: vi.fn(), getWorkflowRevision: vi.fn(), resolveSyncConflict: vi.fn(),
+    createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
   };
 }

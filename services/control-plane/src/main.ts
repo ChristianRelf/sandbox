@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { OidcSessionVerifier } from "./auth.js";
 import { HttpTransactionalEmail } from "./email.js";
+import { HttpImmutablePackageStorage, HttpPackageReviewScanner } from "./package_services.js";
 import { PostgresRepository } from "./postgres.js";
 import { createServer } from "./server.js";
 
@@ -22,6 +23,8 @@ const server = await createServer({
   repository: new PostgresRepository(pool),
   sessions: new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") }),
   email: new HttpTransactionalEmail(required("EMAIL_API_URL"), required("EMAIL_API_KEY"), required("EMAIL_SENDER")),
+  packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
+  packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true
 });

@@ -29,6 +29,7 @@ export interface PluginSubmissionInput {
   capabilities: unknown[]; networkDomains: unknown[]; dependencyInventory: unknown[]; reproducibility: Record<string, unknown>;
 }
 export interface PluginSubmissionRecord { reviewId: string; pluginVersionId: string; publisherPublicId: string; publisherKeyId: string; pluginId: string; version: string; packageIntegrity: string; packageSize: number; packageObjectKey: string; status: string }
+export interface PublisherInput { publicId: string; ownerType: "personal" | "organisation"; ownerId: string; publicName: string; slug: string; description: string; website: string | null; supportContact: string; securityContact: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -40,6 +41,8 @@ export interface ControlPlaneRepository {
   listWorkflowRevisions(actor: AuthenticatedSession, workspaceId: string, workflowId: string, cursor: string | null, limit: number): Promise<{ items: WorkflowRevision[]; nextCursor: string | null }>;
   getWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string): Promise<WorkflowRevision | null>;
   resolveSyncConflict(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<{ selectedRevisionId: string }>;
+  createPublisher(actor: AuthenticatedSession, input: PublisherInput, correlationId: string): Promise<{ id: string; publicId: string; slug: string; verificationStatus: "unverified" }>;
+  registerPublisherSigningKey(actor: AuthenticatedSession, publisherId: string, keyId: string, publicKeyDerBase64: string, correlationId: string): Promise<{ publisherId: string; keyId: string; algorithm: "ed25519" }>;
   createPluginSubmission(actor: AuthenticatedSession, input: PluginSubmissionInput, objectKey: string, correlationId: string): Promise<PluginSubmissionRecord>;
   getPluginSubmission(actor: AuthenticatedSession, publisherId: string, reviewId: string): Promise<PluginSubmissionRecord | null>;
   recordAutomatedPluginReview(actor: AuthenticatedSession, publisherId: string, reviewId: string, results: Record<string, unknown>, passed: boolean, rejectionReasons: string[], correlationId: string): Promise<PluginSubmissionRecord>;

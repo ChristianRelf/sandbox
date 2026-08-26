@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE owner_type AS ENUM ('personal', 'workspace', 'organisation', 'publisher');
@@ -579,5 +577,3 @@ CREATE POLICY summary_member_all ON run_summaries USING (account_can_access_work
 CREATE POLICY webhook_endpoint_member_all ON webhook_endpoints USING (account_can_access_workspace(workspace_id));
 CREATE POLICY webhook_delivery_member_all ON webhook_deliveries USING (account_can_access_workspace(workspace_id));
 CREATE POLICY audit_member_select ON audit_events FOR SELECT USING (account_can_access_workspace(workspace_id));
-
-COMMIT;
