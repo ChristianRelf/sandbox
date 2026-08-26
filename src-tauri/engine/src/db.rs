@@ -5,6 +5,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::{de::DeserializeOwned, Serialize};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
@@ -81,6 +82,48 @@ impl Database {
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(storage)
+    }
+
+    pub fn set_setting<T: Serialize>(&self, key: &str, value: &T) -> Result<(), EngineError> {
+        if key.is_empty() || key.len() > 128 {
+            return Err(EngineError::Storage("Setting key is invalid.".into()));
+        }
+        let encoded = serde_json::to_string(value).map_err(storage)?;
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "INSERT INTO settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
+                params![key, encoded, Utc::now().to_rfc3339()],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn get_setting<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, EngineError> {
+        let encoded: Option<String> = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT value_json FROM settings WHERE key=?",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        encoded
+            .map(|value| serde_json::from_str(&value).map_err(storage))
+            .transpose()
+    }
+
+    pub fn delete_setting(&self, key: &str) -> Result<(), EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute("DELETE FROM settings WHERE key=?", [key])
+            .map_err(storage)?;
+        Ok(())
     }
 
     pub fn save_workflow(&self, workflow: Workflow) -> Result<Workflow, EngineError> {

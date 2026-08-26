@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, PendingApproval, PermissionSummary, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
+import type { AccountStatus, BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, PendingApproval, PermissionSummary, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
 import { previewApi } from "./previewApi";
 const tauri=typeof window!=="undefined"&&"__TAURI_INTERNALS__" in window;
 export const api={
@@ -43,6 +43,9 @@ export const api={
   deleteConnection:(id:string)=>invoke<void>("delete_connection",{id}),
   workflowsUsingConnection:(id:string)=>invoke<string[]>("workflows_using_connection",{id}),
   startGmailOAuth:()=>tauri?invoke<{authorizationUrl:string;expiresAt:string}>("start_gmail_oauth"):Promise.reject(new Error("Gmail OAuth requires the desktop application and SANDBOX_GMAIL_CLIENT_ID.")),
+  accountStatus:()=>tauri?invoke<AccountStatus>("account_status"):Promise.resolve({configured:false,signedIn:false,localWorkflowsAvailable:true,configurationError:"Accounts are available in the desktop application."}),
+  startAccountAuth:(createAccount=false)=>tauri?invoke<{authorizationUrl:string;expiresAt:string}>("start_account_auth",{createAccount}):Promise.reject(new Error("Account authorization opens the system browser from the desktop application.")),
+  signOutAccount:()=>tauri?invoke<void>("sign_out_account"):Promise.resolve(),
   listPendingApprovals:()=>tauri?invoke<PendingApproval[]>("list_pending_approvals"):Promise.resolve([]),
   resolvePendingApproval:(id:string,approved:boolean)=>invoke<void>("resolve_pending_approval",{id,approved}),
   isDesktop:tauri,

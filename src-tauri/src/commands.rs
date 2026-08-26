@@ -1,4 +1,4 @@
-use crate::{oauth, templates, AppState};
+use crate::{account_auth, oauth, templates, AppState};
 use chrono::{DateTime, Utc};
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
@@ -828,6 +828,126 @@ pub fn workflows_using_connection(id: String, state: State<'_, AppState>) -> Res
         .engine
         .database()
         .workflows_using_reference(&id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn account_status(state: State<'_, AppState>) -> Result<account_auth::AccountStatus> {
+    let configuration = account_auth::configured();
+    let metadata = state
+        .engine
+        .database()
+        .get_setting::<account_auth::AccountMetadata>(account_auth::ACCOUNT_METADATA_KEY)
+        .map_err(err)?;
+    let has_secret = state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)?;
+    Ok(account_auth::AccountStatus {
+        configured: configuration.is_ok(),
+        signed_in: metadata.is_some() && has_secret,
+        metadata,
+        local_workflows_available: true,
+        configuration_error: configuration.err(),
+    })
+}
+
+#[tauri::command]
+pub async fn start_account_auth(
+    create_account: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<account_auth::AccountAuthStart> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| {
+            format!("Sandbox could not open a local account callback port: {error}")
+        })?;
+    let address = listener.local_addr().map_err(err)?;
+    let redirect_uri = format!("http://127.0.0.1:{}/account/callback", address.port());
+    let (attempt, start) = account_auth::start(redirect_uri, create_account)?;
+    app.opener()
+        .open_url(&start.authorization_url, None::<&str>)
+        .map_err(|error| {
+            format!("The account page could not be opened in the system browser: {error}")
+        })?;
+    let database = state.engine.database().clone();
+    let vault = state.credential_vault.clone();
+    tauri::async_runtime::spawn(async move {
+        let result: Result<account_auth::AccountMetadata> = async {
+            let (mut stream, _) =
+                tokio::time::timeout(std::time::Duration::from_secs(300), listener.accept())
+                    .await
+                    .map_err(|_| "Account authorization expired after five minutes.".to_string())?
+                    .map_err(|error| format!("Account callback could not be accepted: {error}"))?;
+            let mut request = vec![0_u8; 16 * 1024];
+            let count = stream.read(&mut request).await.map_err(err)?;
+            let request = String::from_utf8_lossy(&request[..count]);
+            let target = request
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .ok_or_else(|| "Account callback request was invalid.".to_string())?;
+            let callback_url = format!("http://127.0.0.1:{}{}", address.port(), target);
+            let code = match attempt.validate_callback(&callback_url) {
+                Ok(code) => code,
+                Err(error) => {
+                    write_oauth_response(&mut stream, false, &error).await;
+                    return Err(error);
+                }
+            };
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(err)?;
+            let (secret, metadata) = match attempt.exchange(&client, &code).await {
+                Ok(value) => value,
+                Err(error) => {
+                    write_oauth_response(&mut stream, false, &error).await;
+                    return Err(error);
+                }
+            };
+            vault.put(account_auth::ACCOUNT_VAULT_ID, &secret)?;
+            if let Err(error) = database.set_setting(account_auth::ACCOUNT_METADATA_KEY, &metadata)
+            {
+                let _ = vault.delete(account_auth::ACCOUNT_VAULT_ID);
+                return Err(error.to_string());
+            }
+            write_oauth_response(
+                &mut stream,
+                true,
+                "Sandbox is connected. You can close this tab and return to the desktop app.",
+            )
+            .await;
+            Ok(metadata)
+        }
+        .await;
+        match result {
+            Ok(metadata) => {
+                let _ = app.emit("account-session-updated", metadata);
+            }
+            Err(error) => {
+                let _ = app.emit("account-session-error", error);
+            }
+        }
+    });
+    Ok(start)
+}
+
+#[tauri::command]
+pub fn sign_out_account(state: State<'_, AppState>) -> Result<()> {
+    if state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)?
+    {
+        state
+            .credential_vault
+            .delete(account_auth::ACCOUNT_VAULT_ID)?;
+    }
+    state
+        .engine
+        .database()
+        .delete_setting(account_auth::ACCOUNT_METADATA_KEY)
         .map_err(err)
 }
 

@@ -22,6 +22,8 @@ export interface ExecutionRecord { id:string; workflowId:string; workflowVersion
 export interface WorkflowSummary { workflow:Workflow; lastExecution?:ExecutionRecord; nextRunAt?:string }
 export interface ValidationIssue { code:string; message:string; nodeId?:string; edgeId?:string }
 export interface RunnerStatus { paused:boolean; activeWorkflowIds:string[]; localSchedulesStopOnQuit:boolean }
+export interface AccountMetadata { accountId:string; email:string; displayName:string; sessionId:string; expiresAt:string; signedInAt:string }
+export interface AccountStatus { configured:boolean; signedIn:boolean; metadata?:AccountMetadata; localWorkflowsAvailable:boolean; configurationError?:string }
 export interface BrowserProfileSettings { viewportWidth:number; viewportHeight:number; downloadFolder?:string; proxy?:string; userAgent?:string; permissions:string[] }
 export interface BrowserProfile { id:string; name:string; persistent:boolean; dataPath:string; settings:BrowserProfileSettings; createdAt:string; lastUsedAt?:string }
 export interface BrowserEngineStatus { available:boolean; protocolVersion:number; sidecarVersion?:string; browserName?:string; browserVersion?:string; error?:string }

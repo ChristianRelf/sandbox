@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*",
+    "examples/plugins/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -15,7 +21,11 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --workspace --no-fail-fast",
     "browser:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-browser-runtime.ps1",
     "browser:build": "npm.cmd run build --prefix browser-sidecar",
-    "browser:test": "npm.cmd run test --prefix browser-sidecar"
+    "browser:test": "npm.cmd run test --prefix browser-sidecar",
+    "contracts:build": "npm.cmd run build --workspace @sandbox/contracts",
+    "control-plane:build": "npm.cmd run build --workspace @sandbox/control-plane",
+    "control-plane:test": "npm.cmd run test --workspace @sandbox/control-plane",
+    "test:all": "npm.cmd test && npm.cmd run browser:test && npm.cmd run test:rust && npm.cmd run control-plane:test"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

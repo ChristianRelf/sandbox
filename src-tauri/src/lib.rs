@@ -1,3 +1,4 @@
+mod account_auth;
 mod browser_sidecar;
 mod commands;
 mod credential_vault;
@@ -286,6 +287,9 @@ pub fn run() {
             commands::delete_connection,
             commands::workflows_using_connection,
             commands::start_gmail_oauth,
+            commands::account_status,
+            commands::start_account_auth,
+            commands::sign_out_account,
             commands::list_pending_approvals,
             commands::resolve_pending_approval
         ])
