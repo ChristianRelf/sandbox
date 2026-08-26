@@ -1,0 +1,25 @@
+[package]
+name = "sandbox-plugin-runtime"
+version = "0.3.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = { version = "3", features = ["rand_core"] }
+parking_lot = "0.12"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+semver = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+wasmtime = { version = "48.0.1", default-features = false, features = ["cranelift", "runtime", "std", "wat"] }
+zip = { version = "8.2.0", default-features = false }
+
+[dev-dependencies]
+rand = "0.9"
+tempfile = "3"
+wat = "1"

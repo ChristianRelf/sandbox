@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 sandbox-engine = { path = "engine" }
+sandbox-plugin-runtime = { path = "plugin-runtime" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -37,4 +38,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 url = "2"
 
 [workspace]
-members = ["engine"]
+members = ["engine", "plugin-runtime"]
