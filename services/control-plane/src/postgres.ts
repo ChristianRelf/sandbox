@@ -333,7 +333,11 @@ export class PostgresRepository implements ControlPlaneRepository {
     const client = await this.pool.connect();
     try {
       const order = marketplaceOrder(query.sort);
-      const cursorClause = query.cursor ? marketplaceCursorClause(query.sort) : "";
+      // Keep the parameter positions stable for every marketplace query. PostgreSQL
+      // cannot infer the type of a completely unused $9 parameter on the first page.
+      const cursorClause = query.cursor
+        ? marketplaceCursorClause(query.sort)
+        : "AND $9::text IS NULL";
       const result = await client.query<MarketplaceRow>(
         `SELECT pl.id AS plugin_id, pl.name, pl.summary, pl.visibility, p.public_id AS publisher_public_id, p.public_name,
                 (p.verification_status = 'verified') AS publisher_verified, pv.version, pv.package_integrity,
