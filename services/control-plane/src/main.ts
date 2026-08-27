@@ -33,6 +33,7 @@ const server = await createServer({
   billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
   entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   webhookProtector: new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"), "base64")),
+  protectedValueProtector: new WebhookProtector(Buffer.from(required("PROTECTED_VALUE_ENCRYPTION_KEY_BASE64"), "base64")),
   webhookBaseUrl: required("CONTROL_PLANE_PUBLIC_URL"),
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true

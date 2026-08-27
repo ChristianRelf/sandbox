@@ -73,6 +73,8 @@ export interface EntitlementRecord { entitlementId: string; ownerType: "personal
 export interface WebhookEndpointRecord { id: string; publicId: string; workspaceId: string; workflowId: string; signingSecretCiphertext: Buffer; allowedMethods: string[]; schema: Record<string, unknown> | null; maximumRequestBytes: number; rateLimitPerMinute: number; retentionSeconds: number; runnerPolicy: Record<string, unknown>; offlineExpirySeconds: number; redactedFields: string[]; disabled: boolean }
 export interface WebhookDeliveryRecord { deliveryId: string; endpointId: string; workspaceId: string; workflowId: string; payloadCiphertext: Buffer; idempotencyKey: string; receivedAt: string; expiresAt: string; attemptCount: number }
 export interface PluginRatingRecord { reviewId: string; pluginId: string; reviewerName: string; versionUsed: string; stars: number; review: string; developerResponse: string | null; createdAt: string; updatedAt: string }
+export interface ProtectedVariableRecord { id: string; environmentId: string; name: string; valueType: string; isSecret: boolean; nonSecretValue: unknown | null; description: string; allowedWorkflowIds: string[]; changedBy: string; changedAt: string }
+export interface ProtectedVariableResolution extends ProtectedVariableRecord { valueCiphertext: Buffer | null }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -143,6 +145,9 @@ export interface ControlPlaneRepository {
   updateRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, displayName: string | null, status: "online" | "offline" | "paused" | "draining" | "maintenance" | null, correlationId: string): Promise<RunnerRecord | null>;
   moveRunner(actor: AuthenticatedSession, sourceWorkspaceId: string, targetWorkspaceId: string, runnerId: string, correlationId: string): Promise<RunnerRecord | null>;
   rotateRunnerDeviceKey(device: RunnerDeviceSession, keyId: string, publicKeyDerBase64: string): Promise<{ keyId: string }>;
+  listProtectedVariables(actor: AuthenticatedSession, workspaceId: string, environmentId: string): Promise<ProtectedVariableRecord[]>;
+  upsertProtectedVariable(actor: AuthenticatedSession, workspaceId: string, environmentId: string, name: string, valueType: string, isSecret: boolean, valueCiphertext: Buffer | null, nonSecretValue: unknown | null, description: string, allowedWorkflowIds: string[], correlationId: string): Promise<ProtectedVariableRecord>;
+  resolveProtectedVariables(device: RunnerDeviceSession, environmentId: string, workflowId: string, names: string[]): Promise<ProtectedVariableResolution[]>;
 }
 
 export class DomainError extends Error {

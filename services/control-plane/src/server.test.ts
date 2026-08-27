@@ -40,7 +40,8 @@ function dependencies(permissions: string[]) {
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
     getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
     createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn(),
-    listPluginRatings: vi.fn(), upsertPluginRating: vi.fn(), respondToPluginRating: vi.fn(), reportPluginRating: vi.fn(), updateRunner: vi.fn(), moveRunner: vi.fn(), rotateRunnerDeviceKey: vi.fn()
+    listPluginRatings: vi.fn(), upsertPluginRating: vi.fn(), respondToPluginRating: vi.fn(), reportPluginRating: vi.fn(), updateRunner: vi.fn(), moveRunner: vi.fn(), rotateRunnerDeviceKey: vi.fn(),
+    listProtectedVariables: vi.fn(), upsertProtectedVariable: vi.fn(), resolveProtectedVariables: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -49,7 +50,7 @@ function dependencies(permissions: string[]) {
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -283,6 +284,18 @@ describe("control-plane API", () => {
     const encrypted = vi.mocked(deps.repository.enqueueWebhookDelivery).mock.calls[0][4];
     expect(deps.webhookProtector.decrypt(encrypted).toString()).toContain("[REDACTED]");
     expect(deps.webhookProtector.decrypt(encrypted).toString()).not.toContain("secret");
+    await server.close();
+  });
+
+  it("encrypts secret environment values before persistence and omits the value from the response", async () => {
+    const deps = dependencies(["connections.manage"]); const environmentId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"; const workflowId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    vi.mocked(deps.repository.upsertProtectedVariable).mockImplementation(async (_actor, _workspace, environment, name, valueType, isSecret, _ciphertext, nonSecretValue, description, allowedWorkflowIds) => ({ id: "ffffffff-ffff-4fff-8fff-ffffffffffff", environmentId: environment, name, valueType, isSecret, nonSecretValue, description, allowedWorkflowIds, changedBy: session.accountId, changedAt: new Date().toISOString() }));
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "PUT", url: `/v1/workspaces/${workspaceId}/environments/${environmentId}/variables/API_KEY`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { valueType: "string", isSecret: true, value: "top-secret", description: "Provider key", allowedWorkflowIds: [workflowId] } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).not.toContain("top-secret");
+    const call = vi.mocked(deps.repository.upsertProtectedVariable).mock.calls[0];
+    expect(call[6]).toBeInstanceOf(Buffer); expect(call[7]).toBeNull(); expect(call[6]?.toString()).not.toContain("top-secret");
     await server.close();
   });
 });

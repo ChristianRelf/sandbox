@@ -76,6 +76,8 @@ const reviewReportInput = z.object({ reason: z.string().trim().min(10).max(2_000
 const runnerUpdateInput = z.object({ displayName: z.string().trim().min(1).max(100).nullable().default(null), status: z.enum(["offline", "paused", "draining", "maintenance"]).nullable().default(null) }).strict().refine(value => value.displayName !== null || value.status !== null, "At least one runner field must be changed.");
 const runnerMoveInput = z.object({ targetWorkspaceId: z.string().uuid() }).strict();
 const runnerKeyRotationInput = z.object({ keyId: z.string().regex(/^[A-Za-z0-9._-]+$/).max(120), publicKeyDerBase64: z.string().base64().max(256) }).strict();
+const protectedVariableInput = z.object({ valueType: z.string().regex(/^[a-z][a-z0-9._-]*$/).max(80), isSecret: z.boolean(), value: z.unknown(), description: z.string().trim().max(500).default(""), allowedWorkflowIds: z.array(z.string().uuid()).min(1).max(500) }).strict();
+const protectedVariableResolutionInput = z.object({ environmentId: z.string().uuid(), workflowId: z.string().uuid(), names: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(100)).min(1).max(100) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -87,6 +89,7 @@ export interface ApiDependencies {
   billing?: BillingProvider;
   entitlementSigner?: EntitlementClaimSigner;
   webhookProtector?: WebhookProtector;
+  protectedValueProtector?: WebhookProtector;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
@@ -338,6 +341,23 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { items: await dependencies.repository.listWorkspaceEnvironments(session, workspaceId) };
   });
 
+  app.get("/v1/workspaces/:workspaceId/environments/:environmentId/variables", async request => {
+    const session = await authenticate(request, dependencies.sessions); const { workspaceId, environmentId } = z.object({ workspaceId: z.string().uuid(), environmentId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listProtectedVariables(session, workspaceId, environmentId) };
+  });
+
+  app.put("/v1/workspaces/:workspaceId/environments/:environmentId/variables/:name", async request => {
+    const session = await authenticate(request, dependencies.sessions); requireFreshRequest(request);
+    const { workspaceId, environmentId, name } = z.object({ workspaceId: z.string().uuid(), environmentId: z.string().uuid(), name: z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(100) }).parse(request.params);
+    await authorizer.require(session, workspaceId, "connections.manage"); const input = protectedVariableInput.parse(request.body);
+    if (input.isSecret && !dependencies.protectedValueProtector) throw new DomainError("protected_value_encryption_unavailable", "Secret variable encryption is not configured.", 503);
+    const encoded = Buffer.from(JSON.stringify(input.value), "utf8"); if (encoded.length > 64*1024) throw new DomainError("protected_value_too_large", "Protected variable value exceeds 64 KB.", 413);
+    const valueCiphertext = input.isSecret ? dependencies.protectedValueProtector!.encrypt(encoded) : null;
+    const variable = await dependencies.repository.upsertProtectedVariable(session, workspaceId, environmentId, name, input.valueType, input.isSecret, valueCiphertext, input.isSecret ? null : input.value, input.description, input.allowedWorkflowIds, request.id);
+    return { variable };
+  });
+
   app.get("/v1/workspaces/:workspaceId/connections", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -463,6 +483,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   app.post("/v1/runner/device-key/rotate", async request => {
     const device = await authenticateRunnerDevice(request, dependencies.repository); const input = runnerKeyRotationInput.parse(request.body); validateEd25519PublicKey(input.publicKeyDerBase64);
     return dependencies.repository.rotateRunnerDeviceKey(device, input.keyId, input.publicKeyDerBase64);
+  });
+
+  app.post("/v1/runner/environment-values", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository); const input = protectedVariableResolutionInput.parse(request.body);
+    if (!dependencies.protectedValueProtector) throw new DomainError("protected_value_encryption_unavailable", "Secret variable encryption is not configured.", 503);
+    const values = await dependencies.repository.resolveProtectedVariables(device, input.environmentId, input.workflowId, input.names);
+    return { values: values.map(variable => ({ name: variable.name, valueType: variable.valueType, isSecret: variable.isSecret, value: variable.isSecret ? JSON.parse(dependencies.protectedValueProtector!.decrypt(variable.valueCiphertext!).toString("utf8")) : variable.nonSecretValue })) };
   });
 
   app.get("/v1/runner/commands", async request => {

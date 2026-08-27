@@ -1126,6 +1126,52 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async listProtectedVariables(actor: AuthenticatedSession, workspaceId: string, environmentId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const environment = await client.query(`SELECT 1 FROM environments WHERE id=$1 AND workspace_id=$2`, [environmentId, workspaceId]);
+      if (!environment.rowCount) throw new DomainError("environment_not_found", "Environment does not belong to this workspace.", 404);
+      const result = await client.query<ProtectedVariableRow>(`SELECT id,environment_id,name,value_type,is_secret,NULL::bytea AS value_ciphertext,non_secret_value,description,allowed_workflow_ids,changed_by,changed_at FROM protected_variables WHERE environment_id=$1 ORDER BY name`, [environmentId]);
+      return result.rows.map(protectedVariableFromRow);
+    });
+  }
+
+  async upsertProtectedVariable(actor: AuthenticatedSession, workspaceId: string, environmentId: string, name: string, valueType: string, isSecret: boolean, valueCiphertext: Buffer | null, nonSecretValue: unknown | null, description: string, allowedWorkflowIds: string[], correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const environment = await client.query(`SELECT 1 FROM environments WHERE id=$1 AND workspace_id=$2`, [environmentId, workspaceId]);
+      if (!environment.rowCount) throw new DomainError("environment_not_found", "Environment does not belong to this workspace.", 404);
+      const workflows = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM synced_workflows WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, [workspaceId, allowedWorkflowIds]);
+      if (Number(workflows.rows[0]?.count ?? 0) !== new Set(allowedWorkflowIds).size) throw new DomainError("protected_variable_workflow_scope_invalid", "Every allowed workflow must belong to this workspace.", 400);
+      const result = await client.query<ProtectedVariableRow>(
+        `INSERT INTO protected_variables(environment_id,name,value_type,is_secret,value_ciphertext,non_secret_value,description,allowed_workflow_ids,changed_by,changed_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) ON CONFLICT(environment_id,name) DO UPDATE SET value_type=excluded.value_type,is_secret=excluded.is_secret,value_ciphertext=excluded.value_ciphertext,non_secret_value=excluded.non_secret_value,description=excluded.description,allowed_workflow_ids=excluded.allowed_workflow_ids,changed_by=excluded.changed_by,changed_at=excluded.changed_at
+         RETURNING id,environment_id,name,value_type,is_secret,NULL::bytea AS value_ciphertext,non_secret_value,description,allowed_workflow_ids,changed_by,changed_at`,
+        [environmentId, name, valueType, isSecret, valueCiphertext, nonSecretValue, description, allowedWorkflowIds, actor.accountId]
+      );
+      await appendAudit(client, actor, workspaceId, "environment.variable_changed", "protected_variable", result.rows[0].id, null, { environmentId, name, valueType, isSecret, allowedWorkflowIds }, correlationId);
+      return protectedVariableFromRow(result.rows[0]);
+    });
+  }
+
+  async resolveProtectedVariables(device: RunnerDeviceSession, environmentId: string, workflowId: string, names: string[]) {
+    return this.withAccount(device.accountId, async client => {
+      const eligible = await client.query(
+        `SELECT 1 FROM environments environment JOIN synced_workflows workflow ON workflow.workspace_id=environment.workspace_id JOIN workflow_revisions revision ON revision.id=workflow.current_published_revision_id JOIN runners runner ON runner.id=$4
+          WHERE environment.id=$1 AND environment.workspace_id=$2 AND workflow.id=$3
+            AND (revision.runner_policy->>'runnerId' IS NULL OR revision.runner_policy->>'runnerId'=$4::text)
+            AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(COALESCE(revision.runner_policy->'tags','[]'::jsonb)) AS required_tag(value) WHERE NOT (required_tag.value=ANY(runner.tags)))`,
+        [environmentId, device.workspaceId, workflowId, device.runnerId]
+      );
+      if (!eligible.rowCount) throw new DomainError("protected_variable_runner_ineligible", "Runner is not eligible for this published workflow and environment.", 403);
+      const result = await client.query<ProtectedVariableRow>(
+        `SELECT id,environment_id,name,value_type,is_secret,value_ciphertext,non_secret_value,description,allowed_workflow_ids,changed_by,changed_at FROM protected_variables
+          WHERE environment_id=$1 AND name=ANY($2::text[]) AND $3=ANY(allowed_workflow_ids)`, [environmentId, names, workflowId]
+      );
+      const found = new Set(result.rows.map(row => row.name)); const missing = [...new Set(names)].filter(name => !found.has(name));
+      if (missing.length) throw new DomainError("protected_variable_unavailable", `Protected variables are missing or not allowed for this workflow: ${missing.join(", ")}.`, 403);
+      return result.rows.map(row => ({ ...protectedVariableFromRow(row), valueCiphertext: row.value_ciphertext }));
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -1187,6 +1233,12 @@ interface SharedConnectionRow { id: string; workspace_id: string; environment_id
 interface WebhookEndpointRow { id: string; public_id: string; workspace_id: string; workflow_id: string; signing_secret_ciphertext: Buffer | null; allowed_methods: string[]; schema: Record<string, unknown> | null; maximum_request_bytes: number; rate_limit_per_minute: number; retention_seconds: number; runner_policy: Record<string, unknown>; offline_expiry_seconds: number; redacted_fields: string[]; disabled_at: Date | null }
 
 interface PluginRatingRow { id: string; plugin_id: string; reviewer_name: string; version_used: string; stars: number; review: string; developer_response: string | null; created_at: Date; updated_at: Date }
+
+interface ProtectedVariableRow { id: string; environment_id: string; name: string; value_type: string; is_secret: boolean; value_ciphertext: Buffer | null; non_secret_value: unknown | null; description: string; allowed_workflow_ids: string[]; changed_by: string; changed_at: Date }
+
+function protectedVariableFromRow(row: ProtectedVariableRow) {
+  return { id: row.id, environmentId: row.environment_id, name: row.name, valueType: row.value_type, isSecret: row.is_secret, nonSecretValue: row.is_secret ? null : row.non_secret_value, description: row.description, allowedWorkflowIds: row.allowed_workflow_ids, changedBy: row.changed_by, changedAt: row.changed_at.toISOString() };
+}
 
 function pluginRatingFromRow(row: PluginRatingRow) {
   return { reviewId: row.id, pluginId: row.plugin_id, reviewerName: row.reviewer_name, versionUsed: row.version_used, stars: row.stars, review: row.review, developerResponse: row.developer_response, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString() };
