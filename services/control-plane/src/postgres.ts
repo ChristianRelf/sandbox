@@ -6,6 +6,7 @@ import { satisfies } from "semver";
 import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SharedConnectionRecord, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
+import type { BillingEvent } from "./billing.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
   constructor(private readonly pool: Pool) {}
@@ -848,6 +849,92 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async getPluginBillingPlan(actor: AuthenticatedSession, ownerType: "personal" | "workspace", ownerId: string, pluginId: string, planId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      let customerId: string | null = null;
+      if (ownerType === "personal") {
+        if (ownerId !== actor.accountId) throw new DomainError("billing_owner_invalid", "Personal billing owner does not match the authenticated account.", 403);
+        const account = await client.query<{ billing_customer_ref: string | null }>(`SELECT billing_customer_ref FROM accounts WHERE id=$1`, [ownerId]);
+        customerId = account.rows[0]?.billing_customer_ref ?? null;
+      } else {
+        const workspace = await client.query<{ billing_customer_ref: string | null }>(`SELECT o.billing_customer_ref FROM workspaces w JOIN organisations o ON o.id=w.organisation_id JOIN workspace_memberships wm ON wm.workspace_id=w.id AND wm.account_id=$2 WHERE w.id=$1`, [ownerId, actor.accountId]);
+        if (!workspace.rowCount) throw new DomainError("billing_owner_invalid", "Workspace is not accessible to the authenticated account.", 403);
+        customerId = workspace.rows[0].billing_customer_ref;
+      }
+      const result = await client.query<{ pricing: { plans?: Array<{ id?: string; stripePriceId?: string; mode?: string; offlineGraceDays?: number; seatAllowance?: number | null }> } }>(
+        `SELECT l.pricing FROM plugin_listings l JOIN plugin_versions pv ON pv.id=l.current_version_id JOIN plugin_reviews pr ON pr.plugin_version_id=pv.id
+          WHERE l.plugin_id=$1 AND pr.status='published' AND pv.revoked_at IS NULL AND l.suspended_at IS NULL AND l.removed_at IS NULL`, [pluginId]
+      );
+      const plan = result.rows[0]?.pricing.plans?.find(candidate => candidate.id === planId);
+      if (!plan?.stripePriceId || !matchesBillingMode(plan.mode)) return null;
+      const offlineGraceDays = Number.isInteger(plan.offlineGraceDays) && Number(plan.offlineGraceDays) >= 1 && Number(plan.offlineGraceDays) <= 30 ? Number(plan.offlineGraceDays) : 7;
+      const seatAllowance = Number.isInteger(plan.seatAllowance) && Number(plan.seatAllowance) > 0 ? Number(plan.seatAllowance) : null;
+      return { pluginId, planId, stripePriceId: plan.stripePriceId, mode: plan.mode, offlineGraceDays, seatAllowance, customerId };
+    });
+  }
+
+  async recordMarketplaceCheckout(actor: AuthenticatedSession, checkoutId: string, ownerType: "personal" | "workspace", ownerId: string, pluginId: string, planId: string, expiresAt: string): Promise<void> {
+    await this.withAccount(actor.accountId, async client => {
+      await client.query(`INSERT INTO marketplace_checkout_sessions(id,account_id,owner_type,owner_id,plugin_id,plan_id,status,expires_at) VALUES($1,$2,$3,$4,$5,$6,'open',$7)`, [checkoutId, actor.accountId, ownerType, ownerId, pluginId, planId, expiresAt]);
+    });
+  }
+
+  async applyBillingEvent(event: BillingEvent): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const claimed = await client.query(`INSERT INTO processed_billing_events(event_id,event_kind) VALUES($1,$2) ON CONFLICT(event_id) DO NOTHING`, [event.eventId, event.kind]);
+      if (!claimed.rowCount) { await client.query("COMMIT"); return; }
+      if (event.kind === "checkout_completed") {
+        const checkout = await client.query<{ account_id: string; owner_type: "personal" | "workspace"; owner_id: string; plugin_id: string; plan_id: string; pricing: { plans?: Array<{ id?: string; offlineGraceDays?: number; seatAllowance?: number | null }> } }>(
+          `SELECT c.account_id,c.owner_type,c.owner_id,c.plugin_id,c.plan_id,l.pricing FROM marketplace_checkout_sessions c JOIN plugin_listings l ON l.plugin_id=c.plugin_id WHERE c.id=$1 AND c.status='open' FOR UPDATE`, [event.checkoutId]
+        );
+        if (!checkout.rowCount) throw new DomainError("checkout_not_found", "Completed checkout was not initiated by Sandbox or was already resolved.", 409);
+        const row = checkout.rows[0];
+        const plan = row.pricing.plans?.find(candidate => candidate.id === row.plan_id);
+        const graceDays = Number.isInteger(plan?.offlineGraceDays) && Number(plan?.offlineGraceDays) >= 1 && Number(plan?.offlineGraceDays) <= 30 ? Number(plan?.offlineGraceDays) : 7;
+        const seats = Number.isInteger(plan?.seatAllowance) && Number(plan?.seatAllowance) > 0 ? Number(plan?.seatAllowance) : null;
+        await client.query(
+          `INSERT INTO entitlements(owner_type,owner_id,plugin_id,plan_id,purchase_source,starts_at,status,seat_allowance,offline_grace_until,stripe_customer_ref,stripe_subscription_ref,stripe_payment_ref)
+           VALUES($1,$2,$3,$4,'stripe',now(),'active',$5,now()+($6::text||' days')::interval,$7,$8,$9)`,
+          [row.owner_type, row.owner_id, row.plugin_id, row.plan_id, seats, graceDays, event.customerId, event.subscriptionId, event.paymentId]
+        );
+        await client.query(`UPDATE marketplace_checkout_sessions SET status='completed' WHERE id=$1`, [event.checkoutId]);
+        if (event.customerId) {
+          if (row.owner_type === "personal") await client.query(`UPDATE accounts SET billing_customer_ref=COALESCE(billing_customer_ref,$1) WHERE id=$2`, [event.customerId, row.owner_id]);
+          else await client.query(`UPDATE organisations o SET billing_customer_ref=COALESCE(o.billing_customer_ref,$1) FROM workspaces w WHERE w.organisation_id=o.id AND w.id=$2`, [event.customerId, row.owner_id]);
+        }
+      } else if (event.kind === "subscription_changed") {
+        const status = stripeEntitlementStatus(event.status);
+        await client.query(`UPDATE entitlements SET status=$1,renews_at=$2,offline_grace_until=CASE WHEN $1 IN ('active','trial','past_due') THEN GREATEST(offline_grace_until,now()+interval '7 days') ELSE offline_grace_until END WHERE stripe_subscription_ref=$3`, [status, event.renewsAt, event.subscriptionId]);
+      } else {
+        await client.query(`UPDATE entitlements SET status=CASE WHEN $1 THEN 'refunded' ELSE status END,refund_state=CASE WHEN $1 THEN 'refunded' ELSE 'none' END WHERE stripe_payment_ref=$2`, [event.refunded, event.paymentId]);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async getActiveEntitlement(actor: AuthenticatedSession, ownerType: "personal" | "workspace", ownerId: string, pluginId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      if (ownerType === "personal" && ownerId !== actor.accountId) throw new DomainError("entitlement_owner_invalid", "Personal entitlement is not owned by this account.", 403);
+      if (ownerType === "workspace") {
+        const member = await client.query(`SELECT 1 FROM workspace_memberships WHERE workspace_id=$1 AND account_id=$2`, [ownerId, actor.accountId]);
+        if (!member.rowCount) throw new DomainError("entitlement_owner_invalid", "Workspace entitlement is not accessible to this account.", 403);
+      }
+      const result = await client.query<{ id: string; plan_id: string; status: "trial" | "active" | "past_due"; seat_allowance: number | null; starts_at: Date; renews_at: Date | null; offline_grace_until: Date }>(
+        `SELECT id,plan_id,status,seat_allowance,starts_at,renews_at,offline_grace_until FROM entitlements
+          WHERE owner_type=$1 AND owner_id=$2 AND plugin_id=$3 AND status IN ('trial','active','past_due') AND offline_grace_until>now()
+          ORDER BY starts_at DESC LIMIT 1`, [ownerType, ownerId, pluginId]
+      );
+      if (!result.rowCount) return null;
+      const row = result.rows[0];
+      return { entitlementId: row.id, ownerType, ownerId, pluginId, planId: row.plan_id, status: row.status, seatAllowance: row.seat_allowance, startsAt: row.starts_at.toISOString(), renewsAt: row.renews_at?.toISOString() ?? null, offlineGraceUntil: row.offline_grace_until.toISOString() };
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -1038,4 +1125,14 @@ function redact(value: Record<string, unknown> | null): Record<string, unknown> 
 
 function isPostgresUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505";
+}
+
+function matchesBillingMode(value: unknown): value is "payment" | "subscription" { return value === "payment" || value === "subscription"; }
+
+function stripeEntitlementStatus(status: string): "trial" | "active" | "past_due" | "expired" | "revoked" {
+  if (status === "trialing") return "trial";
+  if (status === "active") return "active";
+  if (status === "past_due" || status === "unpaid") return "past_due";
+  if (status === "paused") return "revoked";
+  return "expired";
 }

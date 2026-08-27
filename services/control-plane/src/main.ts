@@ -5,6 +5,8 @@ import { HttpImmutablePackageStorage, HttpPackageReviewScanner } from "./package
 import { PostgresRepository } from "./postgres.js";
 import { createServer } from "./server.js";
 import { Ed25519RunnerCommandSigner } from "./runner_protocol.js";
+import { StripeBillingProvider } from "./billing.js";
+import { Ed25519EntitlementClaimSigner } from "./entitlement.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -27,6 +29,8 @@ const server = await createServer({
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
   runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
+  billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
+  entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true
 });

@@ -3,6 +3,8 @@ import type { TransactionalEmail } from "./email.js";
 import { createServer } from "./server.js";
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import type { RunnerCommandSigner } from "./runner_protocol.js";
+import type { BillingProvider } from "./billing.js";
+import type { EntitlementClaimSigner } from "./entitlement.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -34,14 +36,17 @@ function dependencies(permissions: string[]) {
     requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
     authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
-    listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn()
+    listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
+    getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
   const packageStorage = { createUpload: vi.fn(), createDownload: vi.fn(), inspect: vi.fn() };
   const packageScanner = { scan: vi.fn() };
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, webBaseUrl: "https://app.sandbox.test" };
+  const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
+  const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -245,6 +250,19 @@ describe("control-plane API", () => {
     const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/connections`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { environmentId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", provider: "gmail", displayName: "Company Gmail", grantedScopes: ["gmail.readonly"], deploymentMode: "authorize_per_runner", accessToken: "must-never-enter-this-api" } });
     expect(response.statusCode).toBe(400);
     expect(deps.repository.createSharedConnection).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("creates Stripe-hosted checkout without accepting card data", async () => {
+    const deps = dependencies([]);
+    vi.mocked(deps.repository.getPluginBillingPlan).mockResolvedValue({ pluginId: "com.example.weather", planId: "pro", stripePriceId: "price_123", mode: "subscription", offlineGraceDays: 7, seatAllowance: 5, customerId: null });
+    vi.mocked(deps.billing.createCheckout).mockResolvedValue({ checkoutId: "cs_test_123", url: "https://checkout.stripe.com/c/pay/test", expiresAt: new Date(Date.now()+1800_000).toISOString() });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: "/v1/marketplace/plugins/com.example.weather/checkout", headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { ownerType: "personal", ownerId: session.accountId, planId: "pro" } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().checkout.url).toContain("checkout.stripe.com");
+    expect(deps.billing.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ priceId: "price_123", mode: "subscription" }));
+    expect(deps.repository.recordMarketplaceCheckout).toHaveBeenCalledWith(session, "cs_test_123", "personal", session.accountId, "com.example.weather", "pro", expect.any(String));
     await server.close();
   });
 });

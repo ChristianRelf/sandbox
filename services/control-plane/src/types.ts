@@ -1,4 +1,5 @@
 import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
+import type { BillingEvent } from "./billing.js";
 
 export interface AuthenticatedSession {
   accountId: string;
@@ -67,6 +68,8 @@ export interface RunnerDeviceRequestInput { runnerId: string; keyId: string; req
 export interface RunnerDeviceSession { runnerId: string; accountId: string; workspaceId: string; keyId: string }
 export interface WorkspaceEnvironmentRecord { environmentId: string; environment: "development" | "production" }
 export interface SharedConnectionRecord { id: string; workspaceId: string; environmentId: string; provider: string; displayName: string; accountIdentity: string | null; grantedScopes: string[]; permittedWorkflowIds: string[]; permittedRoleIds: string[]; health: string; expiresAt: string | null; lastUsedAt: string | null; createdBy: string; approvalRequirements: Record<string, unknown> }
+export interface PluginBillingPlan { pluginId: string; planId: string; stripePriceId: string; mode: "payment" | "subscription"; offlineGraceDays: number; seatAllowance: number | null; customerId: string | null }
+export interface EntitlementRecord { entitlementId: string; ownerType: "personal" | "workspace" | "organisation" | "publisher"; ownerId: string; pluginId: string; planId: string; status: "trial" | "active" | "past_due" | "expired" | "refunded" | "revoked"; seatAllowance: number | null; startsAt: string; renewsAt: string | null; offlineGraceUntil: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -119,6 +122,10 @@ export interface ControlPlaneRepository {
   listSharedConnections(actor: AuthenticatedSession, workspaceId: string, environmentId: string | null): Promise<SharedConnectionRecord[]>;
   createSharedConnection(actor: AuthenticatedSession, workspaceId: string, input: Omit<SharedConnectionRecord, "id" | "workspaceId" | "health" | "expiresAt" | "lastUsedAt" | "createdBy">, correlationId: string): Promise<SharedConnectionRecord>;
   deploySharedConnection(actor: AuthenticatedSession, workspaceId: string, connectionId: string, runnerId: string, status: "authorization_required" | "available" | "unavailable", localCredentialLabel: string | null, correlationId: string): Promise<{ connectionId: string; runnerId: string; status: string; localCredentialLabel: string | null }>;
+  getPluginBillingPlan(actor: AuthenticatedSession, ownerType: "personal" | "workspace", ownerId: string, pluginId: string, planId: string): Promise<PluginBillingPlan | null>;
+  recordMarketplaceCheckout(actor: AuthenticatedSession, checkoutId: string, ownerType: "personal" | "workspace", ownerId: string, pluginId: string, planId: string, expiresAt: string): Promise<void>;
+  applyBillingEvent(event: BillingEvent): Promise<void>;
+  getActiveEntitlement(actor: AuthenticatedSession, ownerType: "personal" | "workspace", ownerId: string, pluginId: string): Promise<EntitlementRecord | null>;
 }
 
 export class DomainError extends Error {

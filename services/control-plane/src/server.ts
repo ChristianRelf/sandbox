@@ -5,6 +5,8 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
 import type { TransactionalEmail } from "./email.js";
+import type { BillingProvider } from "./billing.js";
+import type { EntitlementClaimSigner } from "./entitlement.js";
 import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_services.js";
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
@@ -64,6 +66,7 @@ const sharedConnectionInput = z.object({
   approvalRequirements: z.record(z.string(), z.unknown()).default({}), deploymentMode: z.literal("authorize_per_runner")
 }).strict();
 const sharedConnectionDeploymentInput = z.object({ runnerId: z.string().uuid(), status: z.enum(["authorization_required", "available", "unavailable"]), localCredentialLabel: z.string().trim().min(1).max(120).nullable().default(null) }).strict();
+const checkoutInput = z.object({ ownerType: z.enum(["personal", "workspace"]), ownerId: z.string().uuid(), planId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(100) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -72,6 +75,8 @@ export interface ApiDependencies {
   packageStorage: ImmutablePackageStorage;
   packageScanner: PackageReviewScanner;
   runnerCommandSigner?: RunnerCommandSigner;
+  billing?: BillingProvider;
+  entitlementSigner?: EntitlementClaimSigner;
   webBaseUrl: string;
   logger?: boolean;
 }
@@ -130,7 +135,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.get("/v1/marketplace/plugins/:pluginId/install", async request => {
     const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
-    const { workspaceId } = z.object({ workspaceId: z.string().uuid().nullable().default(null) }).parse(request.query);
+    const { workspaceId, ownerType, ownerId } = z.object({ workspaceId: z.string().uuid().nullable().default(null), ownerType: z.enum(["personal", "workspace"]).nullable().default(null), ownerId: z.string().uuid().nullable().default(null) }).parse(request.query);
     const session = await authenticateOptional(request, dependencies.sessions);
     if (workspaceId) {
       if (!session) throw new DomainError("authentication_required", "Sign in to install a private workspace plugin.", 401);
@@ -138,9 +143,34 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     }
     const packageRecord = await dependencies.repository.getMarketplacePackage(session, pluginId, workspaceId);
     if (!packageRecord) throw new DomainError("package_not_available", "The current signed package is unavailable, incompatible, suspended, or revoked.", 404);
-    if (packageRecord.pricingModel !== "free") throw new DomainError("entitlement_required", "Purchase or assign an active entitlement before installing this paid plugin.", 402);
+    let entitlementClaim = null;
+    if (packageRecord.pricingModel !== "free") {
+      if (!session || !ownerType || !ownerId) throw new DomainError("entitlement_required", "Sign in and select the licensed owner before installing this paid plugin.", 402);
+      if (ownerType === "personal" && ownerId !== session.accountId) throw new DomainError("entitlement_owner_invalid", "A personal entitlement must belong to the authenticated account.", 403);
+      if (ownerType === "workspace") await authorizer.require(session, ownerId, "plugins.manage");
+      const entitlement = await dependencies.repository.getActiveEntitlement(session, ownerType, ownerId, pluginId);
+      if (!entitlement || new Date(entitlement.offlineGraceUntil).getTime() <= Date.now()) throw new DomainError("entitlement_required", "Purchase, renew, or assign an active entitlement before installing this paid plugin.", 402);
+      if (!dependencies.entitlementSigner) throw new DomainError("entitlement_signing_unavailable", "Paid plugin claims are temporarily unavailable.", 503);
+      entitlementClaim = dependencies.entitlementSigner.sign(entitlement);
+    }
     const download = await dependencies.packageStorage.createDownload(packageRecord.packageObjectKey);
-    return { pluginId: packageRecord.pluginId, version: packageRecord.version, packageIntegrity: packageRecord.packageIntegrity, packageSize: packageRecord.packageSize, publisher: { publicId: packageRecord.publisherPublicId, keyId: packageRecord.publisherKeyId, publicKeyPem: publicKeyPem(packageRecord.publisherPublicKeyDerBase64) }, download };
+    return { pluginId: packageRecord.pluginId, version: packageRecord.version, packageIntegrity: packageRecord.packageIntegrity, packageSize: packageRecord.packageSize, publisher: { publicId: packageRecord.publisherPublicId, keyId: packageRecord.publisherKeyId, publicKeyPem: publicKeyPem(packageRecord.publisherPublicKeyDerBase64) }, entitlementClaim, download };
+  });
+
+  app.post("/v1/marketplace/plugins/:pluginId/checkout", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
+    const input = checkoutInput.parse(request.body);
+    if (input.ownerType === "personal" && input.ownerId !== session.accountId) throw new DomainError("billing_owner_invalid", "Personal checkout must belong to the authenticated account.", 403);
+    if (input.ownerType === "workspace") await authorizer.require(session, input.ownerId, "organisation.billing.manage");
+    if (!dependencies.billing) throw new DomainError("billing_unavailable", "Marketplace billing is temporarily unavailable.", 503);
+    const plan = await dependencies.repository.getPluginBillingPlan(session, input.ownerType, input.ownerId, pluginId, input.planId);
+    if (!plan) throw new DomainError("billing_plan_not_found", "This plugin plan is unavailable for the selected owner.", 404);
+    const metadata = { accountId: session.accountId, ownerType: input.ownerType, ownerId: input.ownerId, pluginId, planId: input.planId, offlineGraceDays: String(plan.offlineGraceDays), seatAllowance: plan.seatAllowance === null ? "" : String(plan.seatAllowance) };
+    const checkout = await dependencies.billing.createCheckout({ priceId: plan.stripePriceId, mode: plan.mode, customerId: plan.customerId ?? undefined, successUrl: `${dependencies.webBaseUrl.replace(/\/$/, "")}/billing/complete?session_id={CHECKOUT_SESSION_ID}`, cancelUrl: `${dependencies.webBaseUrl.replace(/\/$/, "")}/marketplace/${encodeURIComponent(pluginId)}`, metadata });
+    await dependencies.repository.recordMarketplaceCheckout(session, checkout.checkoutId, input.ownerType, input.ownerId, pluginId, input.planId, checkout.expiresAt);
+    return { checkout };
   });
 
   app.get("/v1/account/export", async request => {
@@ -569,6 +599,21 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     await authorizer.require(session, workspaceId, "audit.view");
     return dependencies.repository.listAuditEvents(session, workspaceId, cursor, limit);
   });
+
+  await app.register(async stripeWebhook => {
+    stripeWebhook.removeContentTypeParser("application/json");
+    stripeWebhook.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
+    stripeWebhook.post("/webhook", async request => {
+      if (!dependencies.billing) throw new DomainError("billing_unavailable", "Marketplace billing is unavailable.", 503);
+      const signature = request.headers["stripe-signature"];
+      if (typeof signature !== "string") throw new DomainError("billing_signature_required", "Stripe-Signature is required.", 400);
+      let event;
+      try { event = dependencies.billing.parseWebhook(request.body as Buffer, signature); }
+      catch { throw new DomainError("billing_signature_invalid", "Billing webhook signature is invalid.", 400); }
+      if (event) await dependencies.repository.applyBillingEvent(event);
+      return { received: true };
+    });
+  }, { prefix: "/v1/billing/stripe" });
 
   return app;
 }
