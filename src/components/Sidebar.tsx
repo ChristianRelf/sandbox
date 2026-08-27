@@ -1,4 +1,4 @@
-import { Clock3, Command, GitFork, History, PanelLeftClose, PanelLeftOpen, ShieldQuestion, Settings2 } from "lucide-react";
+import { Blocks, Clock3, Command, GitFork, History, PanelLeftClose, PanelLeftOpen, Search, ShieldQuestion, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { useAppStore, type View } from "../store";
 export function Sidebar({onCommand}:{onCommand:()=>void}){const [collapsed,setCollapsed]=useState(false);const {view,setView}=useAppStore();const navigate=(next:View)=>{const dirty=(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved;if(!dirty||confirm("Leave without saving your workflow changes?"))setView(next)};return <aside className={`sidebar ${collapsed?"sidebar-collapsed":""}`}>
@@ -6,6 +6,8 @@ export function Sidebar({onCommand}:{onCommand:()=>void}){const [collapsed,setCo
   <nav>
     <button className={view==="workflows"?"active":""} onClick={()=>navigate("workflows")}><GitFork size={16}/>{!collapsed&&"Workflows"}</button>
     <button className={view==="history"?"active":""} onClick={()=>navigate("history")}><History size={16}/>{!collapsed&&"Run history"}</button>
+    <button className={view==="marketplace"?"active":""} onClick={()=>navigate("marketplace")}><Search size={16}/>{!collapsed&&"Marketplace"}</button>
+    <button className={view==="plugins"?"active":""} onClick={()=>navigate("plugins")}><Blocks size={16}/>{!collapsed&&"Installed Plugins"}</button>
     <button className={view==="settings"?"active":""} onClick={()=>navigate("settings")}><Settings2 size={16}/>{!collapsed&&"Settings"}</button>
     <button className={view==="approvals"?"active":""} onClick={()=>navigate("approvals")}><ShieldQuestion size={16}/>{!collapsed&&"Pending approvals"}</button>
   </nav>

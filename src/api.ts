@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, PendingApproval, PermissionSummary, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
+import type { AccountStatus, BrowserEngineStatus, BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ExecutionRecord, InstalledPlugin, MarketplacePage, PackageTrustMetadata, PendingApproval, PermissionSummary, PluginPackageInspection, RecordedStep, RunnerStatus, StructuredLocator, ValidationIssue, Workflow, WorkflowSummary } from "./types";
 import { previewApi } from "./previewApi";
 const tauri=typeof window!=="undefined"&&"__TAURI_INTERNALS__" in window;
 export const api={
@@ -43,7 +43,17 @@ export const api={
   deleteConnection:(id:string)=>invoke<void>("delete_connection",{id}),
   workflowsUsingConnection:(id:string)=>invoke<string[]>("workflows_using_connection",{id}),
   startGmailOAuth:()=>tauri?invoke<{authorizationUrl:string;expiresAt:string}>("start_gmail_oauth"):Promise.reject(new Error("Gmail OAuth requires the desktop application and SANDBOX_GMAIL_CLIENT_ID.")),
+  accountStatus:()=>tauri?invoke<AccountStatus>("account_status"):Promise.resolve({configured:false,signedIn:false,localWorkflowsAvailable:true,configurationError:"Accounts are available in the desktop application."}),
+  startAccountAuth:(createAccount=false)=>tauri?invoke<{authorizationUrl:string;expiresAt:string}>("start_account_auth",{createAccount}):Promise.reject(new Error("Account authorization opens the system browser from the desktop application.")),
+  signOutAccount:()=>tauri?invoke<void>("sign_out_account"):Promise.resolve(),
   listPendingApprovals:()=>tauri?invoke<PendingApproval[]>("list_pending_approvals"):Promise.resolve([]),
   resolvePendingApproval:(id:string,approved:boolean)=>invoke<void>("resolve_pending_approval",{id,approved}),
+  inspectPluginPackage:(trust:PackageTrustMetadata)=>tauri?invoke<PluginPackageInspection|undefined>("inspect_plugin_package",{trust}):Promise.reject(new Error("Signed package inspection requires the desktop application.")),
+  installInspectedPlugin:(inspectionId:string)=>tauri?invoke<InstalledPlugin>("install_inspected_plugin",{inspectionId}):Promise.reject(new Error("Plugin installation requires the desktop application.")),
+  listInstalledPlugins:(ownerType="personal",ownerId="local")=>tauri?invoke<InstalledPlugin[]>("list_installed_plugins",{ownerType,ownerId}):Promise.resolve([]),
+  approvePluginPermissions:(plugin:InstalledPlugin)=>tauri?invoke<InstalledPlugin>("approve_plugin_permissions",{pluginId:plugin.pluginId,version:plugin.version,packageIntegrity:plugin.packageIntegrity,ownerType:plugin.ownerType,ownerId:plugin.ownerId}):Promise.reject(new Error("Plugin permissions require the desktop application.")),
+  setPluginEnabled:(plugin:InstalledPlugin,enabled:boolean)=>tauri?invoke<InstalledPlugin>("set_plugin_enabled",{pluginId:plugin.pluginId,version:plugin.version,packageIntegrity:plugin.packageIntegrity,ownerType:plugin.ownerType,ownerId:plugin.ownerId,enabled}):Promise.reject(new Error("Plugin enablement requires the desktop application.")),
+  searchMarketplace:(query:{search?:string;pricing?:string;verifiedOnly?:boolean;sort?:string;cursor?:string;limit?:number})=>tauri?invoke<MarketplacePage>("search_marketplace",{query}):Promise.resolve({items:[],nextCursor:null}),
+  inspectMarketplacePlugin:(pluginId:string)=>tauri?invoke<PluginPackageInspection>("inspect_marketplace_plugin",{pluginId}):Promise.reject(new Error("Marketplace package inspection requires the desktop application.")),
   isDesktop:tauri,
 };

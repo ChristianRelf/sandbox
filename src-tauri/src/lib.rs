@@ -1,9 +1,14 @@
+mod account_auth;
 mod browser_sidecar;
 mod commands;
 mod credential_vault;
 mod integrations;
+mod marketplace;
 mod oauth;
+mod plugin_manager;
+pub mod remote_runner;
 mod runner;
+mod sync_crypto;
 mod templates;
 
 use async_trait::async_trait;
@@ -12,6 +17,7 @@ use credential_vault::{CredentialVault, OsCredentialVault};
 use parking_lot::Mutex;
 use sandbox_engine::{
     BrowserDiagnostics, Database, Engine, EngineError, HostServices, PendingApproval,
+    PluginHostResult, Workflow, WorkflowNode,
 };
 use serde_json::{json, Value};
 use std::{
@@ -31,6 +37,7 @@ pub struct TauriHost {
     browser_sidecar: BrowserSidecar,
     data_dir: std::path::PathBuf,
     credential_vault: Arc<dyn CredentialVault>,
+    plugin_manager: plugin_manager::PluginManager,
 }
 #[async_trait]
 impl HostServices for TauriHost {
@@ -156,6 +163,48 @@ impl HostServices for TauriHost {
         .await
         .map_err(EngineError::Node)
     }
+
+    async fn plugin_operation(
+        &self,
+        workflow: &Workflow,
+        node: &WorkflowNode,
+        execution_id: &str,
+        input: Value,
+        cancellation: CancellationToken,
+    ) -> Result<PluginHostResult, EngineError> {
+        struct CancelOnDrop(Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for CancelOnDrop {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let _cancel_on_drop = CancelOnDrop(cancelled.clone());
+        let monitor_flag = cancelled.clone();
+        let monitor = tauri::async_runtime::spawn(async move {
+            cancellation.cancelled().await;
+            monitor_flag.store(true, Ordering::SeqCst);
+        });
+        let manager = self.plugin_manager.clone();
+        let workflow = workflow.clone();
+        let node = node.clone();
+        let execution_id = execution_id.to_string();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            manager.execute_node(&workflow, &node, &execution_id, input, cancelled)
+        })
+        .await
+        .map_err(|error| EngineError::Node(format!("Plugin worker failed: {error}")))??;
+        monitor.abort();
+        Ok(PluginHostResult {
+            output: result.output,
+            diagnostics: result
+                .diagnostics
+                .into_iter()
+                .map(|diagnostic| format!("{}: {}", diagnostic.code, diagnostic.message))
+                .collect(),
+        })
+    }
     async fn approval_requested(&self, approval: &PendingApproval) -> Result<(), EngineError> {
         let action = approval
             .action
@@ -169,6 +218,11 @@ impl HostServices for TauriHost {
             .title("Sandbox approval required")
             .body(action)
             .show();
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
         let _ = self.app.emit("approval-requested", approval);
         Ok(())
     }
@@ -182,6 +236,8 @@ pub struct AppState {
     pub browser_sidecar: BrowserSidecar,
     pub credential_vault: Arc<dyn CredentialVault>,
     pub data_dir: std::path::PathBuf,
+    pub plugin_manager: plugin_manager::PluginManager,
+    pub sync_crypto: sync_crypto::WorkflowSyncCrypto,
 }
 
 pub fn run() {
@@ -200,6 +256,12 @@ pub fn run() {
             let browser_sidecar =
                 BrowserSidecar::new(app.handle()).map_err(|error| error.to_string())?;
             let credential_vault: Arc<dyn CredentialVault> = Arc::new(OsCredentialVault::new());
+            let plugin_manager = plugin_manager::PluginManager::new(
+                database.clone(),
+                data_dir.join("plugins").join("packages"),
+            )
+            .map_err(|error| error.to_string())?;
+            let sync_crypto = sync_crypto::WorkflowSyncCrypto::new(credential_vault.clone());
             let sidecar_for_verify = browser_sidecar.clone();
             tauri::async_runtime::block_on(async {
                 let _ = sidecar_for_verify.verify().await;
@@ -208,10 +270,11 @@ pub fn run() {
                 database.clone(),
                 Arc::new(TauriHost {
                     app: app.handle().clone(),
-                    database,
+                    database: database.clone(),
                     browser_sidecar: browser_sidecar.clone(),
                     data_dir: data_dir.clone(),
                     credential_vault: credential_vault.clone(),
+                    plugin_manager: plugin_manager.clone(),
                 }),
             );
             let state = AppState {
@@ -222,6 +285,8 @@ pub fn run() {
                 browser_sidecar,
                 credential_vault,
                 data_dir,
+                plugin_manager,
+                sync_crypto,
             };
             runner::create_tray(app, &state)?;
             runner::start_background_services(app.handle().clone(), &state);
@@ -286,8 +351,20 @@ pub fn run() {
             commands::delete_connection,
             commands::workflows_using_connection,
             commands::start_gmail_oauth,
+            commands::account_status,
+            commands::start_account_auth,
+            commands::sign_out_account,
             commands::list_pending_approvals,
-            commands::resolve_pending_approval
+            commands::resolve_pending_approval,
+            commands::inspect_plugin_package,
+            commands::install_inspected_plugin,
+            commands::list_installed_plugins,
+            commands::approve_plugin_permissions,
+            commands::set_plugin_enabled,
+            commands::prepare_workflow_sync,
+            commands::import_synced_revision_copy,
+            commands::search_marketplace,
+            commands::inspect_marketplace_plugin
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");

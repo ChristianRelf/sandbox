@@ -443,11 +443,13 @@ mod tests {
                 position: Position { x: 0., y: 0. },
                 configuration: json!({}),
                 disabled: false,
+                plugin: None,
             })
             .collect();
         Workflow {
             id: "w".into(),
             schema_version: crate::model::CURRENT_SCHEMA_VERSION,
+            owner: Default::default(),
             name: "test".into(),
             description: "".into(),
             enabled: true,

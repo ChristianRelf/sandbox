@@ -1,8 +1,9 @@
-import { Bell, Braces, Camera, Clock3, Code2, Download, FileClock, FileOutput, GitBranch, Globe2, Hand, Keyboard, LogIn, Mail, MailPlus, MessageSquare, MousePointerClick, Navigation, ScanSearch, Send, ShieldQuestion, Tag, Upload, X, type LucideIcon } from "lucide-react";
-import type { NodeType, WorkflowNode } from "./types";
+import { Bell, Blocks, Braces, Camera, Clock3, Code2, Download, FileClock, FileOutput, GitBranch, Globe2, Hand, Keyboard, LogIn, Mail, MailPlus, MessageSquare, MousePointerClick, Navigation, ScanSearch, Send, ShieldQuestion, Tag, Upload, X, type LucideIcon } from "lucide-react";
+import type { InstalledPlugin, NodeType, PluginManifestNode, WorkflowNode } from "./types";
 
-export type NodeGroup = "Triggers" | "Logic" | "Data" | "Browser" | "Network" | "Communication" | "System";
+export type NodeGroup = "Triggers" | "Logic" | "Data" | "Browser" | "Network" | "Communication" | "System" | "Plugins";
 export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string }
+export interface PluginNodeChoice { plugin:InstalledPlugin; node:PluginManifestNode }
 export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"manual_trigger",name:"Manual Trigger",description:"Run from the toolbar",group:"Triggers",icon:Hand,defaults:{},summary:()=>"Starts on demand"},
   {type:"schedule_trigger",name:"Schedule Trigger",description:"Run on a local schedule",group:"Triggers",icon:Clock3,defaults:{scheduleType:"minutes",every:15,time:"09:00",cron:"0 */15 * * *"},summary:c=>c.scheduleType==="minutes"?`Every ${c.every ?? 15} minutes`:c.scheduleType==="daily"?`Daily at ${c.time ?? "09:00"}`:c.scheduleType==="hourly"?"Every hour":String(c.cron ?? "Advanced schedule")},
@@ -36,7 +37,30 @@ export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"slack_webhook",name:"Slack Webhook",description:"Send an incoming webhook message",group:"Communication",icon:MessageSquare,defaults:{credentialId:"",content:""},summary:c=>c.credentialId?"Send Slack message":"Choose a connection"},
   {type:"approval",name:"Manual Approval",description:"Pause for local review",group:"Logic",icon:ShieldQuestion,defaults:{proposedAction:"",recipient:"",subject:"",messagePreview:"",attachments:[],expiresInMinutes:60},summary:c=>String(c.proposedAction||"Approval required")},
 ];
-export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)!;
+const UNKNOWN_PLUGIN_DEFINITION:NodeDefinition={type:"unknown.plugin",name:"Plugin node",description:"Pinned third-party node",group:"Plugins",icon:Blocks,defaults:{},summary:()=>"Pinned sandbox plugin"};
+export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)??{...UNKNOWN_PLUGIN_DEFINITION,type};
 export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false}};
+export const createPluginNode=(choice:PluginNodeChoice,position:{x:number;y:number}):WorkflowNode=>({
+  id:`plugin_${crypto.randomUUID().slice(0,8)}`,
+  type:choice.node.nodeType,
+  version:choice.node.nodeVersion,
+  name:choice.node.displayName,
+  position,
+  configuration:defaultsFromSchema(choice.node.configurationSchema),
+  disabled:false,
+  plugin:{pluginId:choice.plugin.pluginId,pluginVersion:choice.plugin.version,packageIntegrity:choice.plugin.packageIntegrity,publisherId:choice.plugin.publisherId,input:{},credentialReferences:{}},
+});
+export const enabledPluginNodes=(plugins:InstalledPlugin[]):PluginNodeChoice[]=>plugins.filter(plugin=>plugin.state==="enabled").flatMap(plugin=>plugin.manifest.nodes.map(node=>({plugin,node})));
 export const isTrigger=(type:NodeType)=>["manual_trigger","schedule_trigger","file_watch_trigger","gmail_new_email_trigger"].includes(type);
 const locatorSummary=(config:Record<string,unknown>,fallback:string)=>{const locator=config.locator as {accessibleName?:string;primary?:{name?:string;value?:string}}|undefined;return locator?.accessibleName||locator?.primary?.name||locator?.primary?.value||fallback};
+function defaultsFromSchema(schema:Record<string,unknown>):Record<string,unknown>{
+  if(schema.default&&typeof schema.default==="object"&&!Array.isArray(schema.default))return structuredClone(schema.default as Record<string,unknown>);
+  const result:Record<string,unknown>={};
+  const properties=(schema.properties&&typeof schema.properties==="object"?schema.properties:{}) as Record<string,Record<string,unknown>>;
+  for(const [key,property] of Object.entries(properties)){
+    if("default" in property)result[key]=structuredClone(property.default);
+    else if(property.type==="object")result[key]=defaultsFromSchema(property);
+    else if(property.type==="array")result[key]=[];
+  }
+  return result;
+}

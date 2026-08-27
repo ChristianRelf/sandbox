@@ -4,6 +4,7 @@ browser-sidecar/runtime/
 browser-sidecar/browsers/
 browser-sidecar/dist/
 dist/
+.next/
 target/
 src-tauri/target/
 *.db

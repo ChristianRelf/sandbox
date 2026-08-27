@@ -22,6 +22,7 @@ fn node(
         position: Position { x, y },
         configuration,
         disabled: false,
+        plugin: None,
     }
 }
 fn edge(id: &str, source: &str, handle: &str, target: &str) -> WorkflowEdge {
@@ -44,6 +45,7 @@ fn base(
     Workflow {
         id: Uuid::new_v4().to_string(),
         schema_version: CURRENT_SCHEMA_VERSION,
+        owner: Default::default(),
         name: name.into(),
         description: "".into(),
         enabled: false,

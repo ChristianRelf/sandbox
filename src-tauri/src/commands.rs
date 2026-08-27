@@ -1,9 +1,15 @@
-use crate::{oauth, templates, AppState};
+use crate::{
+    account_auth, marketplace, oauth,
+    plugin_manager::{PackageTrustMetadata, PluginPackageInspection},
+    sync_crypto::EncryptedWorkflowRevision,
+    templates, AppState,
+};
 use chrono::{DateTime, Utc};
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
     BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ConnectionStatus, ExecutionRecord,
-    PendingApproval, PermissionSummary, StructuredLocator, Workflow, WorkflowSummary,
+    InstalledPlugin, PendingApproval, PermissionSummary, StructuredLocator, Workflow,
+    WorkflowSummary,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -19,6 +25,178 @@ use uuid::Uuid;
 type Result<T> = std::result::Result<T, String>;
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+#[tauri::command]
+pub async fn inspect_plugin_package(
+    trust: PackageTrustMetadata,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<PluginPackageInspection>> {
+    let selection = tokio::task::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Inspect signed plugin package")
+            .add_filter("Sandbox plugin", &["sandbox-plugin"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(err)?;
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let path = selection.into_path().map_err(err)?;
+    state
+        .plugin_manager
+        .inspect_path(&path, trust)
+        .map(Some)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn install_inspected_plugin(
+    inspection_id: String,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .plugin_manager
+        .install_inspected(&inspection_id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn list_installed_plugins(
+    owner_type: Option<String>,
+    owner_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<InstalledPlugin>> {
+    state
+        .engine
+        .database()
+        .list_installed_plugins(
+            owner_type.as_deref().unwrap_or("personal"),
+            owner_id.as_deref().unwrap_or("local"),
+        )
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn approve_plugin_permissions(
+    plugin_id: String,
+    version: String,
+    package_integrity: String,
+    owner_type: String,
+    owner_id: String,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .engine
+        .database()
+        .approve_plugin_permissions(
+            &plugin_id,
+            &version,
+            &package_integrity,
+            &owner_type,
+            &owner_id,
+        )
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn set_plugin_enabled(
+    plugin_id: String,
+    version: String,
+    package_integrity: String,
+    owner_type: String,
+    owner_id: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<InstalledPlugin> {
+    state
+        .engine
+        .database()
+        .set_plugin_enabled(
+            &plugin_id,
+            &version,
+            &package_integrity,
+            &owner_type,
+            &owner_id,
+            enabled,
+        )
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn prepare_workflow_sync(
+    id: String,
+    parent_revision_id: Option<String>,
+    editor_device_id: String,
+    state: State<'_, AppState>,
+) -> Result<EncryptedWorkflowRevision> {
+    if !state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)
+        .map_err(err)?
+    {
+        return Err("Sign in before enabling workflow sync. Local workflows remain available without an account.".into());
+    }
+    let workflow = state
+        .engine
+        .database()
+        .get_workflow(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    let mut definition = serde_json::to_value(&workflow).map_err(err)?;
+    let mut required_connections = Vec::new();
+    let mut required_profiles = Vec::new();
+    let mut local_path_fields = Vec::new();
+    sanitize_export_definition(
+        &mut definition,
+        &state,
+        &mut required_connections,
+        &mut required_profiles,
+        &mut local_path_fields,
+    )?;
+    if contains_secret_material(&definition) {
+        return Err(
+            "Workflow sync stopped because the definition contains secret-shaped material.".into(),
+        );
+    }
+    let sanitized: Workflow = serde_json::from_value(definition).map_err(err)?;
+    state
+        .sync_crypto
+        .encrypt(&sanitized, parent_revision_id, editor_device_id)
+}
+
+#[tauri::command]
+pub fn import_synced_revision_copy(
+    revision: EncryptedWorkflowRevision,
+    state: State<'_, AppState>,
+) -> Result<Workflow> {
+    let mut workflow = state.sync_crypto.decrypt(&revision)?;
+    workflow.id = Uuid::new_v4().to_string();
+    workflow.name = format!("{} (synced conflict copy)", workflow.name);
+    workflow.enabled = false;
+    workflow.owner = Default::default();
+    workflow.settings.permissions = PermissionSummary::default();
+    workflow.created_at = Utc::now();
+    workflow.updated_at = Utc::now();
+    state.engine.database().save_workflow(workflow).map_err(err)
+}
+
+#[tauri::command]
+pub async fn search_marketplace(
+    query: marketplace::MarketplaceSearch,
+) -> Result<marketplace::MarketplacePage> {
+    marketplace::search(query).await
+}
+
+#[tauri::command]
+pub async fn inspect_marketplace_plugin(
+    plugin_id: String,
+    state: State<'_, AppState>,
+) -> Result<PluginPackageInspection> {
+    marketplace::inspect_for_install(&plugin_id, &state.plugin_manager).await
 }
 
 #[tauri::command]
@@ -828,6 +1006,126 @@ pub fn workflows_using_connection(id: String, state: State<'_, AppState>) -> Res
         .engine
         .database()
         .workflows_using_reference(&id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn account_status(state: State<'_, AppState>) -> Result<account_auth::AccountStatus> {
+    let configuration = account_auth::configured();
+    let metadata = state
+        .engine
+        .database()
+        .get_setting::<account_auth::AccountMetadata>(account_auth::ACCOUNT_METADATA_KEY)
+        .map_err(err)?;
+    let has_secret = state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)?;
+    Ok(account_auth::AccountStatus {
+        configured: configuration.is_ok(),
+        signed_in: metadata.is_some() && has_secret,
+        metadata,
+        local_workflows_available: true,
+        configuration_error: configuration.err(),
+    })
+}
+
+#[tauri::command]
+pub async fn start_account_auth(
+    create_account: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<account_auth::AccountAuthStart> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| {
+            format!("Sandbox could not open a local account callback port: {error}")
+        })?;
+    let address = listener.local_addr().map_err(err)?;
+    let redirect_uri = format!("http://127.0.0.1:{}/account/callback", address.port());
+    let (attempt, start) = account_auth::start(redirect_uri, create_account)?;
+    app.opener()
+        .open_url(&start.authorization_url, None::<&str>)
+        .map_err(|error| {
+            format!("The account page could not be opened in the system browser: {error}")
+        })?;
+    let database = state.engine.database().clone();
+    let vault = state.credential_vault.clone();
+    tauri::async_runtime::spawn(async move {
+        let result: Result<account_auth::AccountMetadata> = async {
+            let (mut stream, _) =
+                tokio::time::timeout(std::time::Duration::from_secs(300), listener.accept())
+                    .await
+                    .map_err(|_| "Account authorization expired after five minutes.".to_string())?
+                    .map_err(|error| format!("Account callback could not be accepted: {error}"))?;
+            let mut request = vec![0_u8; 16 * 1024];
+            let count = stream.read(&mut request).await.map_err(err)?;
+            let request = String::from_utf8_lossy(&request[..count]);
+            let target = request
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1))
+                .ok_or_else(|| "Account callback request was invalid.".to_string())?;
+            let callback_url = format!("http://127.0.0.1:{}{}", address.port(), target);
+            let code = match attempt.validate_callback(&callback_url) {
+                Ok(code) => code,
+                Err(error) => {
+                    write_oauth_response(&mut stream, false, &error).await;
+                    return Err(error);
+                }
+            };
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(err)?;
+            let (secret, metadata) = match attempt.exchange(&client, &code).await {
+                Ok(value) => value,
+                Err(error) => {
+                    write_oauth_response(&mut stream, false, &error).await;
+                    return Err(error);
+                }
+            };
+            vault.put(account_auth::ACCOUNT_VAULT_ID, &secret)?;
+            if let Err(error) = database.set_setting(account_auth::ACCOUNT_METADATA_KEY, &metadata)
+            {
+                let _ = vault.delete(account_auth::ACCOUNT_VAULT_ID);
+                return Err(error.to_string());
+            }
+            write_oauth_response(
+                &mut stream,
+                true,
+                "Sandbox is connected. You can close this tab and return to the desktop app.",
+            )
+            .await;
+            Ok(metadata)
+        }
+        .await;
+        match result {
+            Ok(metadata) => {
+                let _ = app.emit("account-session-updated", metadata);
+            }
+            Err(error) => {
+                let _ = app.emit("account-session-error", error);
+            }
+        }
+    });
+    Ok(start)
+}
+
+#[tauri::command]
+pub fn sign_out_account(state: State<'_, AppState>) -> Result<()> {
+    if state
+        .credential_vault
+        .exists(account_auth::ACCOUNT_VAULT_ID)?
+    {
+        state
+            .credential_vault
+            .delete(account_auth::ACCOUNT_VAULT_ID)?;
+    }
+    state
+        .engine
+        .database()
+        .delete_setting(account_auth::ACCOUNT_METADATA_KEY)
         .map_err(err)
 }
 

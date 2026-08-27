@@ -1,6 +1,6 @@
-# Sandbox v0.1.0
+# Sandbox v0.3.0
 
-Sandbox is a local-first desktop workflow tool. This repository contains one complete vertical slice: users can build a directed workflow, persist it to SQLite, execute it through an independent Rust engine, inspect every node, and keep approved schedules and file watches running while the window is hidden to the system tray.
+Sandbox is a local-first visual desktop automation platform. v0.3 adds a capability-controlled WebAssembly plugin ecosystem, signed packages and exact workflow pins, optional encrypted sync, marketplace and publisher services, team workspaces, governed workflow publication, shared-connection deployment, and signed coordination of multiple local runners. Workflow execution remains local and existing personal workflows continue without an account or network connection.
 
 ## Architecture
 
@@ -64,6 +64,16 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Credential references are defined in the schema, but there is no credential vault or OAuth provider yet.
 - Workflows are DAGs only; loops and arbitrary expression execution are intentionally unsupported.
 
-## Stage two
+## Stage-three documentation
 
-Extract the runner behind IPC, add an OS credential vault and credential-reference editor, add timezone-aware scheduling and durable file-watch checkpoints, introduce controlled parallel branches, and add browser/network node packs through a signed plugin boundary.
+- Architecture and service boundaries: `docs/architecture-v0.3.md`
+- Plugin sandbox and threat model: `docs/plugin-sandbox.md`, `docs/plugin-threat-model.md`
+- Public SDK and CLI: `docs/plugin-sdk.md`
+- Marketplace review: `docs/marketplace-review.md`
+- Baseline compatibility audit: `docs/stage-three-audit.md`
+- Team permissions and publication: `docs/team-permissions.md`
+- Runner pairing and command protocol: `docs/runner-protocol.md`
+- Sync and conflict handling: `docs/sync-and-conflicts.md`
+- v0.2 migration notes: `docs/migration-v0.2-to-v0.3.md`
+- Operations and release commands: `docs/operations-v0.3.md`
+- Security findings and open blockers: `docs/security-review-v0.3.md`, `docs/known-limitations-v0.3.md`

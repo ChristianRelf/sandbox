@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createNode, definitionFor, NODE_DEFINITIONS } from "./catalogue";
+import { createNode, createPluginNode, definitionFor, enabledPluginNodes, NODE_DEFINITIONS } from "./catalogue";
+import type { InstalledPlugin } from "./types";
 
 describe("stage two node catalogue", () => {
   it("exposes the complete managed Chromium action set", () => {
@@ -23,5 +24,14 @@ describe("stage two node catalogue", () => {
     const second = createNode("http_request", { x: 20, y: 20 });
     (first.configuration.headers as Record<string, string>).Authorization = "secret";
     expect(second.configuration.headers).toEqual({});
+  });
+
+  it("creates exact pinned nodes only from enabled plugin versions", () => {
+    const plugin={pluginId:"com.example.weather",version:"1.2.3",packageIntegrity:`sha256:${"a".repeat(64)}`,publisherId:"com.example",state:"enabled",manifest:{name:"Weather",nodes:[{nodeType:"weather.current",nodeVersion:2,displayName:"Current weather",description:"Read weather",category:"Data",riskLevel:"low",configurationSchema:{type:"object",properties:{units:{type:"string",default:"celsius"}}}}]}} as unknown as InstalledPlugin;
+    const choices=enabledPluginNodes([plugin,{...plugin,state:"disabled"}]);
+    expect(choices).toHaveLength(1);
+    const node=createPluginNode(choices[0],{x:10,y:20});
+    expect(node).toMatchObject({type:"weather.current",version:2,configuration:{units:"celsius"},plugin:{pluginId:"com.example.weather",pluginVersion:"1.2.3",packageIntegrity:plugin.packageIntegrity,publisherId:"com.example"}});
+    expect(definitionFor(node.type).group).toBe("Plugins");
   });
 });

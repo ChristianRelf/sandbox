@@ -1,6 +1,6 @@
 [package]
 name = "sandbox-app"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first visual workflow automation"
 authors = ["Sandbox"]
 edition = "2021"
@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 sandbox-engine = { path = "engine" }
+sandbox-plugin-runtime = { path = "plugin-runtime" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
@@ -35,6 +36,15 @@ rand = "0.9"
 zeroize = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 url = "2"
+semver = "1"
+aes-gcm = "0.10"
+urlencoding = "2"
+ed25519-dalek = { version = "3", features = ["pem"] }
+
+[dev-dependencies]
+ed25519-dalek = { version = "3", features = ["pem", "rand_core"] }
+tempfile = "3"
+zip = { version = "8.6.0", default-features = false }
 
 [workspace]
-members = ["engine"]
+members = ["engine", "plugin-runtime"]
