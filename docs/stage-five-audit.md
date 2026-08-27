@@ -37,7 +37,7 @@ Stage-five work may proceed only on blocker remediation and the ordered foundati
 | PostgreSQL migrations | Pass | 16/16 applied; a second run applies nothing and preserves checksums |
 | Backup format restore | Pass with limitation | A fresh staging logical backup restored into an isolated database with 16 migration records, 64 public tables and 45 public functions. This is not evidence for the latest production backup. |
 | npm production advisory audit | Pass | Zero known production vulnerabilities reported |
-| Rust advisory audit | Blocked | `cargo-audit` is not installed on the audit host |
+| Rust advisory audit | Pass with warnings | No known vulnerabilities in desktop, hosted-runner or agent lockfiles. The desktop graph reports 18 maintenance/unsound/yanked warnings requiring release disposition. |
 
 Build and container results are recorded in the GA blocker register when a host or infrastructure dependency prevents completion.
 
@@ -65,4 +65,3 @@ No critical placeholder UI was found by the source scan. `src/previewApi.ts` int
 ## Audit environment cleanup
 
 The PostgreSQL audit container is disposable and contains audit-only credentials. Remove it after evidence collection. Audit-only container images must not be published or treated as signed release artifacts.
-

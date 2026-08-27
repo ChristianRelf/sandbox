@@ -11,13 +11,13 @@ Severity definitions:
 | ID | Severity | Owner | Required release | Status | Blocker / acceptance evidence |
 | --- | --- | --- | --- | --- | --- |
 | GA-001 | Critical | Execution | v0.5.0 | Open | Self-hosted agent must poll, verify, claim and execute exact approved revisions, report state, persist idempotency and recover after restart. Current service sends heartbeats only. |
-| GA-002 | Critical | Billing | v0.5.0 | Open | Implement immutable hosted/browser usage records, local-run exclusion and reconciliation to executions/invoice inputs. Reconciliation must pass with duplicate events. |
+| GA-002 | Critical | Billing | v0.5.0 | In progress | Immutable usage records, payload-bound idempotency, local-target exclusion, redaction and execution reconciliation are implemented. Wire trusted hosted/browser producers and reconcile invoice inputs before closure. |
 | GA-003 | Critical | Security | v0.5.0 | Open | Resolve all external penetration-test criticals and attach retest evidence. No external report is available. |
 | GA-004 | Critical | Security | v0.5.0 | Open | Complete adversarial tenant-isolation review across control plane, runners, artifacts, browser profiles, queues and every v0.5 table. |
 | GA-005 | Critical | Reliability | v0.5.0 | Blocked externally | Restore the latest encrypted production backup into an isolated environment and reconcile application-level counts/hashes. Fresh staging schema restore passed, but is insufficient. |
 | GA-006 | High | Release engineering | v0.5.0 | Open | Align product/package/protocol versions, publish compatibility matrix and eliminate the current mixed 0.3/0.4 metadata. |
 | GA-007 | High | Release engineering | v0.5.0 | In progress | Ensure the default complete suite discovers scheduler, browser-worker, hosted-runner and agent tests; enforce database integrations in CI. |
-| GA-008 | High | Security | v0.5.0 | Blocked on tooling | Run Rust advisory, SBOM, container and supply-chain scans; `cargo-audit` is absent on the audit host. |
+| GA-008 | High | Security | v0.5.0 | In progress | Rust advisory scans report no known vulnerabilities; the desktop graph has 18 maintenance/unsound/yanked warnings requiring disposition. SBOM, container and provenance scans remain. |
 | GA-009 | High | Execution | v0.5.0 | Open | Exercise hosted orchestration with real leases, short-lived workload identity, network policy, cgroup limits, artifact namespace and concurrent cross-tenant workloads. |
 | GA-010 | High | Browser | v0.5.0 | Open | Exercise DNS rebinding/redirect policy, download scanner, encrypted profile store and worker destruction in the target orchestrator. |
 | GA-011 | High | Platform security | v0.5.0 | Open | Consolidate authorisation for every resource/action and enforce environment/token restrictions again at the runner boundary. |
@@ -41,4 +41,3 @@ Severity definitions:
 | GA-C02 | 2026-08-27 | Control-plane and scheduler database integration suites pass against clean PostgreSQL 16. |
 | GA-C03 | 2026-08-27 | Fresh staging logical backup restores into an isolated database with matching schema inventory. Production-backup evidence remains GA-005. |
 | GA-C04 | 2026-08-27 | npm production advisory audit reports zero known vulnerabilities. |
-
