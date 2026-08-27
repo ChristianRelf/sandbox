@@ -217,6 +217,11 @@ impl HostServices for TauriHost {
             .title("Sandbox approval required")
             .body(action)
             .show();
+        if let Some(window) = self.app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
         let _ = self.app.emit("approval-requested", approval);
         Ok(())
     }
