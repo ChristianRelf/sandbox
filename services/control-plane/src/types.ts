@@ -10,6 +10,12 @@ export interface AuthenticatedSession {
   expiresAt: Date;
   authenticationMethods: string[];
   platformPermissions: string[];
+  principalType?: "user" | "personal_access_token" | "service_account";
+  principalId?: string;
+  credentialScopes?: string[];
+  organisationRestriction?: string | null;
+  workspaceRestrictions?: string[];
+  environmentRestrictions?: string[];
 }
 
 export interface SessionVerifier {
