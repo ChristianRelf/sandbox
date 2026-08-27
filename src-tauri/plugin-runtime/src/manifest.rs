@@ -1,4 +1,4 @@
-use crate::{PluginError, MANIFEST_VERSION};
+use crate::{schema::validate_declared_schema, PluginError, MANIFEST_VERSION};
 use regex::Regex;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
@@ -360,6 +360,26 @@ impl Manifest {
                 errors.push(format!(
                     "Node '{}' timeout must be between 100 ms and 300 seconds.",
                     node.node_type
+                ));
+            }
+            for (label, schema) in [
+                ("inputSchema", &node.input_schema),
+                ("outputSchema", &node.output_schema),
+                ("configurationSchema", &node.configuration_schema),
+            ] {
+                if let Err(error) = validate_declared_schema(schema) {
+                    errors.push(format!(
+                        "Node '{}' {label} {error}.",
+                        node.node_type
+                    ));
+                }
+            }
+        }
+        for credential in &self.credentials {
+            if let Err(error) = validate_declared_schema(&credential.configuration_schema) {
+                errors.push(format!(
+                    "Credential '{}' configurationSchema {error}.",
+                    credential.credential_type
                 ));
             }
         }

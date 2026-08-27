@@ -3,6 +3,7 @@ mod error;
 mod manifest;
 mod package;
 mod runtime;
+mod schema;
 
 pub use broker::{
     CapabilityBroker, CredentialOperationBroker, ExecutionContext, HostRequest, HostResponse,
@@ -17,6 +18,7 @@ pub use manifest::{
 };
 pub use package::{package_digest, PackageTrustStore, RevocationList, VerifiedPackage};
 pub use runtime::{PluginRuntime, RuntimeLimits, SandboxDiagnostic};
+pub use schema::validate_schema_instance;
 
 pub const HOST_VERSION: &str = "0.3.0";
 pub const MANIFEST_VERSION: u32 = 1;
