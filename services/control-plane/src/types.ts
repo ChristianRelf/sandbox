@@ -65,6 +65,8 @@ export type GovernancePolicies = Record<string, unknown>;
 export interface WorkspaceMemberRecord { accountId: string; email: string; displayName: string; role: BuiltInRole; joinedAt: string }
 export interface RunnerDeviceRequestInput { runnerId: string; keyId: string; requestTime: string; nonce: string; signatureBase64: string; method: string; path: string; body: unknown }
 export interface RunnerDeviceSession { runnerId: string; accountId: string; workspaceId: string; keyId: string }
+export interface WorkspaceEnvironmentRecord { environmentId: string; environment: "development" | "production" }
+export interface SharedConnectionRecord { id: string; workspaceId: string; environmentId: string; provider: string; displayName: string; accountIdentity: string | null; grantedScopes: string[]; permittedWorkflowIds: string[]; permittedRoleIds: string[]; health: string; expiresAt: string | null; lastUsedAt: string | null; createdBy: string; approvalRequirements: Record<string, unknown> }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -113,6 +115,10 @@ export interface ControlPlaneRepository {
   updateRunnerCommandStatus(device: RunnerDeviceSession, commandId: string, status: "accepted" | "rejected" | "completed", resultSummary: Record<string, unknown> | null): Promise<boolean>;
   recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void>;
   listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number): Promise<{ runners: RunnerRecord[]; runs: RunSummary[]; pendingApprovalCount: number; webhookFailureCount: number }>;
+  listWorkspaceEnvironments(actor: AuthenticatedSession, workspaceId: string): Promise<WorkspaceEnvironmentRecord[]>;
+  listSharedConnections(actor: AuthenticatedSession, workspaceId: string, environmentId: string | null): Promise<SharedConnectionRecord[]>;
+  createSharedConnection(actor: AuthenticatedSession, workspaceId: string, input: Omit<SharedConnectionRecord, "id" | "workspaceId" | "health" | "expiresAt" | "lastUsedAt" | "createdBy">, correlationId: string): Promise<SharedConnectionRecord>;
+  deploySharedConnection(actor: AuthenticatedSession, workspaceId: string, connectionId: string, runnerId: string, status: "authorization_required" | "available" | "unavailable", localCredentialLabel: string | null, correlationId: string): Promise<{ connectionId: string; runnerId: string; status: string; localCredentialLabel: string | null }>;
 }
 
 export class DomainError extends Error {

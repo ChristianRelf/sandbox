@@ -3,7 +3,7 @@ import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCom
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SharedConnectionRecord, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 
@@ -789,6 +789,65 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async listWorkspaceEnvironments(actor: AuthenticatedSession, workspaceId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{ id: string; environment_key: "development" | "production" }>(`SELECT id,environment_key FROM environments WHERE workspace_id=$1 ORDER BY CASE environment_key WHEN 'development' THEN 0 ELSE 1 END`, [workspaceId]);
+      return result.rows.map(row => ({ environmentId: row.id, environment: row.environment_key }));
+    });
+  }
+
+  async listSharedConnections(actor: AuthenticatedSession, workspaceId: string, environmentId: string | null): Promise<SharedConnectionRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const values: unknown[] = [workspaceId];
+      const environmentClause = environmentId ? "AND c.environment_id=$2" : "";
+      if (environmentId) values.push(environmentId);
+      const result = await client.query<SharedConnectionRow>(
+        `SELECT c.id,c.workspace_id,c.environment_id,c.provider,c.display_name,c.account_identity,c.granted_scopes,c.permitted_workflow_ids,c.permitted_role_ids,c.health,c.expires_at,c.last_used_at,c.created_by,c.approval_requirements
+           FROM shared_connections c WHERE c.workspace_id=$1 ${environmentClause} ORDER BY c.display_name,c.id`, values
+      );
+      return result.rows.map(sharedConnectionFromRow);
+    });
+  }
+
+  async createSharedConnection(actor: AuthenticatedSession, workspaceId: string, input: Omit<SharedConnectionRecord, "id" | "workspaceId" | "health" | "expiresAt" | "lastUsedAt" | "createdBy">, correlationId: string): Promise<SharedConnectionRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const environment = await client.query(`SELECT 1 FROM environments WHERE id=$1 AND workspace_id=$2`, [input.environmentId, workspaceId]);
+      if (!environment.rowCount) throw new DomainError("environment_not_found", "Environment does not belong to this workspace.", 404);
+      if (input.permittedWorkflowIds.length) {
+        const workflows = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM synced_workflows WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, [workspaceId, input.permittedWorkflowIds]);
+        if (Number(workflows.rows[0]?.count ?? 0) !== new Set(input.permittedWorkflowIds).size) throw new DomainError("connection_workflow_scope_invalid", "Every permitted workflow must belong to this workspace.", 400);
+      }
+      if (input.permittedRoleIds.length) {
+        const roles = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM roles r JOIN workspaces w ON w.organisation_id=r.organisation_id WHERE w.id=$1 AND r.id=ANY($2::uuid[])`, [workspaceId, input.permittedRoleIds]);
+        if (Number(roles.rows[0]?.count ?? 0) !== new Set(input.permittedRoleIds).size) throw new DomainError("connection_role_scope_invalid", "Every permitted role must belong to this workspace organisation.", 400);
+      }
+      const id = randomUUID();
+      await client.query(
+        `INSERT INTO shared_connections(id,workspace_id,environment_id,provider,display_name,account_identity,granted_scopes,permitted_workflow_ids,permitted_role_ids,health,created_by,approval_requirements)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'authorization_required',$10,$11)`,
+        [id, workspaceId, input.environmentId, input.provider, input.displayName, input.accountIdentity, input.grantedScopes, input.permittedWorkflowIds, input.permittedRoleIds, actor.accountId, input.approvalRequirements]
+      );
+      await appendAudit(client, actor, workspaceId, "connection.created", "shared_connection", id, null, { provider: input.provider, displayName: input.displayName, environmentId: input.environmentId, grantedScopes: input.grantedScopes }, correlationId);
+      return { id, workspaceId, ...input, health: "authorization_required", expiresAt: null, lastUsedAt: null, createdBy: actor.accountId };
+    });
+  }
+
+  async deploySharedConnection(actor: AuthenticatedSession, workspaceId: string, connectionId: string, runnerId: string, status: "authorization_required" | "available" | "unavailable", localCredentialLabel: string | null, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      if (status === "available" && !localCredentialLabel) throw new DomainError("connection_credential_label_required", "An available deployment must identify the runner-local credential by a safe label.", 400);
+      const scope = await client.query(`SELECT 1 FROM shared_connections c JOIN runners r ON r.workspace_id=c.workspace_id WHERE c.id=$1 AND c.workspace_id=$2 AND r.id=$3 AND r.revoked_at IS NULL`, [connectionId, workspaceId, runnerId]);
+      if (!scope.rowCount) throw new DomainError("connection_deployment_scope_invalid", "Connection and runner must both belong to this workspace.", 404);
+      await client.query(
+        `INSERT INTO shared_connection_runner_deployments(connection_id,runner_id,status,local_credential_label,changed_by,changed_at) VALUES($1,$2,$3,$4,$5,now())
+         ON CONFLICT(connection_id,runner_id) DO UPDATE SET status=excluded.status,local_credential_label=excluded.local_credential_label,changed_by=excluded.changed_by,changed_at=excluded.changed_at`,
+        [connectionId, runnerId, status, localCredentialLabel, actor.accountId]
+      );
+      await client.query(`UPDATE shared_connections SET health=CASE WHEN EXISTS(SELECT 1 FROM shared_connection_runner_deployments WHERE connection_id=$1 AND status='available') THEN 'available' ELSE 'authorization_required' END WHERE id=$1`, [connectionId]);
+      await appendAudit(client, actor, workspaceId, "connection.assigned", "shared_connection", connectionId, null, { runnerId, status, localCredentialLabel }, correlationId);
+      return { connectionId, runnerId, status, localCredentialLabel };
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -844,6 +903,12 @@ interface RunnerCommandRow {
 }
 
 interface RunSummaryRow { id: string; workspace_id: string; workflow_id: string; revision_id: string; runner_id: string; trigger: string; status: RunSummary["status"]; started_at: Date | null; duration_ms: string | number | null; failed_node_id: string | null; redacted_error_summary: string | null }
+
+interface SharedConnectionRow { id: string; workspace_id: string; environment_id: string; provider: string; display_name: string; account_identity: string | null; granted_scopes: string[]; permitted_workflow_ids: string[]; permitted_role_ids: string[]; health: string; expires_at: Date | null; last_used_at: Date | null; created_by: string; approval_requirements: Record<string, unknown> }
+
+function sharedConnectionFromRow(row: SharedConnectionRow): SharedConnectionRecord {
+  return { id: row.id, workspaceId: row.workspace_id, environmentId: row.environment_id, provider: row.provider, displayName: row.display_name, accountIdentity: row.account_identity, grantedScopes: row.granted_scopes, permittedWorkflowIds: row.permitted_workflow_ids, permittedRoleIds: row.permitted_role_ids, health: row.health, expiresAt: row.expires_at?.toISOString() ?? null, lastUsedAt: row.last_used_at?.toISOString() ?? null, createdBy: row.created_by, approvalRequirements: row.approval_requirements };
+}
 
 function runSummaryFromRow(row: RunSummaryRow): RunSummary {
   return { id: row.id, workspaceId: row.workspace_id, workflowId: row.workflow_id, revisionId: row.revision_id, runnerId: row.runner_id, trigger: row.trigger, status: row.status, startedAt: row.started_at?.toISOString() ?? null, durationMs: row.duration_ms === null ? null : Number(row.duration_ms), failedNodeId: row.failed_node_id, redactedErrorSummary: row.redacted_error_summary };

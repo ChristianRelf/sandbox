@@ -58,6 +58,12 @@ const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governanc
 const memberRoleInput = z.object({ role: z.enum(["owner", "administrator", "developer", "operator", "viewer"]) });
 const runnerHeartbeatInput = z.object({ currentWorkload: z.number().int().min(0).max(10_000), status: z.enum(["online", "paused", "draining", "maintenance"]).default("online") });
 const runnerCommandStatusInput = z.object({ status: z.enum(["accepted", "rejected", "completed"]), resultSummary: z.record(z.string(), z.unknown()).nullable().default(null) });
+const sharedConnectionInput = z.object({
+  environmentId: z.string().uuid(), provider: z.string().regex(/^[a-z0-9._-]+$/).max(100), displayName: z.string().trim().min(1).max(120), accountIdentity: z.string().trim().max(200).nullable().default(null),
+  grantedScopes: z.array(z.string().min(1).max(200)).max(200).default([]), permittedWorkflowIds: z.array(z.string().uuid()).max(500).default([]), permittedRoleIds: z.array(z.string().uuid()).max(50).default([]),
+  approvalRequirements: z.record(z.string(), z.unknown()).default({}), deploymentMode: z.literal("authorize_per_runner")
+}).strict();
+const sharedConnectionDeploymentInput = z.object({ runnerId: z.string().uuid(), status: z.enum(["authorization_required", "available", "unavailable"]), localCredentialLabel: z.string().trim().min(1).max(120).nullable().default(null) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -248,6 +254,39 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const removed = await dependencies.repository.removeWorkspaceMember(session, workspaceId, accountId, request.id);
     if (!removed) throw new DomainError("member_not_found", "Member was not found in this workspace.", 404);
     return { removed: true };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/environments", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listWorkspaceEnvironments(session, workspaceId) };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/connections", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const { environmentId } = z.object({ environmentId: z.string().uuid().nullable().default(null) }).parse(request.query);
+    await authorizer.require(session, workspaceId, "connections.use");
+    return { items: await dependencies.repository.listSharedConnections(session, workspaceId, environmentId) };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/connections", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "connections.manage");
+    const { deploymentMode: _deploymentMode, ...input } = sharedConnectionInput.parse(request.body);
+    return { connection: await dependencies.repository.createSharedConnection(session, workspaceId, input, request.id) };
+  });
+
+  app.put("/v1/workspaces/:workspaceId/connections/:connectionId/deployment", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, connectionId } = z.object({ workspaceId: z.string().uuid(), connectionId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "connections.manage");
+    const input = sharedConnectionDeploymentInput.parse(request.body);
+    return { deployment: await dependencies.repository.deploySharedConnection(session, workspaceId, connectionId, input.runnerId, input.status, input.localCredentialLabel, request.id) };
   });
 
   app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {

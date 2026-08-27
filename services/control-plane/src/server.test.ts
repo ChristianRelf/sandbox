@@ -33,7 +33,8 @@ function dependencies(permissions: string[]) {
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
-    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn()
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
+    listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -235,6 +236,15 @@ describe("control-plane API", () => {
     const response = await server.inject({ method: "GET", url: "/v1/runner/commands", headers: { "x-sandbox-runner-id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "x-sandbox-key-id": "device-1", "x-sandbox-request-time": new Date(Date.now()-10*60_000).toISOString(), "x-sandbox-request-nonce": "request-nonce-0001", "x-sandbox-signature": Buffer.alloc(64).toString("base64") } });
     expect(response.statusCode).toBe(400);
     expect(deps.repository.authenticateRunnerRequest).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("rejects raw secret fields when creating a shared connection", async () => {
+    const deps = dependencies(["connections.manage"]);
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/connections`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { environmentId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", provider: "gmail", displayName: "Company Gmail", grantedScopes: ["gmail.readonly"], deploymentMode: "authorize_per_runner", accessToken: "must-never-enter-this-api" } });
+    expect(response.statusCode).toBe(400);
+    expect(deps.repository.createSharedConnection).not.toHaveBeenCalled();
     await server.close();
   });
 });
