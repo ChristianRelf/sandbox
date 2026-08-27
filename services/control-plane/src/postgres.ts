@@ -3,7 +3,7 @@ import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCom
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -539,6 +539,115 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async requestWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<WorkflowApprovalRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const revision = await client.query<{ publish_status: string; current_draft_revision_id: string | null }>(
+        `SELECT r.publish_status,w.current_draft_revision_id FROM workflow_revisions r JOIN synced_workflows w ON w.id=r.workflow_id
+          WHERE r.id=$1 AND r.workflow_id=$2 AND w.workspace_id=$3 FOR UPDATE`, [revisionId, workflowId, workspaceId]
+      );
+      if (!revision.rowCount) throw new DomainError("revision_not_found", "Workflow revision not found in this workspace.", 404);
+      if (revision.rows[0].current_draft_revision_id !== revisionId) throw new DomainError("revision_not_current_draft", "Only the current draft can be submitted for approval.", 409);
+      if (!["draft", "rejected", "approval_requested"].includes(revision.rows[0].publish_status)) throw new DomainError("workflow_state_invalid", "This revision is not an editable draft.", 409);
+      const existing = await client.query<ApprovalRow>(`SELECT id,workflow_id,revision_id,status,created_at FROM workflow_approvals WHERE workspace_id=$1 AND workflow_id=$2 AND revision_id=$3 AND status='pending' ORDER BY created_at DESC LIMIT 1`, [workspaceId, workflowId, revisionId]);
+      const requiredApprovals = await requiredApprovalCount(client, workspaceId);
+      if (existing.rowCount) return approvalFromRow(existing.rows[0], requiredApprovals, 0);
+      const approval = await client.query<ApprovalRow>(
+        `INSERT INTO workflow_approvals(workspace_id,workflow_id,revision_id,status,requested_by) VALUES($1,$2,$3,'pending',$4) RETURNING id,workflow_id,revision_id,status,created_at`,
+        [workspaceId, workflowId, revisionId, actor.accountId]
+      );
+      await client.query(`UPDATE workflow_revisions SET publish_status='approval_requested' WHERE id=$1`, [revisionId]);
+      await appendAudit(client, actor, workspaceId, "workflow.approval_requested", "workflow_revision", revisionId, null, { workflowId, requiredApprovals }, correlationId);
+      return approvalFromRow(approval.rows[0], requiredApprovals, 0);
+    });
+  }
+
+  async decideWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, approvalId: string, decision: "approved" | "rejected", reason: string | null, correlationId: string): Promise<WorkflowApprovalRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const approval = await client.query<ApprovalRow>(`SELECT id,workflow_id,revision_id,status,created_at FROM workflow_approvals WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [approvalId, workspaceId]);
+      if (!approval.rowCount) throw new DomainError("approval_not_found", "Workflow approval was not found in this workspace.", 404);
+      if (approval.rows[0].status !== "pending") throw new DomainError("approval_already_resolved", "Workflow approval is no longer pending.", 409);
+      const inserted = await client.query(
+        `INSERT INTO workflow_approval_votes(approval_id,account_id,decision,reason) VALUES($1,$2,$3,$4)
+         ON CONFLICT(approval_id,account_id) DO NOTHING`, [approvalId, actor.accountId, decision, reason]
+      );
+      if (!inserted.rowCount) throw new DomainError("approval_already_voted", "You have already decided this approval request.", 409);
+      const requiredApprovals = await requiredApprovalCount(client, workspaceId);
+      const votes = await client.query<{ decision: "approved" | "rejected"; count: string }>(`SELECT decision,count(*)::text AS count FROM workflow_approval_votes WHERE approval_id=$1 GROUP BY decision`, [approvalId]);
+      const approvalCount = Number(votes.rows.find(row => row.decision === "approved")?.count ?? 0);
+      const rejected = votes.rows.some(row => row.decision === "rejected");
+      let status: WorkflowApprovalRecord["status"] = "pending";
+      if (rejected) status = "rejected";
+      else if (approvalCount >= requiredApprovals) status = "approved";
+      if (status !== "pending") {
+        await client.query(`UPDATE workflow_approvals SET status=$1,resolved_by=$2,reason=$3,resolved_at=now() WHERE id=$4`, [status, actor.accountId, reason, approvalId]);
+        await client.query(`UPDATE workflow_revisions SET publish_status=$1 WHERE id=$2`, [status, approval.rows[0].revision_id]);
+      }
+      await appendAudit(client, actor, workspaceId, `workflow.approval_${decision}`, "workflow_approval", approvalId, null, { workflowId: approval.rows[0].workflow_id, revisionId: approval.rows[0].revision_id, approvalCount, requiredApprovals, status, reason }, correlationId);
+      return approvalFromRow({ ...approval.rows[0], status }, requiredApprovals, approvalCount);
+    });
+  }
+
+  async publishWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, changeSummary: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const workflow = await client.query<{ current_published_revision_id: string | null; current_draft_revision_id: string | null }>(`SELECT current_published_revision_id,current_draft_revision_id FROM synced_workflows WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [workflowId, workspaceId]);
+      if (!workflow.rowCount) throw new DomainError("workflow_not_found", "Workflow not found in this workspace.", 404);
+      if (workflow.rows[0].current_draft_revision_id !== revisionId) throw new DomainError("revision_not_current_draft", "Only the current draft can be published.", 409);
+      const revision = await client.query<{ publish_status: string }>(`SELECT publish_status FROM workflow_revisions WHERE id=$1 AND workflow_id=$2`, [revisionId, workflowId]);
+      if (!revision.rowCount || revision.rows[0].publish_status !== "approved") throw new DomainError("workflow_approval_required", "The exact draft revision must satisfy workspace approval policy before publication.", 409);
+      const missing = await client.query<{ plugin_id: string; version: string }>(
+        `SELECT requirement->>'pluginId' AS plugin_id,requirement->>'version' AS version
+           FROM workflow_revisions r,CROSS JOIN LATERAL jsonb_array_elements(r.plugin_requirements) requirement
+          WHERE r.id=$1 AND NOT EXISTS (
+            SELECT 1 FROM plugin_installations installation JOIN plugin_versions pv ON pv.id=installation.plugin_version_id
+             WHERE installation.workspace_id=$2 AND installation.enabled AND pv.plugin_id=requirement->>'pluginId' AND pv.version=requirement->>'version' AND pv.package_integrity=requirement->>'packageIntegrity' AND pv.revoked_at IS NULL
+          )`, [revisionId, workspaceId]
+      );
+      if (missing.rowCount) throw new DomainError("workflow_plugin_requirements_missing", `Workspace is missing enabled exact plugin versions: ${missing.rows.map(row => `${row.plugin_id}@${row.version}`).join(", ")}.`, 409);
+      const previousPublishedRevisionId = workflow.rows[0].current_published_revision_id;
+      if (previousPublishedRevisionId) await client.query(`UPDATE workflow_revisions SET publish_status='rolled_back' WHERE id=$1`, [previousPublishedRevisionId]);
+      await client.query(`UPDATE workflow_revisions SET publish_status='published',change_summary=$1 WHERE id=$2`, [changeSummary, revisionId]);
+      await client.query(`UPDATE synced_workflows SET current_published_revision_id=$1 WHERE id=$2`, [revisionId, workflowId]);
+      await appendAudit(client, actor, workspaceId, "workflow.published", "workflow_revision", revisionId, { previousPublishedRevisionId }, { workflowId, changeSummary }, correlationId);
+      return { workflowId, publishedRevisionId: revisionId, previousPublishedRevisionId };
+    });
+  }
+
+  async rollbackWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, reason: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const workflow = await client.query<{ current_published_revision_id: string | null }>(`SELECT current_published_revision_id FROM synced_workflows WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [workflowId, workspaceId]);
+      if (!workflow.rowCount) throw new DomainError("workflow_not_found", "Workflow not found in this workspace.", 404);
+      const selected = await client.query<{ publish_status: string }>(`SELECT publish_status FROM workflow_revisions WHERE id=$1 AND workflow_id=$2`, [revisionId, workflowId]);
+      if (!selected.rowCount || !["published", "rolled_back"].includes(selected.rows[0].publish_status)) throw new DomainError("rollback_revision_invalid", "Rollback target must be a previously published revision of this workflow.", 409);
+      const previousPublishedRevisionId = workflow.rows[0].current_published_revision_id;
+      if (previousPublishedRevisionId === revisionId) throw new DomainError("rollback_revision_current", "The selected revision is already published.", 409);
+      if (previousPublishedRevisionId) await client.query(`UPDATE workflow_revisions SET publish_status='rolled_back' WHERE id=$1`, [previousPublishedRevisionId]);
+      await client.query(`UPDATE workflow_revisions SET publish_status='published' WHERE id=$1`, [revisionId]);
+      await client.query(`UPDATE synced_workflows SET current_published_revision_id=$1 WHERE id=$2`, [revisionId, workflowId]);
+      await appendAudit(client, actor, workspaceId, "workflow.rolled_back", "workflow_revision", revisionId, { previousPublishedRevisionId }, { workflowId, reason }, correlationId);
+      return { workflowId, publishedRevisionId: revisionId, previousPublishedRevisionId };
+    });
+  }
+
+  async getGovernancePolicies(actor: AuthenticatedSession, workspaceId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{ policy_key: string; policy_value: unknown }>(`SELECT policy_key,policy_value FROM governance_policies WHERE workspace_id=$1 ORDER BY policy_key`, [workspaceId]);
+      return Object.fromEntries(result.rows.map(row => [row.policy_key, row.policy_value]));
+    });
+  }
+
+  async setGovernancePolicy(actor: AuthenticatedSession, workspaceId: string, policyKey: string, policyValue: unknown, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const existing = await client.query<{ policy_value: unknown }>(`SELECT policy_value FROM governance_policies WHERE workspace_id=$1 AND policy_key=$2 FOR UPDATE`, [workspaceId, policyKey]);
+      await client.query(
+        `INSERT INTO governance_policies(workspace_id,policy_key,policy_value,changed_by,changed_at) VALUES($1,$2,$3,$4,now())
+         ON CONFLICT(workspace_id,policy_key) DO UPDATE SET policy_value=excluded.policy_value,changed_by=excluded.changed_by,changed_at=excluded.changed_at`,
+        [workspaceId, policyKey, policyValue, actor.accountId]
+      );
+      await appendAudit(client, actor, workspaceId, "governance.policy_changed", "governance_policy", policyKey, { policyValue: existing.rows[0]?.policy_value ?? null }, { policyValue }, correlationId);
+      return { policyKey, policyValue };
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -591,6 +700,19 @@ interface RunnerRow {
 interface RunnerCommandRow {
   id: string; issuer_account_id: string; workspace_id: string; target_runner_id: string; action: RunnerCommand["action"]; workflow_revision_id: string | null;
   payload: Record<string, unknown>; created_at: Date; expires_at: Date; idempotency_key: string; key_id: string; signature: string; status: RunnerCommand["status"];
+}
+
+interface ApprovalRow { id: string; workflow_id: string; revision_id: string; status: WorkflowApprovalRecord["status"]; created_at: Date }
+
+function approvalFromRow(row: ApprovalRow, requiredApprovals: number, approvalCount: number): WorkflowApprovalRecord {
+  return { approvalId: row.id, workflowId: row.workflow_id, revisionId: row.revision_id, status: row.status, requiredApprovals, approvalCount, createdAt: row.created_at.toISOString() };
+}
+
+async function requiredApprovalCount(client: PoolClient, workspaceId: string): Promise<number> {
+  const result = await client.query<{ policy_value: unknown }>(`SELECT policy_value FROM governance_policies WHERE workspace_id=$1 AND policy_key='required_approval_count'`, [workspaceId]);
+  const value = result.rows[0]?.policy_value;
+  const count = typeof value === "number" ? value : value && typeof value === "object" && "count" in value ? Number((value as { count: unknown }).count) : 1;
+  return Number.isInteger(count) && count >= 1 && count <= 10 ? count : 1;
 }
 
 function runnerFromRow(row: RunnerRow): RunnerRecord {

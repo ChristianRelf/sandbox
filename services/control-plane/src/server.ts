@@ -48,6 +48,13 @@ const runnerCommandInput = z.object({
 const approvalDecisionInput = z.object({ decision: z.enum(["approved", "rejected"]), reason: z.string().trim().min(1).max(2_000).nullable().default(null) });
 const publishWorkflowInput = z.object({ changeSummary: z.string().trim().min(1).max(2_000) });
 const rollbackWorkflowInput = z.object({ revisionId: z.string().uuid(), reason: z.string().trim().min(1).max(2_000) });
+const governancePolicyValueSchemas = {
+  permitted_plugins: z.array(z.string().min(3).max(200)).max(1_000), verified_publishers_only: z.boolean(), private_plugins: z.boolean(), command_execution: z.boolean(), external_communication: z.boolean(),
+  approved_network_domains: z.array(z.string().regex(/^(?:\*\.)?[a-z0-9.-]+$/).max(253)).max(1_000), shared_connections: z.boolean(), workflow_publishing: z.boolean(), required_approval_count: z.number().int().min(1).max(10),
+  runner_operating_systems: z.array(z.string().trim().min(1).max(80)).max(20), minimum_application_version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/), execution_history_retention_days: z.number().int().min(1).max(3_650),
+  screenshot_upload: z.boolean(), remote_execution: z.boolean(), webhook_retention_seconds: z.number().int().min(60).max(604_800)
+} as const;
+const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governancePolicyValueSchemas) as [keyof typeof governancePolicyValueSchemas, ...(keyof typeof governancePolicyValueSchemas)[]]), policyValue: z.unknown() });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -235,6 +242,8 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     const input = runnerCommandInput.parse(request.body);
     await authorizer.require(session, workspaceId, input.action === "request_diagnostics" ? "runners.manage" : "workflows.run");
+    const policies = await dependencies.repository.getGovernancePolicies(session, workspaceId);
+    authorizer.enforcePolicy(policies.remote_execution !== false, { policy: "remote_execution", resource: `runner command ${input.action}`, administratorAction: "A workspace administrator can enable remote execution in Governance.", userAction: "Run the workflow directly on an eligible local runner instead." });
     if (!dependencies.runnerCommandSigner) throw new DomainError("runner_signing_unavailable", "Remote commands are unavailable because the control-plane signing key is not configured.", 503);
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + input.expiresInSeconds * 1_000);
@@ -243,6 +252,24 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload
     });
     return { command: await dependencies.repository.createRunnerCommand(session, command, request.id) };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/governance", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { policies: await dependencies.repository.getGovernancePolicies(session, workspaceId) };
+  });
+
+  app.put("/v1/workspaces/:workspaceId/governance", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "policies.manage");
+    const input = governancePolicyInput.parse(request.body);
+    const schema = governancePolicyValueSchemas[input.policyKey];
+    const policyValue = schema.parse(input.policyValue);
+    return dependencies.repository.setGovernancePolicy(session, workspaceId, input.policyKey, policyValue, request.id);
   });
 
   app.delete("/v1/workspaces/:workspaceId/runners/:runnerId", async request => {

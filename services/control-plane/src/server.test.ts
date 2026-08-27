@@ -31,7 +31,8 @@ function dependencies(permissions: string[]) {
     searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
-    requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn()
+    requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
+    getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -204,6 +205,17 @@ describe("control-plane API", () => {
     const published = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/workflows/${workflowId}/revisions/${revisionId}/publish`, headers, payload: { changeSummary: "Approved production revision" } });
     expect(published.statusCode, published.body).toBe(200);
     expect(deps.repository.publishWorkflowRevision).toHaveBeenCalledWith(session, workspaceId, workflowId, revisionId, "Approved production revision", expect.any(String));
+    await server.close();
+  });
+
+  it("returns an actionable governance failure when remote execution is disabled", async () => {
+    const deps = dependencies(["workflows.run"]);
+    vi.mocked(deps.repository.getGovernancePolicies).mockResolvedValue({ remote_execution: false });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", action: "run_workflow", workflowRevisionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", idempotencyKey: "remote-run-unique-0002" } });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toMatch(/remote_execution.*administrator.*local runner/i);
+    expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();
     await server.close();
   });
 });
