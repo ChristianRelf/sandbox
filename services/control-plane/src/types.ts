@@ -1,4 +1,4 @@
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
 
 export interface AuthenticatedSession {
   accountId: string;
@@ -63,6 +63,8 @@ export interface RunnerCommandInput {
 export interface WorkflowApprovalRecord { approvalId: string; workflowId: string; revisionId: string; status: "pending" | "approved" | "rejected" | "expired"; requiredApprovals: number; approvalCount: number; createdAt: string }
 export type GovernancePolicies = Record<string, unknown>;
 export interface WorkspaceMemberRecord { accountId: string; email: string; displayName: string; role: BuiltInRole; joinedAt: string }
+export interface RunnerDeviceRequestInput { runnerId: string; keyId: string; requestTime: string; nonce: string; signatureBase64: string; method: string; path: string; body: unknown }
+export interface RunnerDeviceSession { runnerId: string; accountId: string; workspaceId: string; keyId: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -105,6 +107,12 @@ export interface ControlPlaneRepository {
   updateWorkspaceMemberRole(actor: AuthenticatedSession, workspaceId: string, accountId: string, role: BuiltInRole, correlationId: string): Promise<WorkspaceMemberRecord>;
   removeWorkspaceMember(actor: AuthenticatedSession, workspaceId: string, accountId: string, correlationId: string): Promise<boolean>;
   revokeInvitation(actor: AuthenticatedSession, workspaceId: string, invitationId: string, correlationId: string): Promise<boolean>;
+  authenticateRunnerRequest(input: RunnerDeviceRequestInput): Promise<RunnerDeviceSession>;
+  recordRunnerHeartbeat(device: RunnerDeviceSession, currentWorkload: number, status: "online" | "paused" | "draining" | "maintenance"): Promise<RunnerRecord>;
+  dequeueRunnerCommands(device: RunnerDeviceSession, limit: number): Promise<RunnerCommand[]>;
+  updateRunnerCommandStatus(device: RunnerDeviceSession, commandId: string, status: "accepted" | "rejected" | "completed", resultSummary: Record<string, unknown> | null): Promise<boolean>;
+  recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void>;
+  listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number): Promise<{ runners: RunnerRecord[]; runs: RunSummary[]; pendingApprovalCount: number; webhookFailureCount: number }>;
 }
 
 export class DomainError extends Error {

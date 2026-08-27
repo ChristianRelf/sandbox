@@ -1,4 +1,4 @@
-import { createPrivateKey, sign } from "node:crypto";
+import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { runnerCommandSchema, type RunnerCommand } from "@sandbox/contracts";
 
 export interface RunnerCommandSigner {
@@ -31,6 +31,21 @@ export function buildSignedRunnerCommand(
 ): RunnerCommand {
   const unsigned = { ...input, keyId: signer.keyId };
   return runnerCommandSchema.parse({ ...unsigned, signature: signer.sign(unsigned), status: "queued" });
+}
+
+export interface CanonicalRunnerRequest { runnerId: string; keyId: string; requestTime: string; nonce: string; method: string; path: string; body: unknown }
+
+export function canonicalRunnerRequest(request: CanonicalRunnerRequest): Buffer {
+  return Buffer.from(JSON.stringify(sortValue(request)), "utf8");
+}
+
+export function verifyRunnerRequestSignature(request: CanonicalRunnerRequest, publicKeyDer: Buffer, signatureBase64: string): boolean {
+  try {
+    const key = createPublicKey({ key: publicKeyDer, format: "der", type: "spki" });
+    return key.asymmetricKeyType === "ed25519" && verify(null, canonicalRunnerRequest(request), key, Buffer.from(signatureBase64, "base64"));
+  } catch {
+    return false;
+  }
 }
 
 function sortValue(value: unknown): unknown {

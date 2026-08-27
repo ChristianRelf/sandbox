@@ -32,7 +32,8 @@ function dependencies(permissions: string[]) {
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
-    getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn()
+    getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -225,6 +226,15 @@ describe("control-plane API", () => {
     const response = await server.inject({ method: "PUT", url: `/v1/workspaces/${workspaceId}/members/33333333-3333-4333-8333-333333333333/role`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { role: "owner" } });
     expect(response.statusCode).toBe(403);
     expect(deps.repository.updateWorkspaceMemberRole).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("rejects stale runner device requests before reading commands", async () => {
+    const deps = dependencies([]);
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "GET", url: "/v1/runner/commands", headers: { "x-sandbox-runner-id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "x-sandbox-key-id": "device-1", "x-sandbox-request-time": new Date(Date.now()-10*60_000).toISOString(), "x-sandbox-request-nonce": "request-nonce-0001", "x-sandbox-signature": Buffer.alloc(64).toString("base64") } });
+    expect(response.statusCode).toBe(400);
+    expect(deps.repository.authenticateRunnerRequest).not.toHaveBeenCalled();
     await server.close();
   });
 });

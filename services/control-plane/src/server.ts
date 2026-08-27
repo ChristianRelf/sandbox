@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { workflowRevisionSchema } from "@sandbox/contracts";
+import { runSummarySchema, workflowRevisionSchema } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -56,6 +56,8 @@ const governancePolicyValueSchemas = {
 } as const;
 const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governancePolicyValueSchemas) as [keyof typeof governancePolicyValueSchemas, ...(keyof typeof governancePolicyValueSchemas)[]]), policyValue: z.unknown() });
 const memberRoleInput = z.object({ role: z.enum(["owner", "administrator", "developer", "operator", "viewer"]) });
+const runnerHeartbeatInput = z.object({ currentWorkload: z.number().int().min(0).max(10_000), status: z.enum(["online", "paused", "draining", "maintenance"]).default("online") });
+const runnerCommandStatusInput = z.object({ status: z.enum(["accepted", "rejected", "completed"]), resultSummary: z.record(z.string(), z.unknown()).nullable().default(null) });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -319,6 +321,43 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { revoked: true, localDataDeleted: false };
   });
 
+  app.post("/v1/runner/heartbeat", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const input = runnerHeartbeatInput.parse(request.body);
+    return { runner: await dependencies.repository.recordRunnerHeartbeat(device, input.currentWorkload, input.status) };
+  });
+
+  app.get("/v1/runner/commands", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20) }).parse(request.query);
+    return { items: await dependencies.repository.dequeueRunnerCommands(device, limit) };
+  });
+
+  app.post("/v1/runner/commands/:commandId/status", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const { commandId } = z.object({ commandId: z.string().uuid() }).parse(request.params);
+    const input = runnerCommandStatusInput.parse(request.body);
+    const updated = await dependencies.repository.updateRunnerCommandStatus(device, commandId, input.status, input.resultSummary);
+    if (!updated) throw new DomainError("runner_command_not_found", "Command is unavailable, expired, or not assigned to this runner.", 404);
+    return { updated: true };
+  });
+
+  app.post("/v1/runner/run-summaries", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const summary = runSummarySchema.parse(request.body);
+    if (summary.runnerId !== device.runnerId || summary.workspaceId !== device.workspaceId) throw new DomainError("runner_summary_scope_invalid", "Run summary does not match the authenticated runner and workspace.", 403);
+    await dependencies.repository.recordRunSummary(device, summary);
+    return { recorded: true };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/activity", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(request.query);
+    await authorizer.require(session, workspaceId, "executions.view_summary");
+    return dependencies.repository.listWorkspaceActivity(session, workspaceId, limit);
+  });
+
   app.post("/v1/workspaces/:workspaceId/sync/revisions", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -530,6 +569,23 @@ function validateEd25519PublicKey(derBase64: string): void {
   const key = Buffer.from(derBase64, "base64");
   const prefix = Buffer.from("302a300506032b6570032100", "hex");
   if (key.length !== 44 || !key.subarray(0, prefix.length).equals(prefix)) throw new DomainError("runner_key_invalid", "Runner public key must be an Ed25519 SubjectPublicKeyInfo DER value.", 400);
+}
+
+async function authenticateRunnerDevice(request: FastifyRequest, repository: ControlPlaneRepository) {
+  const runnerId = singleHeader(request, "x-sandbox-runner-id");
+  const keyId = singleHeader(request, "x-sandbox-key-id");
+  const requestTime = singleHeader(request, "x-sandbox-request-time");
+  const nonce = singleHeader(request, "x-sandbox-request-nonce");
+  const signatureBase64 = singleHeader(request, "x-sandbox-signature");
+  const timestamp = Date.parse(requestTime);
+  if (!Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 5 * 60_000) throw new DomainError("stale_runner_request", "Runner request timestamp is outside the five-minute freshness window.", 400);
+  return repository.authenticateRunnerRequest({ runnerId, keyId, requestTime, nonce, signatureBase64, method: request.method.toUpperCase(), path: request.url, body: request.body ?? null });
+}
+
+function singleHeader(request: FastifyRequest, name: string): string {
+  const value = request.headers[name];
+  if (typeof value !== "string" || !value || value.length > 512) throw new DomainError("runner_authentication_required", `Runner authentication header '${name}' is required.`, 401);
+  return value;
 }
 
 export function correlationId(): string {

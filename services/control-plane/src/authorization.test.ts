@@ -24,7 +24,8 @@ function repository(permissionByWorkspace: Record<string, Permission[]>): Contro
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
-    getGovernancePolicies: vi.fn(), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn()
+    getGovernancePolicies: vi.fn(), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn()
   };
 }
 

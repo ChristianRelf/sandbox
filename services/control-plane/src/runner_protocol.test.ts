@@ -1,6 +1,6 @@
-import { generateKeyPairSync, verify } from "node:crypto";
+import { generateKeyPairSync, sign, verify } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { buildSignedRunnerCommand, canonicalRunnerCommand, Ed25519RunnerCommandSigner } from "./runner_protocol.js";
+import { buildSignedRunnerCommand, canonicalRunnerCommand, canonicalRunnerRequest, Ed25519RunnerCommandSigner, verifyRunnerRequestSignature } from "./runner_protocol.js";
 
 describe("runner command protocol", () => {
   it("signs a stable canonical command and detects mutation", () => {
@@ -13,5 +13,14 @@ describe("runner command protocol", () => {
     const { signature, status: _status, ...unsigned } = command;
     expect(verify(null, canonicalRunnerCommand(unsigned), publicKey, Buffer.from(signature, "base64"))).toBe(true);
     expect(verify(null, canonicalRunnerCommand({ ...unsigned, action: "pause_workflow" }), publicKey, Buffer.from(signature, "base64"))).toBe(false);
+  });
+
+  it("authenticates a canonical device request and rejects body tampering", () => {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const request = { runnerId: "11111111-1111-4111-8111-111111111111", keyId: "device-1", requestTime: "2026-08-27T12:00:00.000Z", nonce: "unique-request-nonce-1", method: "POST", path: "/v1/runner/heartbeat", body: { status: "online", currentWorkload: 0 } };
+    const signature = sign(null, canonicalRunnerRequest(request), privateKey).toString("base64");
+    const der = publicKey.export({ format: "der", type: "spki" });
+    expect(verifyRunnerRequestSignature(request, der, signature)).toBe(true);
+    expect(verifyRunnerRequestSignature({ ...request, body: { status: "online", currentWorkload: 1 } }, der, signature)).toBe(false);
   });
 });

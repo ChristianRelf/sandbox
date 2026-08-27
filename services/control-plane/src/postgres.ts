@@ -1,10 +1,11 @@
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
+import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
   constructor(private readonly pool: Pool) {}
@@ -701,6 +702,93 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async authenticateRunnerRequest(input: RunnerDeviceRequestInput): Promise<RunnerDeviceSession> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ account_id: string; workspace_id: string | null; status: string; public_key: Buffer }>(
+        `SELECT r.account_id,r.workspace_id,r.status,k.public_key FROM runners r JOIN runner_device_keys k ON k.runner_id=r.id
+          WHERE r.id=$1 AND k.key_id=$2 AND r.revoked_at IS NULL AND k.revoked_at IS NULL FOR UPDATE`, [input.runnerId, input.keyId]
+      );
+      if (!result.rowCount || !result.rows[0].workspace_id || result.rows[0].status === "revoked") throw new DomainError("runner_authentication_failed", "Runner identity is unknown, revoked, or not assigned to a workspace.", 401);
+      if (!verifyRunnerRequestSignature({ runnerId: input.runnerId, keyId: input.keyId, requestTime: input.requestTime, nonce: input.nonce, method: input.method, path: input.path, body: input.body }, result.rows[0].public_key, input.signatureBase64)) throw new DomainError("runner_signature_invalid", "Runner request signature is invalid.", 401);
+      if (!/^[A-Za-z0-9_-]{16,200}$/.test(input.nonce)) throw new DomainError("runner_nonce_invalid", "Runner request nonce is invalid.", 400);
+      try {
+        await client.query(`INSERT INTO runner_request_nonces(runner_id,nonce,expires_at) VALUES($1,$2,now()+interval '10 minutes')`, [input.runnerId, input.nonce]);
+      } catch (error) {
+        if (isPostgresUniqueViolation(error)) throw new DomainError("runner_request_replayed", "Runner request nonce has already been used.", 409);
+        throw error;
+      }
+      await client.query(`DELETE FROM runner_request_nonces WHERE expires_at < now()`);
+      await client.query("COMMIT");
+      return { runnerId: input.runnerId, accountId: result.rows[0].account_id, workspaceId: result.rows[0].workspace_id, keyId: input.keyId };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async recordRunnerHeartbeat(device: RunnerDeviceSession, currentWorkload: number, status: "online" | "paused" | "draining" | "maintenance"): Promise<RunnerRecord> {
+    return this.withAccount(device.accountId, async client => {
+      const result = await client.query<RunnerRow>(
+        `UPDATE runners SET current_workload=$1,status=$2,last_seen_at=now()
+          WHERE id=$3 AND workspace_id=$4 AND revoked_at IS NULL
+          RETURNING id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at`,
+        [currentWorkload, status, device.runnerId, device.workspaceId]
+      );
+      if (!result.rowCount) throw new DomainError("runner_revoked", "Runner is no longer active in this workspace.", 403);
+      return runnerFromRow(result.rows[0]);
+    });
+  }
+
+  async dequeueRunnerCommands(device: RunnerDeviceSession, limit: number): Promise<RunnerCommand[]> {
+    return this.withAccount(device.accountId, async client => {
+      await client.query(`UPDATE runner_commands SET status='expired' WHERE target_runner_id=$1 AND status IN ('queued','delivered') AND expires_at<=now()`, [device.runnerId]);
+      const result = await client.query<RunnerCommandRow>(
+        `SELECT id,issuer_account_id,workspace_id,target_runner_id,action,workflow_revision_id,convert_from(payload_ciphertext,'utf8')::jsonb AS payload,created_at,expires_at,idempotency_key,key_id,encode(signature,'base64') AS signature,status
+           FROM runner_commands WHERE target_runner_id=$1 AND workspace_id=$2 AND status='queued' AND expires_at>now()
+          ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT $3`, [device.runnerId, device.workspaceId, limit]
+      );
+      if (result.rowCount) await client.query(`UPDATE runner_commands SET status='delivered',delivered_at=COALESCE(delivered_at,now()) WHERE id=ANY($1::uuid[])`, [result.rows.map(row => row.id)]);
+      return result.rows.map(row => runnerCommandFromRow({ ...row, status: "delivered" }));
+    });
+  }
+
+  async updateRunnerCommandStatus(device: RunnerDeviceSession, commandId: string, status: "accepted" | "rejected" | "completed", resultSummary: Record<string, unknown> | null): Promise<boolean> {
+    return this.withAccount(device.accountId, async client => {
+      const result = await client.query(
+        `UPDATE runner_commands SET status=$1,result_summary=$2,completed_at=CASE WHEN $1 IN ('rejected','completed') THEN now() ELSE completed_at END
+          WHERE id=$3 AND target_runner_id=$4 AND workspace_id=$5 AND expires_at>now() AND status IN ('delivered','accepted')`,
+        [status, redact(resultSummary), commandId, device.runnerId, device.workspaceId]
+      );
+      return (result.rowCount ?? 0) > 0;
+    });
+  }
+
+  async recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void> {
+    await this.withAccount(device.accountId, async client => {
+      const revision = await client.query(`SELECT 1 FROM workflow_revisions r JOIN synced_workflows w ON w.id=r.workflow_id WHERE r.id=$1 AND r.workflow_id=$2 AND w.workspace_id=$3`, [summary.revisionId, summary.workflowId, device.workspaceId]);
+      if (!revision.rowCount) throw new DomainError("run_summary_revision_invalid", "Run summary references a workflow revision outside this workspace.", 403);
+      await client.query(
+        `INSERT INTO run_summaries(id,workspace_id,workflow_id,revision_id,runner_id,trigger,status,started_at,duration_ms,failed_node_id,redacted_error_summary)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO NOTHING`,
+        [summary.id, device.workspaceId, summary.workflowId, summary.revisionId, device.runnerId, summary.trigger, summary.status, summary.startedAt, summary.durationMs, summary.failedNodeId, summary.redactedErrorSummary]
+      );
+    });
+  }
+
+  async listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number) {
+    return this.withAccount(actor.accountId, async client => {
+      const runners = await client.query<RunnerRow>(`SELECT id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at FROM runners WHERE workspace_id=$1 AND revoked_at IS NULL ORDER BY last_seen_at DESC NULLS LAST,id LIMIT 100`, [workspaceId]);
+      const runs = await client.query<RunSummaryRow>(`SELECT id,workspace_id,workflow_id,revision_id,runner_id,trigger,status,started_at,duration_ms,failed_node_id,redacted_error_summary FROM run_summaries WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2`, [workspaceId, limit]);
+      const approvals = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM workflow_approvals WHERE workspace_id=$1 AND status='pending'`, [workspaceId]);
+      const webhooks = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM webhook_deliveries WHERE workspace_id=$1 AND status='failed'`, [workspaceId]);
+      return { runners: runners.rows.map(runnerFromRow), runs: runs.rows.map(runSummaryFromRow), pendingApprovalCount: Number(approvals.rows[0]?.count ?? 0), webhookFailureCount: Number(webhooks.rows[0]?.count ?? 0) };
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -753,6 +841,12 @@ interface RunnerRow {
 interface RunnerCommandRow {
   id: string; issuer_account_id: string; workspace_id: string; target_runner_id: string; action: RunnerCommand["action"]; workflow_revision_id: string | null;
   payload: Record<string, unknown>; created_at: Date; expires_at: Date; idempotency_key: string; key_id: string; signature: string; status: RunnerCommand["status"];
+}
+
+interface RunSummaryRow { id: string; workspace_id: string; workflow_id: string; revision_id: string; runner_id: string; trigger: string; status: RunSummary["status"]; started_at: Date | null; duration_ms: string | number | null; failed_node_id: string | null; redacted_error_summary: string | null }
+
+function runSummaryFromRow(row: RunSummaryRow): RunSummary {
+  return { id: row.id, workspaceId: row.workspace_id, workflowId: row.workflow_id, revisionId: row.revision_id, runnerId: row.runner_id, trigger: row.trigger, status: row.status, startedAt: row.started_at?.toISOString() ?? null, durationMs: row.duration_ms === null ? null : Number(row.duration_ms), failedNodeId: row.failed_node_id, redactedErrorSummary: row.redacted_error_summary };
 }
 
 interface ApprovalRow { id: string; workflow_id: string; revision_id: string; status: WorkflowApprovalRecord["status"]; created_at: Date }
@@ -875,4 +969,8 @@ async function appendAudit(client: PoolClient, actor: AuthenticatedSession, work
 function redact(value: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!value) return null;
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, /token|secret|password|cookie|authorization|payload|ciphertext/i.test(key) ? "[REDACTED]" : item]));
+}
+
+function isPostgresUniqueViolation(error: unknown): boolean {
+  return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505";
 }
