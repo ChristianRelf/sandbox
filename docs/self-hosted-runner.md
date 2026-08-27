@@ -22,3 +22,14 @@ sandbox-runner --config /etc/sandbox-runner/config.toml validate
 `run` reports health every 30 seconds and reports `draining` during a graceful shutdown. Configure the service manager with enough stop time for the runner's `drain_timeout_seconds`; forced termination can leave work for lease-expiry recovery.
 
 The systemd unit uses a dedicated account, a read-only system view, private temporary storage, and a single writable data directory. Container deployments should additionally use a read-only root filesystem, dropped capabilities, PID/CPU/memory limits, and only the approved data and working-directory mounts.
+
+## Release packaging
+
+Release builders require `cargo-zigbuild`, Zig, GNU tar, and `sha256sum`. The packaging script cross-compiles both supported GNU/Linux architectures, normalizes archive ownership and timestamps, and produces one checksum manifest:
+
+```sh
+SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
+  agents/server/packaging/build-release.sh 0.4.0
+```
+
+Set `COSIGN_KEY` to an approved Sigstore key or KMS URI to produce a signed bundle for `SHA256SUMS`; unsigned output is for local testing only. Publish the two archives, checksum manifest, and Sigstore bundle as one immutable release. Build the container for both platforms with `docker buildx build --platform linux/amd64,linux/arm64`; production publication must also attach provenance and an image signature.
