@@ -85,7 +85,8 @@ npm.cmd run openapi:check --workspace @sandbox/control-plane
 ```
 
 The complete control-plane test command runs the check. The current OpenAPI file
-records every stable method/path plus common transport behavior. Health,
-marketplace summaries, personal credentials and service accounts have promoted
-resource schemas. Routes marked with the `JsonValue` schema are still being
-expanded during the GA candidate and remain part of GA-013.
+records every stable method/path plus common transport behavior. Every operation
+has a named request and response schema; health, marketplace summaries, personal
+credentials and service accounts additionally publish closed field-level schemas.
+Compatibility tests reject unresolved operation references and the removed
+`JsonValue` fallback.

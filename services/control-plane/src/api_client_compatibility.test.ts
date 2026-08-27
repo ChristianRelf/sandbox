@@ -5,7 +5,7 @@ import { createServer, type ApiDependencies } from "./server.js";
 import type { AuthenticatedSession, ControlPlaneRepository } from "./types.js";
 
 const session:AuthenticatedSession={accountId:"11111111-1111-4111-8111-111111111111",sessionId:"22222222-2222-4222-8222-222222222222",subject:"identity|sdk",email:"sdk@example.com",issuedAt:new Date(),expiresAt:new Date(Date.now()+60_000),authenticationMethods:["passkey"],platformPermissions:[]};
-type OpenApiOperation={parameters:Array<{$ref?:string}>;responses:Record<string,unknown>};
+type OpenApiOperation={parameters:Array<{$ref?:string}>;requestBody?:{content:{"application/json":{schema:{$ref:string}}}};responses:Record<string,{content?:{"application/json"?:{schema?:{$ref:string}}}}>};
 type OpenApiContract={paths:Record<string,Record<string,OpenApiOperation>>;components:{schemas:Record<string,unknown>}};
 
 describe("published v1 client compatibility",()=>{
@@ -28,6 +28,11 @@ describe("published v1 client compatibility",()=>{
     expect(operation.parameters).toEqual(expect.arrayContaining([{$ref:"#/components/parameters/CorrelationId"},{$ref:"#/components/parameters/IdempotencyKey"}]));
     expect(operation.responses["200"]).toMatchObject({content:{"application/json":{schema:{$ref:"#/components/schemas/IssuedCredentialEnvelope"}}}});
     expect(contract.components.schemas).toHaveProperty("PersonalAccessTokenInput");expect(contract.components.schemas).toHaveProperty("ServiceAccount");
+    expect(contract.components.schemas).not.toHaveProperty("JsonValue");
+    for(const methods of Object.values(contract.paths))for(const operation of Object.values(methods)){
+      const refs=[operation.requestBody?.content["application/json"].schema.$ref,operation.responses["200"]?.content?.["application/json"]?.schema?.$ref].filter((ref):ref is string=>Boolean(ref));
+      for(const ref of refs){expect(ref).not.toContain("JsonValue");expect(contract.components.schemas).toHaveProperty(ref.split("/").at(-1)!);}
+    }
     await server.close();
   });
 });

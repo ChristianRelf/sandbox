@@ -160,7 +160,7 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
         : path === "/v1/billing/stripe/webhook"
           ? [{ stripeSignature: [] }]
           : [{ bearerAuth: [] }];
-    if (mutation) operation.requestBody = { required: requestSchema(path, method).$ref !== "#/components/schemas/JsonValue", content: { "application/json": { schema: requestSchema(path, method) } } };
+    if (mutation) operation.requestBody = { required: isExplicitRequestSchema(path, method), content: { "application/json": { schema: requestSchema(path, method) } } };
     paths[path] ??= {};
     paths[path][method] = operation;
   }
@@ -183,7 +183,7 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
         CorrelationId: { schema: { type: "string" }, description: "Correlation ID for this request." },
         IdempotencyReplayed: { schema: { type: "string", enum: ["true"] }, description: "Present only when the response was replayed." }
       },
-      schemas: apiSchemas(),
+      schemas: apiSchemas(routes),
       responses: {
         ApiError: { description: "Structured API error.", headers: { "x-correlation-id": { schema: { type: "string" } } }, content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } },
         RateLimited: { description: "Rate limit exceeded.", headers: { "retry-after": { schema: { type: "integer" } }, "x-ratelimit-limit": { schema: { type: "integer" } }, "x-ratelimit-remaining": { schema: { type: "integer" } } }, content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } }
@@ -198,7 +198,11 @@ function requestSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/workspaces/{workspaceId}/service-accounts" && method === "post") return { $ref: "#/components/schemas/ServiceAccountInput" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens" && method === "post") return { $ref: "#/components/schemas/PersonalAccessTokenInput" };
   if (path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
-  return { $ref: "#/components/schemas/JsonValue" };
+  return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Input")}` };
+}
+
+function isExplicitRequestSchema(path: string, method: string): boolean {
+  return requestSchema(path, method).$ref !== `#/components/schemas/${operationSchemaName(path, method, "Input")}`;
 }
 
 function responseSchema(path: string, method: string): { $ref: string } {
@@ -210,17 +214,23 @@ function responseSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/workspaces/{workspaceId}/service-accounts" && method === "post") return { $ref: "#/components/schemas/ServiceAccountEnvelope" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
   if ((path === "/v1/personal-access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}") && method === "delete") return { $ref: "#/components/schemas/RevocationResponse" };
-  return { $ref: "#/components/schemas/JsonValue" };
+  return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Response")}` };
 }
 
-function apiSchemas(): Record<string, unknown> {
+function operationSchemaName(path: string, method: string, suffix: "Input" | "Response"): string {
+  const operation = `${method}_${path.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+  const pascal = operation.split("_").filter(Boolean).map(part => `${part[0].toUpperCase()}${part.slice(1)}`).join("");
+  return `${pascal}${suffix}`;
+}
+
+function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
   const uuid = { type: "string", format: "uuid" };
   const dateTime = { type: "string", format: "date-time" };
   const stringArray = { type: "array", items: { type: "string" } };
   const credentialProperties = { id: uuid, name: { type: "string" }, prefix: { type: "string" }, scopes: stringArray, organisationId: uuid, workspaceIds: { type: "array", items: uuid }, environmentIds: { type: "array", items: uuid }, createdAt: dateTime, expiresAt: dateTime };
   const serviceAccountProperties = { id: uuid, organisationId: uuid, workspaceId: { oneOf: [uuid, { type: "null" }] }, name: { type: "string" }, description: { type: "string" }, ownerAccountIds: { type: "array", items: uuid }, roleId: uuid, environmentIds: { type: "array", items: uuid }, expiryPolicyDays: { type: "integer" }, status: { type: "string", enum: ["active", "suspended", "revoked"] }, createdAt: dateTime, lastUsedAt: { oneOf: [dateTime, { type: "null" }] } };
-  return {
-    JsonValue: { description: "JSON value for a route whose resource schema is not yet promoted to the stable contract.", oneOf: [{ type: "null" }, { type: "boolean" }, { type: "number" }, { type: "string" }, { type: "array", items: {} }, { type: "object", additionalProperties: true }] },
+  const schemas: Record<string, unknown> = {
+    ApiObject: { type: "object", description: "A versioned API resource object. Resource-specific fields are additive within v1.", additionalProperties: true },
     ApiError: { type: "object", required: ["error", "correlationId"], properties: { error: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" }, details: {} } }, correlationId: { type: "string" } } },
     HealthResponse: { type: "object", required: ["status", "service", "execution"], properties: { status: { const: "ok" }, service: { const: "sandbox-control-plane" }, execution: { const: "local-only" } }, additionalProperties: false },
     PersonalAccessTokenInput: { type: "object", required: ["name", "scopes", "organisationId", "workspaceIds"], properties: { name: { type: "string", minLength: 1, maxLength: 120 }, scopes: stringArray, organisationId: uuid, workspaceIds: { type: "array", minItems: 1, items: uuid }, environmentIds: { type: "array", items: uuid, default: [] }, expiresInDays: { type: "integer", minimum: 1, maximum: 90, default: 30 } }, additionalProperties: false },
@@ -236,4 +246,15 @@ function apiSchemas(): Record<string, unknown> {
     RevocationResponse: { type: "object", required: ["revoked"], properties: { revoked: { const: true } }, additionalProperties: false },
     MarketplacePage: { type: "object", required: ["items", "nextCursor"], properties: { items: { type: "array", items: { type: "object", required: ["pluginId", "name", "version", "packageIntegrity"], properties: { pluginId: { type: "string" }, name: { type: "string" }, version: { type: "string" }, packageIntegrity: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } }, additionalProperties: true } }, nextCursor: { oneOf: [{ type: "string" }, { type: "null" }] } }, additionalProperties: false }
   };
+  for (const route of routes.filter(route => route.method !== "HEAD" && (route.url === "/health" || route.url.startsWith("/v1/")))) {
+    const path = route.url.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+    const method = route.method.toLowerCase();
+    if (["post", "put", "patch", "delete"].includes(method)) {
+      const input = requestSchema(path, method).$ref.split("/").at(-1)!;
+      schemas[input] ??= { allOf: [{ $ref: "#/components/schemas/ApiObject" }], description: `Request body for ${method.toUpperCase()} ${path}.` };
+    }
+    const response = responseSchema(path, method).$ref.split("/").at(-1)!;
+    schemas[response] ??= { allOf: [{ $ref: "#/components/schemas/ApiObject" }], description: `Successful response for ${method.toUpperCase()} ${path}.` };
+  }
+  return schemas;
 }

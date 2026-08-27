@@ -101,7 +101,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/DeleteV1AccountResponse"
                 }
               }
             }
@@ -141,7 +141,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/DeleteV1AccountInput"
               }
             }
           }
@@ -175,7 +175,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1AccountExportResponse"
                 }
               }
             }
@@ -239,7 +239,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1AccountProfileResponse"
                 }
               }
             }
@@ -303,7 +303,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1AccountSessionsResponse"
                 }
               }
             }
@@ -378,7 +378,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1AccountSessionsSessionIdRevokeResponse"
                 }
               }
             }
@@ -418,7 +418,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1AccountSessionsSessionIdRevokeInput"
               }
             }
           }
@@ -455,7 +455,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1BillingStripeWebhookResponse"
                 }
               }
             }
@@ -495,7 +495,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1BillingStripeWebhookInput"
               }
             }
           }
@@ -540,7 +540,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1InternalPluginReviewsReviewIdDecisionResponse"
                 }
               }
             }
@@ -580,7 +580,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1InternalPluginReviewsReviewIdDecisionInput"
               }
             }
           }
@@ -625,7 +625,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1InternalPluginVersionsPluginVersionIdRevokeResponse"
                 }
               }
             }
@@ -665,7 +665,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1InternalPluginVersionsPluginVersionIdRevokeInput"
               }
             }
           }
@@ -702,7 +702,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1InvitationsAcceptResponse"
                 }
               }
             }
@@ -742,7 +742,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1InvitationsAcceptInput"
               }
             }
           }
@@ -844,7 +844,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1MarketplacePluginsPluginIdResponse"
                 }
               }
             }
@@ -915,7 +915,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1MarketplacePluginsPluginIdCheckoutResponse"
                 }
               }
             }
@@ -955,7 +955,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1MarketplacePluginsPluginIdCheckoutInput"
               }
             }
           }
@@ -997,7 +997,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1MarketplacePluginsPluginIdInstallResponse"
                 }
               }
             }
@@ -1065,7 +1065,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1MarketplacePluginsPluginIdReviewsResponse"
                 }
               }
             }
@@ -1144,7 +1144,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1MarketplacePluginsPluginIdReviewsReviewIdReportResponse"
                 }
               }
             }
@@ -1184,7 +1184,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1MarketplacePluginsPluginIdReviewsReviewIdReportInput"
               }
             }
           }
@@ -1229,7 +1229,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PutV1MarketplacePluginsPluginIdReviewsMeResponse"
                 }
               }
             }
@@ -1269,7 +1269,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PutV1MarketplacePluginsPluginIdReviewsMeInput"
               }
             }
           }
@@ -1303,7 +1303,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1OpenapiJsonResponse"
                 }
               }
             }
@@ -1366,7 +1366,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1OrganisationsResponse"
                 }
               }
             }
@@ -1406,7 +1406,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1OrganisationsInput"
               }
             }
           }
@@ -1667,7 +1667,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersResponse"
                 }
               }
             }
@@ -1707,7 +1707,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersInput"
               }
             }
           }
@@ -1768,7 +1768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsPluginIdReviewsReviewIdResponseResponse"
                 }
               }
             }
@@ -1808,7 +1808,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsPluginIdReviewsReviewIdResponseInput"
               }
             }
           }
@@ -1853,7 +1853,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsResponse"
                 }
               }
             }
@@ -1893,7 +1893,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsInput"
               }
             }
           }
@@ -1946,7 +1946,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdPublishResponse"
                 }
               }
             }
@@ -1986,7 +1986,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdPublishInput"
               }
             }
           }
@@ -2039,7 +2039,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdSubmitResponse"
                 }
               }
             }
@@ -2079,7 +2079,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdSubmitInput"
               }
             }
           }
@@ -2132,7 +2132,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdUploadResponse"
                 }
               }
             }
@@ -2172,7 +2172,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdPluginsSubmissionsReviewIdUploadInput"
               }
             }
           }
@@ -2217,7 +2217,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1PublishersPublisherIdSigningKeysResponse"
                 }
               }
             }
@@ -2257,7 +2257,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1PublishersPublisherIdSigningKeysInput"
               }
             }
           }
@@ -2291,7 +2291,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1RunnerCommandsResponse"
                 }
               }
             }
@@ -2366,7 +2366,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerCommandsCommandIdStatusResponse"
                 }
               }
             }
@@ -2406,7 +2406,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerCommandsCommandIdStatusInput"
               }
             }
           }
@@ -2443,7 +2443,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerDeviceKeyRotateResponse"
                 }
               }
             }
@@ -2483,7 +2483,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerDeviceKeyRotateInput"
               }
             }
           }
@@ -2520,7 +2520,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerEnvironmentValuesResponse"
                 }
               }
             }
@@ -2560,7 +2560,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerEnvironmentValuesInput"
               }
             }
           }
@@ -2597,7 +2597,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerHeartbeatResponse"
                 }
               }
             }
@@ -2637,7 +2637,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerHeartbeatInput"
               }
             }
           }
@@ -2674,7 +2674,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerRunSummariesResponse"
                 }
               }
             }
@@ -2714,7 +2714,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerRunSummariesInput"
               }
             }
           }
@@ -2748,7 +2748,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1RunnerWebhookDeliveriesResponse"
                 }
               }
             }
@@ -2823,7 +2823,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnerWebhookDeliveriesDeliveryIdStatusResponse"
                 }
               }
             }
@@ -2863,7 +2863,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnerWebhookDeliveriesDeliveryIdStatusInput"
               }
             }
           }
@@ -2900,7 +2900,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnersPairingChallengesResponse"
                 }
               }
             }
@@ -2940,7 +2940,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnersPairingChallengesInput"
               }
             }
           }
@@ -2977,7 +2977,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1RunnersPairingConfirmResponse"
                 }
               }
             }
@@ -3017,7 +3017,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1RunnersPairingConfirmInput"
               }
             }
           }
@@ -3152,7 +3152,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdActivityResponse"
                 }
               }
             }
@@ -3224,7 +3224,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdAuditResponse"
                 }
               }
             }
@@ -3296,7 +3296,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdConnectionsResponse"
                 }
               }
             }
@@ -3369,7 +3369,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdConnectionsResponse"
                 }
               }
             }
@@ -3409,7 +3409,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdConnectionsInput"
               }
             }
           }
@@ -3462,7 +3462,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdConnectionsConnectionIdDeploymentResponse"
                 }
               }
             }
@@ -3502,7 +3502,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdConnectionsConnectionIdDeploymentInput"
               }
             }
           }
@@ -3544,7 +3544,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdEnvironmentsResponse"
                 }
               }
             }
@@ -3624,7 +3624,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesResponse"
                 }
               }
             }
@@ -3715,7 +3715,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesNameResponse"
                 }
               }
             }
@@ -3755,7 +3755,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesNameInput"
               }
             }
           }
@@ -3797,7 +3797,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdGovernanceResponse"
                 }
               }
             }
@@ -3870,7 +3870,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdGovernanceResponse"
                 }
               }
             }
@@ -3910,7 +3910,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdGovernanceInput"
               }
             }
           }
@@ -3955,7 +3955,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdInvitationsResponse"
                 }
               }
             }
@@ -3995,7 +3995,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdInvitationsInput"
               }
             }
           }
@@ -4048,7 +4048,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdInvitationsInvitationIdResponse"
                 }
               }
             }
@@ -4088,7 +4088,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdInvitationsInvitationIdInput"
               }
             }
           }
@@ -4130,7 +4130,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdMembersResponse"
                 }
               }
             }
@@ -4213,7 +4213,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdMembersAccountIdResponse"
                 }
               }
             }
@@ -4253,7 +4253,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdMembersAccountIdInput"
               }
             }
           }
@@ -4306,7 +4306,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdMembersAccountIdRoleResponse"
                 }
               }
             }
@@ -4346,7 +4346,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdMembersAccountIdRoleInput"
               }
             }
           }
@@ -4391,7 +4391,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnerCommandsResponse"
                 }
               }
             }
@@ -4431,7 +4431,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnerCommandsInput"
               }
             }
           }
@@ -4473,7 +4473,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdRunnersResponse"
                 }
               }
             }
@@ -4556,7 +4556,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdRunnersRunnerIdResponse"
                 }
               }
             }
@@ -4596,7 +4596,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdRunnersRunnerIdInput"
               }
             }
           }
@@ -4647,7 +4647,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PatchV1WorkspacesWorkspaceIdRunnersRunnerIdResponse"
                 }
               }
             }
@@ -4687,7 +4687,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PatchV1WorkspacesWorkspaceIdRunnersRunnerIdInput"
               }
             }
           }
@@ -4740,7 +4740,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnersRunnerIdMoveResponse"
                 }
               }
             }
@@ -4780,7 +4780,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnersRunnerIdMoveInput"
               }
             }
           }
@@ -5073,7 +5073,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncRevisionsResponse"
                 }
               }
             }
@@ -5113,7 +5113,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncRevisionsInput"
               }
             }
           }
@@ -5158,7 +5158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncWorkflowsResponse"
                 }
               }
             }
@@ -5198,7 +5198,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncWorkflowsInput"
               }
             }
           }
@@ -5251,7 +5251,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdConflictsResolveResponse"
                 }
               }
             }
@@ -5291,7 +5291,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdConflictsResolveInput"
               }
             }
           }
@@ -5341,7 +5341,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdRevisionsResponse"
                 }
               }
             }
@@ -5429,7 +5429,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdRevisionsRevisionIdResponse"
                 }
               }
             }
@@ -5501,7 +5501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdWebhooksResponse"
                 }
               }
             }
@@ -5574,7 +5574,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWebhooksResponse"
                 }
               }
             }
@@ -5614,7 +5614,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWebhooksInput"
               }
             }
           }
@@ -5667,7 +5667,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWebhooksEndpointIdRotateSecretResponse"
                 }
               }
             }
@@ -5707,7 +5707,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWebhooksEndpointIdRotateSecretInput"
               }
             }
           }
@@ -5760,7 +5760,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowApprovalsApprovalIdDecisionResponse"
                 }
               }
             }
@@ -5800,7 +5800,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowApprovalsApprovalIdDecisionInput"
               }
             }
           }
@@ -5861,7 +5861,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdPublishResponse"
                 }
               }
             }
@@ -5901,7 +5901,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdPublishInput"
               }
             }
           }
@@ -5962,7 +5962,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdRequestApprovalResponse"
                 }
               }
             }
@@ -6002,7 +6002,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdRequestApprovalInput"
               }
             }
           }
@@ -6055,7 +6055,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JsonValue"
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRollbackResponse"
                 }
               }
             }
@@ -6095,7 +6095,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/JsonValue"
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRollbackInput"
               }
             }
           }
@@ -6165,30 +6165,10 @@
       }
     },
     "schemas": {
-      "JsonValue": {
-        "description": "JSON value for a route whose resource schema is not yet promoted to the stable contract.",
-        "oneOf": [
-          {
-            "type": "null"
-          },
-          {
-            "type": "boolean"
-          },
-          {
-            "type": "number"
-          },
-          {
-            "type": "string"
-          },
-          {
-            "type": "array",
-            "items": {}
-          },
-          {
-            "type": "object",
-            "additionalProperties": true
-          }
-        ]
+      "ApiObject": {
+        "type": "object",
+        "description": "A versioned API resource object. Resource-specific fields are additive within v1.",
+        "additionalProperties": true
       },
       "ApiError": {
         "type": "object",
@@ -6696,6 +6676,902 @@
           }
         },
         "additionalProperties": false
+      },
+      "GetV1OpenapiJsonResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/openapi.json."
+      },
+      "GetV1MarketplacePluginsPluginIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/marketplace/plugins/{pluginId}."
+      },
+      "GetV1MarketplacePluginsPluginIdInstallResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/marketplace/plugins/{pluginId}/install."
+      },
+      "PostV1MarketplacePluginsPluginIdCheckoutInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/marketplace/plugins/{pluginId}/checkout."
+      },
+      "PostV1MarketplacePluginsPluginIdCheckoutResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/marketplace/plugins/{pluginId}/checkout."
+      },
+      "GetV1MarketplacePluginsPluginIdReviewsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/marketplace/plugins/{pluginId}/reviews."
+      },
+      "PutV1MarketplacePluginsPluginIdReviewsMeInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/marketplace/plugins/{pluginId}/reviews/me."
+      },
+      "PutV1MarketplacePluginsPluginIdReviewsMeResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/marketplace/plugins/{pluginId}/reviews/me."
+      },
+      "PostV1PublishersPublisherIdPluginsPluginIdReviewsReviewIdResponseInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/plugins/{pluginId}/reviews/{reviewId}/response."
+      },
+      "PostV1PublishersPublisherIdPluginsPluginIdReviewsReviewIdResponseResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/plugins/{pluginId}/reviews/{reviewId}/response."
+      },
+      "PostV1MarketplacePluginsPluginIdReviewsReviewIdReportInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/marketplace/plugins/{pluginId}/reviews/{reviewId}/report."
+      },
+      "PostV1MarketplacePluginsPluginIdReviewsReviewIdReportResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/marketplace/plugins/{pluginId}/reviews/{reviewId}/report."
+      },
+      "GetV1AccountExportResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/account/export."
+      },
+      "GetV1AccountProfileResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/account/profile."
+      },
+      "DeleteV1AccountInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for DELETE /v1/account."
+      },
+      "DeleteV1AccountResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for DELETE /v1/account."
+      },
+      "GetV1AccountSessionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/account/sessions."
+      },
+      "PostV1AccountSessionsSessionIdRevokeInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/account/sessions/{sessionId}/revoke."
+      },
+      "PostV1AccountSessionsSessionIdRevokeResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/account/sessions/{sessionId}/revoke."
+      },
+      "PostV1OrganisationsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/organisations."
+      },
+      "PostV1OrganisationsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/organisations."
+      },
+      "PostV1WorkspacesWorkspaceIdInvitationsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/invitations."
+      },
+      "PostV1WorkspacesWorkspaceIdInvitationsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/invitations."
+      },
+      "PostV1InvitationsAcceptInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/invitations/accept."
+      },
+      "PostV1InvitationsAcceptResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/invitations/accept."
+      },
+      "DeleteV1WorkspacesWorkspaceIdInvitationsInvitationIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for DELETE /v1/workspaces/{workspaceId}/invitations/{invitationId}."
+      },
+      "DeleteV1WorkspacesWorkspaceIdInvitationsInvitationIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for DELETE /v1/workspaces/{workspaceId}/invitations/{invitationId}."
+      },
+      "GetV1WorkspacesWorkspaceIdMembersResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/members."
+      },
+      "PutV1WorkspacesWorkspaceIdMembersAccountIdRoleInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/workspaces/{workspaceId}/members/{accountId}/role."
+      },
+      "PutV1WorkspacesWorkspaceIdMembersAccountIdRoleResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/workspaces/{workspaceId}/members/{accountId}/role."
+      },
+      "DeleteV1WorkspacesWorkspaceIdMembersAccountIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for DELETE /v1/workspaces/{workspaceId}/members/{accountId}."
+      },
+      "DeleteV1WorkspacesWorkspaceIdMembersAccountIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for DELETE /v1/workspaces/{workspaceId}/members/{accountId}."
+      },
+      "GetV1WorkspacesWorkspaceIdEnvironmentsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/environments."
+      },
+      "GetV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/environments/{environmentId}/variables."
+      },
+      "PutV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesNameInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/workspaces/{workspaceId}/environments/{environmentId}/variables/{name}."
+      },
+      "PutV1WorkspacesWorkspaceIdEnvironmentsEnvironmentIdVariablesNameResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/workspaces/{workspaceId}/environments/{environmentId}/variables/{name}."
+      },
+      "GetV1WorkspacesWorkspaceIdConnectionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/connections."
+      },
+      "PostV1WorkspacesWorkspaceIdConnectionsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/connections."
+      },
+      "PostV1WorkspacesWorkspaceIdConnectionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/connections."
+      },
+      "PutV1WorkspacesWorkspaceIdConnectionsConnectionIdDeploymentInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/workspaces/{workspaceId}/connections/{connectionId}/deployment."
+      },
+      "PutV1WorkspacesWorkspaceIdConnectionsConnectionIdDeploymentResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/workspaces/{workspaceId}/connections/{connectionId}/deployment."
+      },
+      "PostV1RunnersPairingChallengesInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runners/pairing/challenges."
+      },
+      "PostV1RunnersPairingChallengesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runners/pairing/challenges."
+      },
+      "PostV1RunnersPairingConfirmInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runners/pairing/confirm."
+      },
+      "PostV1RunnersPairingConfirmResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runners/pairing/confirm."
+      },
+      "GetV1WorkspacesWorkspaceIdRunnersResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/runners."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnerCommandsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/runner-commands."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnerCommandsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/runner-commands."
+      },
+      "GetV1WorkspacesWorkspaceIdGovernanceResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/governance."
+      },
+      "PutV1WorkspacesWorkspaceIdGovernanceInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/workspaces/{workspaceId}/governance."
+      },
+      "PutV1WorkspacesWorkspaceIdGovernanceResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/workspaces/{workspaceId}/governance."
+      },
+      "DeleteV1WorkspacesWorkspaceIdRunnersRunnerIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for DELETE /v1/workspaces/{workspaceId}/runners/{runnerId}."
+      },
+      "DeleteV1WorkspacesWorkspaceIdRunnersRunnerIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for DELETE /v1/workspaces/{workspaceId}/runners/{runnerId}."
+      },
+      "PatchV1WorkspacesWorkspaceIdRunnersRunnerIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PATCH /v1/workspaces/{workspaceId}/runners/{runnerId}."
+      },
+      "PatchV1WorkspacesWorkspaceIdRunnersRunnerIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PATCH /v1/workspaces/{workspaceId}/runners/{runnerId}."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnersRunnerIdMoveInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/runners/{runnerId}/move."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnersRunnerIdMoveResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/runners/{runnerId}/move."
+      },
+      "PostV1RunnerHeartbeatInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/heartbeat."
+      },
+      "PostV1RunnerHeartbeatResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/heartbeat."
+      },
+      "PostV1RunnerDeviceKeyRotateInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/device-key/rotate."
+      },
+      "PostV1RunnerDeviceKeyRotateResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/device-key/rotate."
+      },
+      "PostV1RunnerEnvironmentValuesInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/environment-values."
+      },
+      "PostV1RunnerEnvironmentValuesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/environment-values."
+      },
+      "GetV1RunnerCommandsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/runner/commands."
+      },
+      "PostV1RunnerCommandsCommandIdStatusInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/commands/{commandId}/status."
+      },
+      "PostV1RunnerCommandsCommandIdStatusResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/commands/{commandId}/status."
+      },
+      "PostV1RunnerRunSummariesInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/run-summaries."
+      },
+      "PostV1RunnerRunSummariesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/run-summaries."
+      },
+      "GetV1RunnerWebhookDeliveriesResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/runner/webhook-deliveries."
+      },
+      "PostV1RunnerWebhookDeliveriesDeliveryIdStatusInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/webhook-deliveries/{deliveryId}/status."
+      },
+      "PostV1RunnerWebhookDeliveriesDeliveryIdStatusResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/webhook-deliveries/{deliveryId}/status."
+      },
+      "GetV1WorkspacesWorkspaceIdActivityResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/activity."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncRevisionsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/sync/revisions."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncRevisionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/sync/revisions."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncWorkflowsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/sync/workflows."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncWorkflowsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/sync/workflows."
+      },
+      "GetV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdRevisionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/sync/workflows/{workflowId}/revisions."
+      },
+      "GetV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdRevisionsRevisionIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/sync/workflows/{workflowId}/revisions/{revisionId}."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdConflictsResolveInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/sync/workflows/{workflowId}/conflicts/resolve."
+      },
+      "PostV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdConflictsResolveResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/sync/workflows/{workflowId}/conflicts/resolve."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdRequestApprovalInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/revisions/{revisionId}/request-approval."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdRequestApprovalResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/revisions/{revisionId}/request-approval."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowApprovalsApprovalIdDecisionInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/workflow-approvals/{approvalId}/decision."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowApprovalsApprovalIdDecisionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/workflow-approvals/{approvalId}/decision."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdPublishInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/revisions/{revisionId}/publish."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRevisionsRevisionIdPublishResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/revisions/{revisionId}/publish."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRollbackInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/rollback."
+      },
+      "PostV1WorkspacesWorkspaceIdWorkflowsWorkflowIdRollbackResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/rollback."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/plugins/submissions."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/plugins/submissions."
+      },
+      "PostV1PublishersInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers."
+      },
+      "PostV1PublishersResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers."
+      },
+      "PostV1PublishersPublisherIdSigningKeysInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/signing-keys."
+      },
+      "PostV1PublishersPublisherIdSigningKeysResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/signing-keys."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdUploadInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/upload."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdUploadResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/upload."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdSubmitInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/submit."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdSubmitResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/submit."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdPublishInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/publish."
+      },
+      "PostV1PublishersPublisherIdPluginsSubmissionsReviewIdPublishResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/publishers/{publisherId}/plugins/submissions/{reviewId}/publish."
+      },
+      "PostV1InternalPluginReviewsReviewIdDecisionInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/internal/plugin-reviews/{reviewId}/decision."
+      },
+      "PostV1InternalPluginReviewsReviewIdDecisionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/internal/plugin-reviews/{reviewId}/decision."
+      },
+      "PostV1InternalPluginVersionsPluginVersionIdRevokeInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/internal/plugin-versions/{pluginVersionId}/revoke."
+      },
+      "PostV1InternalPluginVersionsPluginVersionIdRevokeResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/internal/plugin-versions/{pluginVersionId}/revoke."
+      },
+      "GetV1WorkspacesWorkspaceIdAuditResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/audit."
+      },
+      "GetV1WorkspacesWorkspaceIdWebhooksResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/webhooks."
+      },
+      "PostV1WorkspacesWorkspaceIdWebhooksInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/webhooks."
+      },
+      "PostV1WorkspacesWorkspaceIdWebhooksResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/webhooks."
+      },
+      "PostV1WorkspacesWorkspaceIdWebhooksEndpointIdRotateSecretInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/webhooks/{endpointId}/rotate-secret."
+      },
+      "PostV1WorkspacesWorkspaceIdWebhooksEndpointIdRotateSecretResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/webhooks/{endpointId}/rotate-secret."
+      },
+      "PostV1BillingStripeWebhookInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/billing/stripe/webhook."
+      },
+      "PostV1BillingStripeWebhookResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/billing/stripe/webhook."
       }
     },
     "responses": {
