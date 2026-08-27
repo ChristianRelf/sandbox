@@ -38,6 +38,12 @@ pub enum EngineEvent {
     },
 }
 
+#[derive(Debug, Clone)]
+pub struct PluginHostResult {
+    pub output: Value,
+    pub diagnostics: Vec<String>,
+}
+
 #[async_trait]
 pub trait HostServices: Send + Sync {
     async fn desktop_notification(&self, title: &str, message: &str) -> Result<(), EngineError>;
@@ -57,6 +63,18 @@ pub trait HostServices: Send + Sync {
     ) -> Result<Value, EngineError> {
         Err(EngineError::Node(
             "The requested integration is unavailable on this host.".into(),
+        ))
+    }
+    async fn plugin_operation(
+        &self,
+        _workflow: &Workflow,
+        _node: &WorkflowNode,
+        _execution_id: &str,
+        _input: Value,
+        _cancellation: CancellationToken,
+    ) -> Result<PluginHostResult, EngineError> {
+        Err(EngineError::Node(
+            "The sandboxed plugin runtime is unavailable on this host.".into(),
         ))
     }
     async fn approval_requested(&self, _approval: &PendingApproval) -> Result<(), EngineError> {
@@ -667,6 +685,29 @@ impl Engine {
             "approval" => {
                 self.execute_approval(node, workflow, execution_id, trigger, outputs, cancellation)
                     .await
+            }
+            _ if node.plugin.is_some() => {
+                let pin = node.plugin.as_ref().expect("guarded plugin pin");
+                let input = resolve_value(&pin.input, trigger, outputs)?;
+                let mut resolved_node = node.clone();
+                resolved_node.configuration =
+                    resolve_value(&node.configuration, trigger, outputs)?;
+                let result = self
+                    .host
+                    .plugin_operation(
+                        workflow,
+                        &resolved_node,
+                        execution_id,
+                        input,
+                        cancellation,
+                    )
+                    .await?;
+                let mut node_result = NodeResult::new(result.output).log(format!(
+                    "{} completed through its pinned sandbox package.",
+                    node.name
+                ));
+                node_result.logs.extend(result.diagnostics);
+                Ok(node_result)
             }
             other => Err(EngineError::Node(format!(
                 "Node type '{other}' is not supported by this runner."

@@ -37,10 +37,22 @@ pub struct PluginNodePin {
     pub plugin_version: String,
     pub package_integrity: String,
     pub publisher_id: String,
+    /// Host-resolved node input mapping. References use the same expression
+    /// syntax as built-in node configuration and default to an empty object.
+    #[serde(default = "empty_object", skip_serializing_if = "is_empty_object")]
+    pub input: Value,
     /// Friendly manifest references mapped to opaque host connection IDs. The
     /// referenced secret remains in the operating-system credential store.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub credential_references: std::collections::BTreeMap<String, String>,
+}
+
+fn empty_object() -> Value {
+    Value::Object(Default::default())
+}
+
+fn is_empty_object(value: &Value) -> bool {
+    value.as_object().is_some_and(serde_json::Map::is_empty)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

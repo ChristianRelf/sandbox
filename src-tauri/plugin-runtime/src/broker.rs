@@ -32,6 +32,7 @@ pub struct ExecutionContext {
     pub approved_capabilities: BTreeSet<String>,
     pub network_domains: Vec<NetworkDomain>,
     pub approved_credential_references: BTreeMap<String, String>,
+    pub approved_credential_operations: BTreeMap<String, BTreeSet<String>>,
     pub persistent_quota_bytes: u64,
     pub temporary_quota_bytes: u64,
     pub cancellation: Arc<AtomicBool>,
@@ -43,6 +44,35 @@ impl ExecutionContext {
         execution_id: impl Into<String>,
         node_id: impl Into<String>,
     ) -> Self {
+        let mut credential_operations = BTreeMap::<String, BTreeSet<String>>::new();
+        let mut persistent_quota_bytes = 0;
+        let mut temporary_quota_bytes = 0;
+        for capability in &manifest.capabilities {
+            match capability {
+                Capability::CredentialOperations {
+                    credential_type,
+                    operations,
+                } => {
+                    credential_operations
+                        .entry(credential_type.clone())
+                        .or_default()
+                        .extend(operations.iter().cloned());
+                }
+                Capability::PersistentStorage { max_bytes } => {
+                    persistent_quota_bytes = manifest
+                        .storage_requirements
+                        .persistent_bytes
+                        .min(*max_bytes);
+                }
+                Capability::TemporaryStorage { max_bytes } => {
+                    temporary_quota_bytes = manifest
+                        .storage_requirements
+                        .temporary_bytes
+                        .min(*max_bytes);
+                }
+                _ => {}
+            }
+        }
         Self {
             plugin_id: manifest.plugin_id.clone(),
             plugin_version: manifest.version.to_string(),
@@ -55,8 +85,9 @@ impl ExecutionContext {
             approved_capabilities: manifest.capabilities.iter().map(Capability::key).collect(),
             network_domains: manifest.network_domains.clone(),
             approved_credential_references: BTreeMap::new(),
-            persistent_quota_bytes: manifest.storage_requirements.persistent_bytes,
-            temporary_quota_bytes: manifest.storage_requirements.temporary_bytes,
+            approved_credential_operations: credential_operations,
+            persistent_quota_bytes,
+            temporary_quota_bytes,
             cancellation: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -354,6 +385,15 @@ impl CapabilityBroker {
             } => {
                 let capability = format!("credential_operations:{credential_type}");
                 context.require(&capability)?;
+                if !context
+                    .approved_credential_operations
+                    .get(&credential_type)
+                    .is_some_and(|operations| operations.contains(&action))
+                {
+                    return Err(PluginError::Permission(format!(
+                        "Credential operation '{credential_type}.{action}' is not declared."
+                    )));
+                }
                 let credential_id = context
                     .approved_credential_references
                     .get(&credential_reference)

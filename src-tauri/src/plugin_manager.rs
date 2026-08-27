@@ -1,18 +1,23 @@
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
 use sandbox_engine::{
-    Database, EngineError, InstalledPlugin, PluginInstallState, PluginRevocation,
+    Database, EngineError, InstalledPlugin, PluginInstallState, PluginRevocation, Workflow,
+    WorkflowNode,
 };
 use sandbox_plugin_runtime::{
-    permission_diff, permission_summary, Manifest, PackageTrustStore, RevocationList,
-    VerifiedPackage, HOST_VERSION,
+    permission_diff, permission_summary, validate_schema_instance, CapabilityBroker,
+    CredentialOperationBroker, ExecutionContext, Manifest, NetworkTransport, PackageTrustStore,
+    PluginError, PluginRuntime, PluginStorage, ReqwestTransport, RevocationList, RuntimeLimits,
+    SandboxDiagnostic, StorageScope, VerifiedPackage, HOST_VERSION,
 };
 use semver::Version;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration as StdDuration,
 };
 use uuid::Uuid;
 
@@ -41,6 +46,12 @@ pub struct PluginPackageInspection {
     pub signed_and_verified: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct PluginExecutionResult {
+    pub output: Value,
+    pub diagnostics: Vec<SandboxDiagnostic>,
+}
+
 struct PendingInspection {
     bytes: Vec<u8>,
     trust: PackageTrustMetadata,
@@ -55,15 +66,35 @@ pub struct PluginManager {
     database: Database,
     package_directory: PathBuf,
     pending: Arc<Mutex<HashMap<String, PendingInspection>>>,
+    broker: Arc<CapabilityBroker>,
 }
 
 impl PluginManager {
     pub fn new(database: Database, package_directory: PathBuf) -> Result<Self, EngineError> {
+        let network = Arc::new(ReqwestTransport::new().map_err(plugin)?);
+        Self::with_host_services(
+            database,
+            package_directory,
+            network,
+            Arc::new(UnavailableCredentialOperations),
+        )
+    }
+
+    pub fn with_host_services(
+        database: Database,
+        package_directory: PathBuf,
+        network: Arc<dyn NetworkTransport>,
+        credentials: Arc<dyn CredentialOperationBroker>,
+    ) -> Result<Self, EngineError> {
         std::fs::create_dir_all(&package_directory).map_err(storage)?;
+        let storage = Arc::new(DatabasePluginStorage {
+            database: database.clone(),
+        });
         Ok(Self {
             database,
             package_directory,
             pending: Arc::new(Mutex::new(HashMap::new())),
+            broker: Arc::new(CapabilityBroker::new(network, credentials, storage)),
         })
     }
 
@@ -188,6 +219,185 @@ impl PluginManager {
         self.database.save_plugin_revocation(&revocation)
     }
 
+    pub fn execute_node(
+        &self,
+        workflow: &Workflow,
+        node: &WorkflowNode,
+        execution_id: &str,
+        input: Value,
+        cancellation: Arc<AtomicBool>,
+    ) -> Result<PluginExecutionResult, EngineError> {
+        let pin = node.plugin.as_ref().ok_or_else(|| {
+            EngineError::Node("The workflow node has no exact plugin package pin.".into())
+        })?;
+        let installed = self
+            .database
+            .get_installed_plugin(
+                &pin.plugin_id,
+                &pin.plugin_version,
+                &pin.package_integrity,
+                &workflow.owner.owner_type,
+                &workflow.owner.owner_id,
+            )?
+            .ok_or_else(|| {
+                EngineError::Node(format!(
+                    "The pinned plugin {} {} is not installed for this workflow owner.",
+                    pin.plugin_id, pin.plugin_version
+                ))
+            })?;
+        if installed.state != PluginInstallState::Enabled {
+            return Err(EngineError::Permission(format!(
+                "Plugin {} {} is not enabled for this workflow owner.",
+                installed.plugin_id, installed.version
+            )));
+        }
+        if installed.requested_permissions != installed.approved_permissions
+            || installed.update_requires_review
+        {
+            return Err(EngineError::Permission(
+                "The exact plugin version has permissions awaiting review.".into(),
+            ));
+        }
+        let public_key = installed.publisher_public_key_pem.as_deref().ok_or_else(|| {
+            EngineError::Permission(
+                "The installed package has no retained publisher trust key; reinstall it before execution."
+                    .into(),
+            )
+        })?;
+        let package_bytes = std::fs::read(&installed.package_path).map_err(storage)?;
+        let verified = self.verify(
+            &package_bytes,
+            &PackageTrustMetadata {
+                publisher_id: installed.publisher_id.clone(),
+                key_id: installed.publisher_key_id.clone(),
+                publisher_public_key_pem: public_key.to_string(),
+                owner_type: installed.owner_type.clone(),
+                owner_id: installed.owner_id.clone(),
+                source: installed.source.clone(),
+            },
+        )
+        .map_err(|error| EngineError::Permission(error.to_string()))?;
+        if verified.digest != pin.package_integrity
+            || verified.manifest.plugin_id != pin.plugin_id
+            || verified.manifest.version.to_string() != pin.plugin_version
+            || verified.manifest.publisher_id != pin.publisher_id
+        {
+            return Err(EngineError::Permission(
+                "The verified package does not match the workflow's exact plugin pin.".into(),
+            ));
+        }
+        let definition = verified
+            .manifest
+            .node(&node.node_type, node.version)
+            .ok_or_else(|| {
+                EngineError::Node(format!(
+                    "Plugin {} {} does not declare node {} version {}.",
+                    pin.plugin_id, pin.plugin_version, node.node_type, node.version
+                ))
+            })?
+            .clone();
+        if definition
+            .capabilities
+            .iter()
+            .any(|capability| capability == "external_communication")
+            && !workflow
+                .settings
+                .permissions
+                .external_communication_permitted
+        {
+            return Err(EngineError::Permission(format!(
+                "{} requires external communication approval before it can run.",
+                node.name
+            )));
+        }
+        validate_schema_instance(
+            &definition.configuration_schema,
+            &node.configuration,
+            "Plugin configuration",
+        )
+        .map_err(plugin_execution)?;
+        validate_schema_instance(&definition.input_schema, &input, "Plugin input")
+            .map_err(plugin_execution)?;
+        let entrypoint = verified
+            .manifest
+            .entrypoints
+            .iter()
+            .find(|entrypoint| entrypoint.id == definition.execution_entrypoint)
+            .ok_or_else(|| EngineError::Node("The plugin execution entrypoint is missing.".into()))?
+            .clone();
+        let wasm = verified
+            .entrypoint(&definition.execution_entrypoint)
+            .map_err(plugin_execution)?;
+        let idempotency_key = format!("{execution_id}-{}", node.id);
+        let mut guest_input = input.as_object().cloned().unwrap_or_default();
+        guest_input.insert("configuration".into(), node.configuration.clone());
+        guest_input.insert("input".into(), input);
+        guest_input.insert("idempotencyKey".into(), Value::String(idempotency_key));
+        let guest_input = Value::Object(guest_input);
+        let storage_execution_id = format!("{execution_id}:{}", node.id);
+        let mut context = ExecutionContext::from_manifest(
+            &verified.manifest,
+            storage_execution_id.clone(),
+            &node.id,
+        );
+        context.owner_id = workflow.owner.owner_id.clone();
+        context.workspace_id = (workflow.owner.owner_type == "workspace")
+            .then(|| workflow.owner.owner_id.clone());
+        context.plugin_major_version = if verified
+            .manifest
+            .storage_requirements
+            .isolate_by_major_version
+        {
+            verified.manifest.version.major
+        } else {
+            0
+        };
+        context.approved_capabilities = definition
+            .capabilities
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        context.approved_credential_references = pin.credential_references.clone();
+        context.cancellation = cancellation;
+        let runtime = PluginRuntime::new(RuntimeLimits {
+            timeout: StdDuration::from_millis(definition.timeout_ms),
+            ..RuntimeLimits::default()
+        })
+        .map_err(plugin_execution)?;
+        let execution = runtime.execute(
+            wasm,
+            &entrypoint.export,
+            &guest_input,
+            self.broker.clone(),
+            context,
+        );
+        let cleanup = self
+            .database
+            .clear_temporary_plugin_storage(&storage_execution_id);
+        let (envelope, diagnostics) = execution.map_err(plugin_execution)?;
+        cleanup?;
+        if envelope.get("ok").and_then(Value::as_bool) == Some(false) {
+            let message = envelope
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or("The plugin returned a structured execution error.");
+            return Err(EngineError::Node(message.chars().take(4096).collect()));
+        }
+        let output = if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
+            envelope.get("output").cloned().ok_or_else(|| {
+                EngineError::Node("The plugin returned no typed output value.".into())
+            })?
+        } else {
+            envelope
+        };
+        validate_schema_instance(&definition.output_schema, &output, "Plugin output")
+            .map_err(plugin_execution)?;
+        Ok(PluginExecutionResult {
+            output,
+            diagnostics,
+        })
+    }
+
     fn verify(
         &self,
         bytes: &[u8],
@@ -224,6 +434,107 @@ impl PluginManager {
             .join(manifest.version.to_string())
             .join(format!("{digest}.sandbox-plugin"))
     }
+}
+
+struct UnavailableCredentialOperations;
+
+impl CredentialOperationBroker for UnavailableCredentialOperations {
+    fn execute(
+        &self,
+        _credential_id: &str,
+        credential_type: &str,
+        operation: &str,
+        _input: &Value,
+    ) -> Result<Value, PluginError> {
+        Err(PluginError::Host(format!(
+            "No host adapter is registered for credential operation {credential_type}.{operation}."
+        )))
+    }
+}
+
+struct DatabasePluginStorage {
+    database: Database,
+}
+
+impl PluginStorage for DatabasePluginStorage {
+    fn get(&self, scope: &StorageScope, key: &str) -> Result<Option<Vec<u8>>, PluginError> {
+        let (workspace, major, temporary) = normalized_scope(scope);
+        self.database
+            .plugin_storage_get(
+                &scope.plugin_id,
+                &scope.publisher_id,
+                &scope.owner_id,
+                workspace,
+                major,
+                temporary,
+                key,
+            )
+            .map_err(plugin_storage)
+    }
+
+    fn put(
+        &self,
+        scope: &StorageScope,
+        key: &str,
+        value: &[u8],
+        quota: u64,
+    ) -> Result<(), PluginError> {
+        let (workspace, major, temporary) = normalized_scope(scope);
+        self.database
+            .plugin_storage_put(
+                &scope.plugin_id,
+                &scope.publisher_id,
+                &scope.owner_id,
+                workspace,
+                major,
+                temporary,
+                key,
+                value,
+                quota,
+            )
+            .map_err(plugin_storage)
+    }
+
+    fn delete(&self, scope: &StorageScope, key: &str) -> Result<(), PluginError> {
+        let (workspace, major, temporary) = normalized_scope(scope);
+        self.database
+            .plugin_storage_delete(
+                &scope.plugin_id,
+                &scope.publisher_id,
+                &scope.owner_id,
+                workspace,
+                major,
+                temporary,
+                key,
+            )
+            .map_err(plugin_storage)
+    }
+
+    fn used_bytes(&self, scope: &StorageScope) -> Result<u64, PluginError> {
+        let (workspace, major, temporary) = normalized_scope(scope);
+        self.database
+            .plugin_storage_used_bytes(
+                &scope.plugin_id,
+                &scope.publisher_id,
+                &scope.owner_id,
+                workspace,
+                major,
+                temporary,
+            )
+            .map_err(plugin_storage)
+    }
+}
+
+fn normalized_scope(scope: &StorageScope) -> (&str, u64, &str) {
+    (
+        scope.workspace_id.as_deref().unwrap_or(""),
+        scope.major_version.unwrap_or(0),
+        scope.temporary_execution_id.as_deref().unwrap_or(""),
+    )
+}
+
+fn plugin_storage(error: impl std::fmt::Display) -> PluginError {
+    PluginError::Storage(error.to_string())
 }
 
 fn validate_trust_metadata(trust: &PackageTrustMetadata) -> Result<(), EngineError> {
@@ -269,6 +580,16 @@ fn write_immutable(path: &Path, bytes: &[u8]) -> Result<(), EngineError> {
 
 fn plugin(error: impl std::fmt::Display) -> EngineError {
     EngineError::Validation(error.to_string())
+}
+
+fn plugin_execution(error: PluginError) -> EngineError {
+    match error {
+        PluginError::Permission(message) | PluginError::Package(message) => {
+            EngineError::Permission(message)
+        }
+        PluginError::Cancelled => EngineError::Cancelled,
+        other => EngineError::Node(other.to_string()),
+    }
 }
 
 fn storage(error: impl std::fmt::Display) -> EngineError {
@@ -375,6 +696,7 @@ mod tests {
                     plugin_version: plugin.version.clone(),
                     package_integrity: plugin.package_integrity.clone(),
                     publisher_id: plugin.publisher_id.clone(),
+                    input: serde_json::json!({}),
                     credential_references: BTreeMap::new(),
                 }),
             }],

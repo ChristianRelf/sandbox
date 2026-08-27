@@ -16,6 +16,7 @@ use credential_vault::{CredentialVault, OsCredentialVault};
 use parking_lot::Mutex;
 use sandbox_engine::{
     BrowserDiagnostics, Database, Engine, EngineError, HostServices, PendingApproval,
+    PluginHostResult, Workflow, WorkflowNode,
 };
 use serde_json::{json, Value};
 use std::{
@@ -35,6 +36,7 @@ pub struct TauriHost {
     browser_sidecar: BrowserSidecar,
     data_dir: std::path::PathBuf,
     credential_vault: Arc<dyn CredentialVault>,
+    plugin_manager: plugin_manager::PluginManager,
 }
 #[async_trait]
 impl HostServices for TauriHost {
@@ -160,6 +162,48 @@ impl HostServices for TauriHost {
         .await
         .map_err(EngineError::Node)
     }
+
+    async fn plugin_operation(
+        &self,
+        workflow: &Workflow,
+        node: &WorkflowNode,
+        execution_id: &str,
+        input: Value,
+        cancellation: CancellationToken,
+    ) -> Result<PluginHostResult, EngineError> {
+        struct CancelOnDrop(Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for CancelOnDrop {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let _cancel_on_drop = CancelOnDrop(cancelled.clone());
+        let monitor_flag = cancelled.clone();
+        let monitor = tauri::async_runtime::spawn(async move {
+            cancellation.cancelled().await;
+            monitor_flag.store(true, Ordering::SeqCst);
+        });
+        let manager = self.plugin_manager.clone();
+        let workflow = workflow.clone();
+        let node = node.clone();
+        let execution_id = execution_id.to_string();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            manager.execute_node(&workflow, &node, &execution_id, input, cancelled)
+        })
+        .await
+        .map_err(|error| EngineError::Node(format!("Plugin worker failed: {error}")))??;
+        monitor.abort();
+        Ok(PluginHostResult {
+            output: result.output,
+            diagnostics: result
+                .diagnostics
+                .into_iter()
+                .map(|diagnostic| format!("{}: {}", diagnostic.code, diagnostic.message))
+                .collect(),
+        })
+    }
     async fn approval_requested(&self, approval: &PendingApproval) -> Result<(), EngineError> {
         let action = approval
             .action
@@ -224,6 +268,7 @@ pub fn run() {
                     browser_sidecar: browser_sidecar.clone(),
                     data_dir: data_dir.clone(),
                     credential_vault: credential_vault.clone(),
+                    plugin_manager: plugin_manager.clone(),
                 }),
             );
             let state = AppState {

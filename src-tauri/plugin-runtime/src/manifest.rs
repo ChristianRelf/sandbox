@@ -412,6 +412,26 @@ impl Manifest {
             errors
                 .push("Plugin storage requirements cannot exceed 100 MB per storage class.".into());
         }
+        let declared_persistent = self.capabilities.iter().find_map(|capability| match capability {
+            Capability::PersistentStorage { max_bytes } => Some(*max_bytes),
+            _ => None,
+        });
+        let declared_temporary = self.capabilities.iter().find_map(|capability| match capability {
+            Capability::TemporaryStorage { max_bytes } => Some(*max_bytes),
+            _ => None,
+        });
+        if self.storage_requirements.persistent_bytes > declared_persistent.unwrap_or(0) {
+            errors.push(
+                "storageRequirements.persistentBytes exceeds the declared persistent storage capability."
+                    .into(),
+            );
+        }
+        if self.storage_requirements.temporary_bytes > declared_temporary.unwrap_or(0) {
+            errors.push(
+                "storageRequirements.temporaryBytes exceeds the declared temporary storage capability."
+                    .into(),
+            );
+        }
         let privacy_required = capability_keys.contains("network")
             || capability_keys.contains("persistent_storage")
             || capability_keys.contains("external_communication")

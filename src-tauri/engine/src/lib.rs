@@ -9,6 +9,6 @@ pub mod schedule;
 pub mod validation;
 
 pub use db::Database;
-pub use engine::{Engine, EngineEvent, HostServices, LocalHost};
+pub use engine::{Engine, EngineEvent, HostServices, LocalHost, PluginHostResult};
 pub use error::EngineError;
 pub use model::*;
