@@ -52,6 +52,7 @@ Local personal workflows bypass organisation identity because they do not use or
 - `service_account_role_assignments` bounds workspaces, roles and environments.
 - `access_tokens` stores prefix, HMAC digest, scope, restrictions, expiry, last use and revocation metadata; plaintext is never persisted.
 - `api_idempotency_records` binds caller, key and canonical request hash, and stores the replay response encrypted for 24 hours.
+- `@sandbox/api-client` implements the stable v1 transport contract with bounded idempotent retries and optional runtime response validation.
 
 ## Security boundaries
 

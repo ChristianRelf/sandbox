@@ -17,10 +17,31 @@
         "tags": [
           "service"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -31,6 +52,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -38,6 +62,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -50,10 +77,34 @@
         "tags": [
           "account"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -64,6 +115,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -72,13 +126,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/account/export": {
@@ -87,10 +154,31 @@
         "tags": [
           "account"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -101,6 +189,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -108,6 +199,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -124,10 +218,31 @@
         "tags": [
           "account"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -138,6 +253,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -145,6 +263,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -161,10 +282,31 @@
         "tags": [
           "account"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -175,6 +317,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -182,6 +327,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -206,11 +354,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -221,6 +392,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -228,6 +402,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -240,7 +417,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -252,10 +431,34 @@
         "tags": [
           "billing"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -266,6 +469,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -273,6 +479,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -285,7 +494,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -305,11 +516,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -320,6 +554,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -327,6 +564,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -339,7 +579,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -359,11 +601,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -374,6 +639,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -381,6 +649,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -393,7 +664,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -405,10 +678,34 @@
         "tags": [
           "invitations"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -419,6 +716,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -426,6 +726,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -438,7 +741,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -450,10 +755,31 @@
         "tags": [
           "marketplace"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketplacePage"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -464,6 +790,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -471,6 +800,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -491,11 +823,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -506,6 +858,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -513,6 +868,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -533,11 +891,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -548,6 +929,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -555,6 +939,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -567,7 +954,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -587,11 +976,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -602,6 +1011,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -609,6 +1021,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -629,11 +1044,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -644,6 +1079,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -651,6 +1089,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -679,11 +1120,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -694,6 +1158,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -701,6 +1168,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -713,7 +1183,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -733,11 +1205,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -748,6 +1243,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -755,6 +1253,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -767,7 +1268,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -779,10 +1282,31 @@
         "tags": [
           "openapi.json"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -793,6 +1317,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -800,6 +1327,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -812,10 +1342,34 @@
         "tags": [
           "organisations"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -826,6 +1380,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -833,6 +1390,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -845,7 +1405,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -857,10 +1419,31 @@
         "tags": [
           "personal-access-tokens"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenSummaryList"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -871,6 +1454,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -878,6 +1464,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -892,10 +1481,34 @@
         "tags": [
           "personal-access-tokens"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCredentialEnvelope"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -906,6 +1519,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -913,6 +1529,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -922,10 +1541,12 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/PersonalAccessTokenInput"
+              }
             }
           }
         }
@@ -945,11 +1566,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationResponse"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -960,6 +1604,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -968,13 +1615,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRevocationInput"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/publishers": {
@@ -983,10 +1643,34 @@
         "tags": [
           "publishers"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -997,6 +1681,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1004,6 +1691,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1016,7 +1706,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1052,11 +1744,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1067,6 +1782,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1074,6 +1792,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1086,7 +1807,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1106,11 +1829,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1121,6 +1867,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1128,6 +1877,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1140,7 +1892,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1168,11 +1922,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1183,6 +1960,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1190,6 +1970,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1202,7 +1985,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1230,11 +2015,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1245,6 +2053,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1252,6 +2063,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1264,7 +2078,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1292,11 +2108,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1307,6 +2146,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1314,6 +2156,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1326,7 +2171,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1346,11 +2193,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1361,6 +2231,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1368,6 +2241,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1380,7 +2256,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1392,10 +2270,31 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1406,6 +2305,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1413,6 +2315,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1437,11 +2342,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1452,6 +2380,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1459,6 +2390,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1471,7 +2405,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1483,10 +2419,34 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1497,6 +2457,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1504,6 +2467,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1516,7 +2482,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1528,10 +2496,34 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1542,6 +2534,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1549,6 +2544,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1561,7 +2559,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1573,10 +2573,34 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1587,6 +2611,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1594,6 +2621,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1606,7 +2636,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1618,10 +2650,34 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1632,6 +2688,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1639,6 +2698,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1651,7 +2713,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1663,10 +2727,31 @@
         "tags": [
           "runner"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1677,6 +2762,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1684,6 +2772,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1708,11 +2799,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1723,6 +2837,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1730,6 +2847,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1742,7 +2862,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1754,10 +2876,34 @@
         "tags": [
           "runners"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1768,6 +2914,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1775,6 +2924,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1787,7 +2939,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1799,10 +2953,34 @@
         "tags": [
           "runners"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1813,6 +2991,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1820,6 +3001,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1832,7 +3016,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -1860,11 +3046,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevocationResponse"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1875,6 +3084,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1883,13 +3095,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRevocationInput"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/workspaces/{workspaceId}/activity": {
@@ -1906,11 +3131,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1921,6 +3166,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1928,6 +3176,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1952,11 +3203,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -1967,6 +3238,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -1974,6 +3248,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -1998,11 +3275,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2013,6 +3310,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2020,6 +3320,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2042,11 +3345,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2057,6 +3383,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2064,6 +3393,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2076,7 +3408,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2104,11 +3438,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2119,6 +3476,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2126,6 +3486,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2138,7 +3501,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2158,11 +3523,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2173,6 +3558,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2180,6 +3568,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2212,11 +3603,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2227,6 +3638,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2234,6 +3648,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2274,11 +3691,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2289,6 +3729,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2296,6 +3739,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2308,7 +3754,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2328,11 +3776,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2343,6 +3811,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2350,6 +3821,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2372,11 +3846,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2387,6 +3884,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2394,6 +3894,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2406,7 +3909,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2426,11 +3931,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2441,6 +3969,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2448,6 +3979,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2460,7 +3994,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2488,11 +4024,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2503,6 +4062,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2511,13 +4073,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/workspaces/{workspaceId}/members": {
@@ -2534,11 +4109,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2549,6 +4144,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2556,6 +4154,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2588,11 +4189,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2603,6 +4227,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2611,13 +4238,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/workspaces/{workspaceId}/members/{accountId}/role": {
@@ -2642,11 +4282,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2657,6 +4320,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2664,6 +4330,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2676,7 +4345,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2696,11 +4367,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2711,6 +4405,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2718,6 +4415,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2730,7 +4430,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2750,11 +4452,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2765,6 +4487,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2772,6 +4497,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2804,11 +4532,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2819,6 +4570,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2827,13 +4581,26 @@
           },
           "500": {
             "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
           }
         },
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
+            }
+          }
+        }
       },
       "patch": {
         "operationId": "patch_v1_workspaces_workspaceId_runners_runnerId",
@@ -2856,11 +4623,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2871,6 +4661,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2878,6 +4671,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2890,7 +4686,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2918,11 +4716,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2933,6 +4754,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2940,6 +4764,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -2952,7 +4779,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -2972,11 +4801,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountList"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -2987,6 +4836,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -2994,6 +4846,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3016,11 +4871,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountEnvelope"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3031,6 +4909,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3038,6 +4919,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3047,10 +4931,12 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAccountInput"
+              }
             }
           }
         }
@@ -3078,11 +4964,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCredentialEnvelope"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3093,6 +5002,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3100,6 +5012,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3109,10 +5024,12 @@
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/PersonalAccessTokenInput"
+              }
             }
           }
         }
@@ -3132,11 +5049,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3147,6 +5087,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3154,6 +5097,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3166,7 +5112,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3186,11 +5134,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3201,6 +5172,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3208,6 +5182,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3220,7 +5197,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3248,11 +5227,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3263,6 +5265,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3270,6 +5275,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3282,7 +5290,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3310,11 +5320,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3325,6 +5355,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3332,6 +5365,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3372,11 +5408,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3387,6 +5443,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3394,6 +5453,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3418,11 +5480,31 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3433,6 +5515,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3440,6 +5525,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3462,11 +5550,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3477,6 +5588,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3484,6 +5598,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3496,7 +5613,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3524,11 +5643,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3539,6 +5681,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3546,6 +5691,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3558,7 +5706,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3586,11 +5736,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3601,6 +5774,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3608,6 +5784,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3620,7 +5799,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3656,11 +5837,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3671,6 +5875,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3678,6 +5885,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3690,7 +5900,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3726,11 +5938,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3741,6 +5976,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3748,6 +5986,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3760,7 +6001,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3788,11 +6031,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
         "responses": {
           "200": {
-            "description": "Successful response."
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JsonValue"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/ApiError"
@@ -3803,6 +6069,9 @@
           "403": {
             "$ref": "#/components/responses/ApiError"
           },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
@@ -3810,6 +6079,9 @@
             "$ref": "#/components/responses/RateLimited"
           },
           "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
             "$ref": "#/components/responses/ApiError"
           }
         },
@@ -3822,7 +6094,9 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {}
+              "schema": {
+                "$ref": "#/components/schemas/JsonValue"
+              }
             }
           }
         }
@@ -3847,7 +6121,75 @@
         "name": "stripe-signature"
       }
     },
+    "parameters": {
+      "CorrelationId": {
+        "name": "x-correlation-id",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+        },
+        "description": "Caller-supplied correlation ID; the server generates one when omitted."
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "description": "Enables exact replay for mutating requests for 24 hours."
+      }
+    },
+    "headers": {
+      "CorrelationId": {
+        "schema": {
+          "type": "string"
+        },
+        "description": "Correlation ID for this request."
+      },
+      "IdempotencyReplayed": {
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Present only when the response was replayed."
+      }
+    },
     "schemas": {
+      "JsonValue": {
+        "description": "JSON value for a route whose resource schema is not yet promoted to the stable contract.",
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {}
+          },
+          {
+            "type": "object",
+            "additionalProperties": true
+          }
+        ]
+      },
       "ApiError": {
         "type": "object",
         "required": [
@@ -3875,6 +6217,485 @@
             "type": "string"
           }
         }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "execution"
+        ],
+        "properties": {
+          "status": {
+            "const": "ok"
+          },
+          "service": {
+            "const": "sandbox-control-plane"
+          },
+          "execution": {
+            "const": "local-only"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PersonalAccessTokenInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "scopes",
+          "organisationId",
+          "workspaceIds"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organisationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceIds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "environmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": []
+          },
+          "expiresInDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "default": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "CredentialRevocationInput": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false
+      },
+      "TokenSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "organisationId",
+          "workspaceIds",
+          "environmentIds",
+          "createdAt",
+          "expiresAt",
+          "kind",
+          "lastUsedAt",
+          "revokedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organisationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "environmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "service_account"
+            ]
+          },
+          "lastUsedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssuedCredential": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "organisationId",
+          "workspaceIds",
+          "environmentIds",
+          "createdAt",
+          "expiresAt",
+          "token"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organisationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "environmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "token": {
+            "type": "string",
+            "description": "Secret returned only on issuance or exact encrypted idempotent replay."
+          }
+        },
+        "additionalProperties": false
+      },
+      "TokenSummaryList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TokenSummary"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "IssuedCredentialEnvelope": {
+        "type": "object",
+        "required": [
+          "credential"
+        ],
+        "properties": {
+          "credential": {
+            "$ref": "#/components/schemas/IssuedCredential"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "roleId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "default": ""
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": []
+          },
+          "expiryPolicyDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "default": 90
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccount": {
+        "type": "object",
+        "required": [
+          "id",
+          "organisationId",
+          "workspaceId",
+          "name",
+          "description",
+          "ownerAccountIds",
+          "roleId",
+          "environmentIds",
+          "expiryPolicyDays",
+          "status",
+          "createdAt",
+          "lastUsedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organisationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ownerAccountIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "expiryPolicyDays": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "revoked"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccount"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountEnvelope": {
+        "type": "object",
+        "required": [
+          "serviceAccount"
+        ],
+        "properties": {
+          "serviceAccount": {
+            "$ref": "#/components/schemas/ServiceAccount"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevocationResponse": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "MarketplacePage": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "pluginId",
+                "name",
+                "version",
+                "packageIntegrity"
+              ],
+              "properties": {
+                "pluginId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "packageIntegrity": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "nextCursor": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {

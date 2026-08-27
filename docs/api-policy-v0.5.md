@@ -4,6 +4,11 @@ The supported control-plane surface is `/v1`. The checked-in route contract is
 `docs/api/openapi-v1.json`; `GET /v1/openapi.json` serves the same document from a
 running control plane.
 
+The public `@sandbox/api-client` package implements this transport contract for
+browser and Node.js 20+ callers. It provides stable credential/service-account
+types and accepts a caller-supplied parser for runtime validation of other resource
+responses.
+
 ## Compatibility and deprecation
 
 - Existing v1 fields and successful meanings remain backward compatible for the
@@ -49,6 +54,11 @@ with `API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64`, which must decode to 32 bytes. Thi
 separate from token hashing and webhook encryption keys. Five-hundred responses are
 not retained, allowing a safe retry.
 
+`@sandbox/api-client` adds idempotency and freshness headers automatically. It
+retries 429, 502, 503 and 504 responses at most twice by default and only retries a
+mutation when it carries an idempotency key. The same key and correlation ID are
+retained across attempts.
+
 Generate a key in PowerShell:
 
 ```powershell
@@ -75,5 +85,7 @@ npm.cmd run openapi:check --workspace @sandbox/control-plane
 ```
 
 The complete control-plane test command runs the check. The current OpenAPI file
-records every stable method/path plus common transport behavior. Resource schemas
-are still being expanded during the GA candidate and remain part of GA-013.
+records every stable method/path plus common transport behavior. Health,
+marketplace summaries, personal credentials and service accounts have promoted
+resource schemas. Routes marked with the `JsonValue` schema are still being
+expanded during the GA candidate and remain part of GA-013.
