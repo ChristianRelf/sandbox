@@ -43,6 +43,7 @@ integration("PostgreSQL execution coordination", () => {
 
     const waiting: ExecutionTransition = { transitionId:randomUUID(),executionId,fromState:"queued",toState:"waiting_for_runner",occurredAt:new Date().toISOString(),actor:{actorType:"system",actorId:null,runnerId:null},reason:"Ready for routing.",expectedVersion:0,leaseId:null,correlationId,metadata:{} };
     await coordinator.transition(waiting);
+    expect(await coordinator.transition(waiting)).toEqual(waiting);
     const identity: RunnerIdentity = { runnerId,keyId:"runner-key",runnerType:"hosted",protocolVersion:RUNNER_PROTOCOL_VERSION,engineVersion:"0.4.0",pluginRuntimeVersion:"0.4.0",architecture:"x86_64",operatingSystem:"linux",workspaceId,environmentId,region:"eu-west-2",tags:["standard"],concurrencyLimit:2,maintenanceState:"active",nodeCapabilities:[{nodeType:"http_request",nodeVersions:[1],constraints:{}}],plugins:[],connections:[] };
     const lease = await coordinator.claim(identity,new Date(),30);
     expect(lease?.executionId).toBe(executionId);
@@ -52,7 +53,10 @@ integration("PostgreSQL execution coordination", () => {
 
     await coordinator.transition({ transitionId:randomUUID(),executionId,fromState:"claimed",toState:"starting",occurredAt:new Date().toISOString(),actor:{actorType:"runner",actorId:null,runnerId},reason:"Runner started workload.",expectedVersion:2,leaseId:lease!.leaseId,correlationId,metadata:{} });
     expect(await coordinator.checkpoint({ checkpointId:randomUUID(),executionId,workflowRevisionId:revisionId,nodeId:"http",nodeVersion:1,attempt:1,status:"completed",inputHash:`sha256:${"b".repeat(64)}`,outputReference:"object://redacted-output",sideEffect:"idempotent",idempotencyKey:`node-${executionId}`,completedAt:new Date().toISOString(),runnerId },lease!.leaseToken,new Date())).toEqual({ created:true });
-    await coordinator.markLeaseLost(executionId,{ disposition:"review_required",certainty:"uncertain",checkpointId:null,resumeAfterNodeId:"http",reason:"External action may have completed before the runner partitioned.",preserveIdempotencyKey:true },new Date(),correlationId);
+    await coordinator.recordNodeStarted(executionId,runnerId,lease!.leaseId,lease!.leaseToken,{nodeId:"send-email",sideEffect:"unsafe",completionCheckpointExists:false,supportsIdempotency:false,idempotencyKey:null,explicitSafeRetry:false},new Date());
+    const recoveries=await coordinator.recoverExpiredLeases(new Date(Date.now()+60_000));
+    expect(recoveries).toHaveLength(1);
+    expect(recoveries[0].recovery).toMatchObject({disposition:"review_required",certainty:"uncertain"});
     const lost = await pool.query<{ status:string; outcome_certainty:string; recovery_disposition:string }>(`SELECT status,outcome_certainty,recovery_disposition FROM executions WHERE id=$1`,[executionId]);
     expect(lost.rows[0]).toEqual({ status:"lost", outcome_certainty:"uncertain", recovery_disposition:"review_required" });
     expect(await coordinator.claim(identity,new Date(),30)).toBeNull();
