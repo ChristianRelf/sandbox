@@ -8,6 +8,7 @@ import { Ed25519RunnerCommandSigner } from "./runner_protocol.js";
 import { StripeBillingProvider } from "./billing.js";
 import { Ed25519EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector } from "./webhook_crypto.js";
+import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -23,9 +24,13 @@ const pool = new Pool({
   idle_in_transaction_session_timeout: 15_000
 });
 
+const oidcSessions=new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") });
+const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"));
+
 const server = await createServer({
   repository: new PostgresRepository(pool),
-  sessions: new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") }),
+  sessions: new CompositeSessionVerifier(oidcSessions,credentialService),
+  credentialService,
   email: new HttpTransactionalEmail(required("EMAIL_API_URL"), required("EMAIL_API_KEY"), required("EMAIL_SENDER")),
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),

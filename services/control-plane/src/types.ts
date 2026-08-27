@@ -13,6 +13,7 @@ export interface AuthenticatedSession {
   principalType?: "user" | "personal_access_token" | "service_account";
   principalId?: string;
   credentialScopes?: string[];
+  principalPermissions?: string[];
   organisationRestriction?: string | null;
   workspaceRestrictions?: string[];
   environmentRestrictions?: string[];

@@ -6,6 +6,7 @@ import type { RunnerCommandSigner } from "./runner_protocol.js";
 import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector, webhookSignature } from "./webhook_crypto.js";
+import type { CredentialAdministration } from "./credentials.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -50,10 +51,23 @@ function dependencies(permissions: string[]) {
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
+  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn()};
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
+  it("shows a newly issued personal token once and never asks the credential service to persist plaintext",async()=>{
+    const deps=dependencies([]);const organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.credentialService.issuePersonalToken).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"CI",prefix:"sbx_pat_abcdefghijkl",token:"sbx_pat_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86_400_000).toISOString()});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"CI",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresInDays:1}});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json().credential.token).toMatch(/^sbx_pat_/);expect(deps.credentialService.issuePersonalToken).toHaveBeenCalledWith(session,expect.not.objectContaining({token:expect.anything()}),expect.any(String));await server.close();
+  });
+
+  it("requires server-side service-account management permission",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);const response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Deploy bot",roleId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}});
+    expect(response.statusCode).toBe(403);expect(deps.credentialService.createServiceAccount).not.toHaveBeenCalled();await server.close();
+  });
+
   it("requires server-side workspace permission for invitations", async () => {
     const deps = dependencies([]);
     const server = await createServer(deps);

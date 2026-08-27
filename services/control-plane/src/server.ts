@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { runSummarySchema, workflowRevisionSchema } from "@sandbox/contracts";
+import { permissions, runSummarySchema, workflowRevisionSchema } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -12,6 +12,7 @@ import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_se
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
 import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
+import type { CredentialAdministration } from "./credentials.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -78,6 +79,9 @@ const runnerMoveInput = z.object({ targetWorkspaceId: z.string().uuid() }).stric
 const runnerKeyRotationInput = z.object({ keyId: z.string().regex(/^[A-Za-z0-9._-]+$/).max(120), publicKeyDerBase64: z.string().base64().max(256) }).strict();
 const protectedVariableInput = z.object({ valueType: z.string().regex(/^[a-z][a-z0-9._-]*$/).max(80), isSecret: z.boolean(), value: z.unknown(), description: z.string().trim().max(500).default(""), allowedWorkflowIds: z.array(z.string().uuid()).min(1).max(500) }).strict();
 const protectedVariableResolutionInput = z.object({ environmentId: z.string().uuid(), workflowId: z.string().uuid(), names: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(100)).min(1).max(100) }).strict();
+const credentialInput=z.object({name:z.string().trim().min(1).max(120),scopes:z.array(z.enum(permissions)).min(1).max(permissions.length),organisationId:z.string().uuid(),workspaceIds:z.array(z.string().uuid()).min(1).max(100),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiresInDays:z.number().int().min(1).max(90).default(30)}).strict();
+const serviceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
+const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -90,13 +94,14 @@ export interface ApiDependencies {
   entitlementSigner?: EntitlementClaimSigner;
   webhookProtector?: WebhookProtector;
   protectedValueProtector?: WebhookProtector;
+  credentialService?: CredentialAdministration;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
 }
 
 export async function createServer(dependencies: ApiDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: dependencies.logger ?? false, trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
+  const app = Fastify({ logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","res.headers.set-cookie","body.token"] } : false, trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
   await app.register(rateLimit, { max: 240, timeWindow: "1 minute", keyGenerator: request => request.ip });
   const authorizer = new Authorizer(dependencies.repository);
 
@@ -223,6 +228,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.get("/v1/account/export", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     return dependencies.repository.exportAccountData(session);
   });
 
@@ -238,6 +244,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.delete("/v1/account", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     if (!session.authenticationMethods.some(method => method === "mfa" || method === "webauthn" || method === "passkey")) {
       throw new DomainError("step_up_required", "Account deletion requires a recent passkey or multi-factor authentication step.", 403);
@@ -248,11 +255,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.get("/v1/account/sessions", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     return { items: await dependencies.repository.listSessions(session) };
   });
 
   app.post("/v1/account/sessions/:sessionId/revoke", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const { sessionId } = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const revoked = await dependencies.repository.revokeSession(session, sessionId, request.id);
@@ -260,8 +269,61 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { revoked: true };
   });
 
+  app.get("/v1/personal-access-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    return{items:await dependencies.credentialService.listPersonalTokens(session)};
+  });
+
+  app.post("/v1/personal-access-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const input=credentialInput.parse(request.body);
+    return{credential:await dependencies.credentialService.issuePersonalToken(session,{...input,expiresAt:new Date(Date.now()+input.expiresInDays*86_400_000)},request.id)};
+  });
+
+  app.delete("/v1/personal-access-tokens/:tokenId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const{tokenId}=z.object({tokenId:z.string().uuid()}).parse(request.params);const{reason}=credentialRevocationInput.parse(request.body);
+    if(!await dependencies.credentialService.revokeToken(session,tokenId,reason,request.id))throw new DomainError("credential_not_found","Credential was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{items:await dependencies.credentialService.listServiceAccounts(session,workspaceId)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{serviceAccount:await dependencies.credentialService.createServiceAccount(session,{workspaceId,...serviceAccountInput.parse(request.body)},request.id)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId,serviceAccountId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    const input=credentialInput.parse(request.body);
+    if(input.workspaceIds.length!==1||input.workspaceIds[0]!==workspaceId)throw new DomainError("credential_workspace_restricted","Service-account credentials must be restricted to the route workspace.",400);
+    return{credential:await dependencies.credentialService.issueServiceAccountToken(session,serviceAccountId,{...input,expiresAt:new Date(Date.now()+input.expiresInDays*86_400_000)},request.id)};
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/access-tokens/:tokenId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId,tokenId}=z.object({workspaceId:z.string().uuid(),tokenId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"access_token",resourceId:tokenId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const{reason}=credentialRevocationInput.parse(request.body);if(!await dependencies.credentialService.revokeToken(session,tokenId,reason,request.id,workspaceId))throw new DomainError("credential_not_found","Credential was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
   app.post("/v1/organisations", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     return dependencies.repository.createOrganisation(session, organisationInput.parse(request.body), request.id);
   });
@@ -293,6 +355,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/invitations/accept", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = acceptInvitationInput.parse(request.body);
     return dependencies.repository.acceptInvitation(session, input.token, request.id);
@@ -386,6 +449,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingInput.parse(request.body);
     validateEd25519PublicKey(input.devicePublicKeyDerBase64);
@@ -396,6 +460,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/confirm", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingConfirmation.parse(request.body);
     if (input.workspaceId) await authorizer.require(session, input.workspaceId, "runners.manage");
@@ -815,6 +880,10 @@ function requireFreshRequest(request: FastifyRequest): void {
 
 function requirePlatform(session: AuthenticatedSession, permission: string): void {
   if (!session.platformPermissions.includes(permission)) throw new DomainError("platform_permission_denied", `Platform permission '${permission}' is required.`, 403);
+}
+
+function requireHumanPrincipal(session:AuthenticatedSession):void {
+  if((session.principalType??"user")!=="user")throw new DomainError("human_principal_required","This account-security operation requires an interactive human session.",403);
 }
 
 function publicKeyPem(derBase64: string): string {

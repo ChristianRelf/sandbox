@@ -40,6 +40,9 @@ export class Authorizer {
     if (principalType !== "user" && !session.credentialScopes?.includes(request.permission)) {
       throw denied("credential_scope_denied",session,request,`Credential scope '${request.permission}' is required.`);
     }
+    if (session.principalPermissions && !session.principalPermissions.includes(request.permission)) {
+      throw denied("principal_permission_denied",session,request,`The principal's assigned role does not grant '${request.permission}'.`);
+    }
     const permissions = await this.repository.permissions(session.accountId, request.workspaceId);
     if (!permissions.has(request.permission)) {
       throw new DomainError(

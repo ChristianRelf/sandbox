@@ -51,6 +51,7 @@ describe("Authorizer", () => {
     await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",permission:"workflows.edit",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_scope_denied"});
     await expect(authorizer.require(token,{workspaceId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_workspace_restricted"});
     await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_environment_restricted"});
+    await expect(authorizer.require({...token,credentialScopes:["workflows.run"],principalPermissions:["workflows.view"]},{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"principal_permission_denied"});
   });
 
   it("returns actionable governance failures", () => {

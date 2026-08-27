@@ -11,6 +11,8 @@ export const permissions = [
   "organisation.owners.manage",
   "organisation.security.manage",
   "members.manage",
+  "service_accounts.manage",
+  "api_credentials.manage",
   "plugins.manage",
   "plugins.develop_private",
   "plugins.permissions.request",
@@ -39,7 +41,7 @@ export type BuiltInRole = "owner" | "administrator" | "developer" | "operator" |
 
 export const rolePermissionMatrix: Readonly<Record<BuiltInRole, readonly Permission[]>> = {
   owner: permissions,
-  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
+  administrator: ["members.manage", "service_accounts.manage", "api_credentials.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
   developer: ["plugins.develop_private", "plugins.permissions.request", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.view", "executions.view_summary"],
   operator: ["connections.use", "workflows.run", "workflows.pause", "workflows.view", "executions.view_summary", "approvals.handle"],
   viewer: ["workflows.view", "executions.view_summary"]

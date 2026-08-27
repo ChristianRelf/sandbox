@@ -21,7 +21,7 @@ Severity definitions:
 | GA-009 | High | Execution | v0.5.0 | Open | Exercise hosted orchestration with real leases, short-lived workload identity, network policy, cgroup limits, artifact namespace and concurrent cross-tenant workloads. |
 | GA-010 | High | Browser | v0.5.0 | Open | Exercise DNS rebinding/redirect policy, download scanner, encrypted profile store and worker destruction in the target orchestrator. |
 | GA-011 | High | Platform security | v0.5.0 | Open | Consolidate authorisation for every resource/action and enforce environment/token restrictions again at the runner boundary. |
-| GA-012 | High | Identity | v0.5.0 | Open | Add scoped, expiring, hashed personal/service credentials and session/token revocation. |
+| GA-012 | High | Identity | v0.5.0 | In progress | Workspace service principals and scoped, expiring, HMAC-hashed personal/service tokens are implemented with immediate revocation, human ownership, RLS and non-interactive login enforcement. Add organisation-wide assignment, client assertions, expiry notifications and access reviews before closure. |
 | GA-013 | High | API | v0.5.0 | Open | Define compatibility/deprecation policy before publishing stable API; add structured errors, idempotency storage, correlation IDs, rate-limit contract and OpenAPI drift gate. |
 | GA-014 | High | Reliability | v0.5.0 | Open | Add production readiness checks, SLI collection, alerts, synthetic workflows and tested incident/status communication. `/health` currently reports process health only. |
 | GA-015 | High | Reliability | v0.5.0 | Open | Exercise queue recovery, runner-capacity failure, regional recovery and incident lifecycle with an immutable timeline and post-incident report. |
