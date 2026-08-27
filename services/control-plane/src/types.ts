@@ -72,6 +72,7 @@ export interface PluginBillingPlan { pluginId: string; planId: string; stripePri
 export interface EntitlementRecord { entitlementId: string; ownerType: "personal" | "workspace" | "organisation" | "publisher"; ownerId: string; pluginId: string; planId: string; status: "trial" | "active" | "past_due" | "expired" | "refunded" | "revoked"; seatAllowance: number | null; startsAt: string; renewsAt: string | null; offlineGraceUntil: string }
 export interface WebhookEndpointRecord { id: string; publicId: string; workspaceId: string; workflowId: string; signingSecretCiphertext: Buffer; allowedMethods: string[]; schema: Record<string, unknown> | null; maximumRequestBytes: number; rateLimitPerMinute: number; retentionSeconds: number; runnerPolicy: Record<string, unknown>; offlineExpirySeconds: number; redactedFields: string[]; disabled: boolean }
 export interface WebhookDeliveryRecord { deliveryId: string; endpointId: string; workspaceId: string; workflowId: string; payloadCiphertext: Buffer; idempotencyKey: string; receivedAt: string; expiresAt: string; attemptCount: number }
+export interface PluginRatingRecord { reviewId: string; pluginId: string; reviewerName: string; versionUsed: string; stars: number; review: string; developerResponse: string | null; createdAt: string; updatedAt: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -135,6 +136,10 @@ export interface ControlPlaneRepository {
   enqueueWebhookDelivery(endpoint: WebhookEndpointRecord, deliveryId: string, nonce: string, idempotencyKey: string, payloadCiphertext: Buffer, payloadHash: string, receivedAt: Date): Promise<{ status: "queued"; expiresAt: string }>;
   dequeueWebhookDeliveries(device: RunnerDeviceSession, limit: number): Promise<WebhookDeliveryRecord[]>;
   acknowledgeWebhookDelivery(device: RunnerDeviceSession, deliveryId: string, outcome: "delivered" | "retry" | "failed"): Promise<boolean>;
+  listPluginRatings(pluginId: string, cursor: string | null, limit: number): Promise<{ items: PluginRatingRecord[]; nextCursor: string | null }>;
+  upsertPluginRating(actor: AuthenticatedSession, pluginId: string, versionUsed: string, stars: number, review: string): Promise<PluginRatingRecord>;
+  respondToPluginRating(actor: AuthenticatedSession, publisherId: string, pluginId: string, reviewId: string, response: string, correlationId: string): Promise<boolean>;
+  reportPluginRating(actor: AuthenticatedSession, pluginId: string, reviewId: string, reason: string): Promise<boolean>;
 }
 
 export class DomainError extends Error {

@@ -70,6 +70,9 @@ const sharedConnectionInput = z.object({
 const sharedConnectionDeploymentInput = z.object({ runnerId: z.string().uuid(), status: z.enum(["authorization_required", "available", "unavailable"]), localCredentialLabel: z.string().trim().min(1).max(120).nullable().default(null) }).strict();
 const checkoutInput = z.object({ ownerType: z.enum(["personal", "workspace"]), ownerId: z.string().uuid(), planId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(100) }).strict();
 const webhookEndpointInput = z.object({ workflowId: z.string().uuid(), allowedMethods: z.array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"])).min(1).max(5), schema: z.record(z.string(), z.unknown()).nullable().default(null), maximumRequestBytes: z.number().int().min(1).max(1_048_576).default(262_144), rateLimitPerMinute: z.number().int().min(1).max(1_000).default(60), retentionSeconds: z.number().int().min(60).max(604_800).default(86_400), runnerPolicy: z.record(z.string(), z.unknown()).default({}), offlineExpirySeconds: z.number().int().min(60).max(604_800).default(3_600), redactedFields: z.array(z.string().regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/)).max(100).default([]) }).strict();
+const pluginRatingInput = z.object({ versionUsed: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).max(50), stars: z.number().int().min(1).max(5), review: z.string().trim().max(5_000).default("") }).strict();
+const developerResponseInput = z.object({ response: z.string().trim().min(1).max(5_000) }).strict();
+const reviewReportInput = z.object({ reason: z.string().trim().min(10).max(2_000) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -176,6 +179,40 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const checkout = await dependencies.billing.createCheckout({ priceId: plan.stripePriceId, mode: plan.mode, customerId: plan.customerId ?? undefined, successUrl: `${dependencies.webBaseUrl.replace(/\/$/, "")}/billing/complete?session_id={CHECKOUT_SESSION_ID}`, cancelUrl: `${dependencies.webBaseUrl.replace(/\/$/, "")}/marketplace/${encodeURIComponent(pluginId)}`, metadata });
     await dependencies.repository.recordMarketplaceCheckout(session, checkout.checkoutId, input.ownerType, input.ownerId, pluginId, input.planId, checkout.expiresAt);
     return { checkout };
+  });
+
+  app.get("/v1/marketplace/plugins/:pluginId/reviews", async request => {
+    const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
+    const { cursor, limit } = z.object({ cursor: z.string().uuid().nullable().default(null), limit: z.coerce.number().int().min(1).max(50).default(20) }).parse(request.query);
+    return dependencies.repository.listPluginRatings(pluginId, cursor, limit);
+  });
+
+  app.put("/v1/marketplace/plugins/:pluginId/reviews/me", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { pluginId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/) }).parse(request.params);
+    const input = pluginRatingInput.parse(request.body);
+    return { review: await dependencies.repository.upsertPluginRating(session, pluginId, input.versionUsed, input.stars, input.review) };
+  });
+
+  app.post("/v1/publishers/:publisherId/plugins/:pluginId/reviews/:reviewId/response", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { publisherId, pluginId, reviewId } = z.object({ publisherId: z.string().uuid(), pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/), reviewId: z.string().uuid() }).parse(request.params);
+    const { response } = developerResponseInput.parse(request.body);
+    const updated = await dependencies.repository.respondToPluginRating(session, publisherId, pluginId, reviewId, response, request.id);
+    if (!updated) throw new DomainError("plugin_review_not_found", "Visible plugin review was not found for this publisher.", 404);
+    return { updated: true };
+  });
+
+  app.post("/v1/marketplace/plugins/:pluginId/reviews/:reviewId/report", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { pluginId, reviewId } = z.object({ pluginId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/), reviewId: z.string().uuid() }).parse(request.params);
+    const { reason } = reviewReportInput.parse(request.body);
+    const reported = await dependencies.repository.reportPluginRating(session, pluginId, reviewId, reason);
+    if (!reported) throw new DomainError("plugin_review_not_found", "Visible plugin review was not found.", 404);
+    return { reported: true };
   });
 
   app.get("/v1/account/export", async request => {

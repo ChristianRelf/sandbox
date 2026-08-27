@@ -1032,6 +1032,57 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async listPluginRatings(pluginId: string, cursor: string | null, limit: number) {
+    const values: unknown[] = [pluginId, limit + 1];
+    const cursorClause = cursor ? "AND (rating.updated_at,rating.id)<(SELECT updated_at,id FROM plugin_ratings WHERE id=$3)" : "";
+    if (cursor) values.push(cursor);
+    const result = await this.pool.query<PluginRatingRow>(
+      `SELECT rating.id,rating.plugin_id,account.display_name AS reviewer_name,rating.version_used,rating.stars,rating.review,rating.developer_response,rating.created_at,rating.updated_at
+         FROM plugin_ratings rating JOIN accounts account ON account.id=rating.account_id
+        WHERE rating.plugin_id=$1 AND rating.moderation_status='visible' ${cursorClause}
+        ORDER BY rating.updated_at DESC,rating.id DESC LIMIT $2`, values
+    );
+    const page = result.rows.slice(0, limit);
+    return { items: page.map(pluginRatingFromRow), nextCursor: result.rows.length > limit ? page.at(-1)!.id : null };
+  }
+
+  async upsertPluginRating(actor: AuthenticatedSession, pluginId: string, versionUsed: string, stars: number, review: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const version = await client.query(`SELECT 1 FROM plugin_versions WHERE plugin_id=$1 AND version=$2`, [pluginId, versionUsed]);
+      if (!version.rowCount) throw new DomainError("plugin_review_version_invalid", "The reviewed plugin version does not exist.", 400);
+      const installation = await client.query<{ id: string }>(`SELECT installation.id FROM plugin_installations installation JOIN plugin_versions version ON version.id=installation.plugin_version_id WHERE installation.installed_by=$1 AND version.plugin_id=$2 ORDER BY installation.installed_at DESC LIMIT 1`, [actor.accountId, pluginId]);
+      const purchase = await client.query(`SELECT 1 FROM entitlements WHERE owner_type='personal' AND owner_id=$1 AND plugin_id=$2 AND status NOT IN ('refunded','revoked') LIMIT 1`, [actor.accountId, pluginId]);
+      if (!installation.rowCount && !purchase.rowCount) throw new DomainError("plugin_review_ineligible", "Install or purchase this plugin before leaving a review.", 403);
+      const result = await client.query<PluginRatingRow>(
+        `INSERT INTO plugin_ratings(plugin_id,account_id,installation_id,version_used,stars,review) VALUES($1,$2,$3,$4,$5,$6)
+         ON CONFLICT(plugin_id,account_id) DO UPDATE SET version_used=excluded.version_used,stars=excluded.stars,review=excluded.review,updated_at=now(),moderation_status='visible'
+         RETURNING id,plugin_id,(SELECT display_name FROM accounts WHERE id=$2) AS reviewer_name,version_used,stars,review,developer_response,created_at,updated_at`,
+        [pluginId, actor.accountId, installation.rows[0]?.id ?? null, versionUsed, stars, review]
+      );
+      await client.query(`UPDATE plugin_listings SET rating_average=(SELECT avg(stars) FROM plugin_ratings WHERE plugin_id=$1 AND moderation_status='visible'),rating_count=(SELECT count(*) FROM plugin_ratings WHERE plugin_id=$1 AND moderation_status='visible') WHERE plugin_id=$1`, [pluginId]);
+      return pluginRatingFromRow(result.rows[0]);
+    });
+  }
+
+  async respondToPluginRating(actor: AuthenticatedSession, publisherId: string, pluginId: string, reviewId: string, response: string, correlationId: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      await requirePublisherPermission(client, actor.accountId, publisherId, ["admin", "submit"]);
+      const result = await client.query(`UPDATE plugin_ratings rating SET developer_response=$1,updated_at=now() FROM plugins plugin WHERE rating.id=$2 AND rating.plugin_id=$3 AND plugin.id=rating.plugin_id AND plugin.publisher_id=$4 AND rating.moderation_status='visible'`, [response, reviewId, pluginId, publisherId]);
+      if (!result.rowCount) return false;
+      await appendPlatformAudit(client, actor, "plugin.review_responded", "plugin_rating", reviewId, { pluginId }, correlationId);
+      return true;
+    });
+  }
+
+  async reportPluginRating(actor: AuthenticatedSession, pluginId: string, reviewId: string, reason: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      const rating = await client.query(`SELECT 1 FROM plugin_ratings WHERE id=$1 AND plugin_id=$2 AND moderation_status='visible'`, [reviewId, pluginId]);
+      if (!rating.rowCount) return false;
+      await client.query(`INSERT INTO plugin_rating_reports(rating_id,reported_by,reason,status) VALUES($1,$2,$3,'open') ON CONFLICT(rating_id,reported_by) DO UPDATE SET reason=excluded.reason,status='open',created_at=now(),resolved_at=NULL`, [reviewId, actor.accountId, reason]);
+      return true;
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -1091,6 +1142,12 @@ interface RunSummaryRow { id: string; workspace_id: string; workflow_id: string;
 interface SharedConnectionRow { id: string; workspace_id: string; environment_id: string; provider: string; display_name: string; account_identity: string | null; granted_scopes: string[]; permitted_workflow_ids: string[]; permitted_role_ids: string[]; health: string; expires_at: Date | null; last_used_at: Date | null; created_by: string; approval_requirements: Record<string, unknown> }
 
 interface WebhookEndpointRow { id: string; public_id: string; workspace_id: string; workflow_id: string; signing_secret_ciphertext: Buffer | null; allowed_methods: string[]; schema: Record<string, unknown> | null; maximum_request_bytes: number; rate_limit_per_minute: number; retention_seconds: number; runner_policy: Record<string, unknown>; offline_expiry_seconds: number; redacted_fields: string[]; disabled_at: Date | null }
+
+interface PluginRatingRow { id: string; plugin_id: string; reviewer_name: string; version_used: string; stars: number; review: string; developer_response: string | null; created_at: Date; updated_at: Date }
+
+function pluginRatingFromRow(row: PluginRatingRow) {
+  return { reviewId: row.id, pluginId: row.plugin_id, reviewerName: row.reviewer_name, versionUsed: row.version_used, stars: row.stars, review: row.review, developerResponse: row.developer_response, createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString() };
+}
 
 function webhookEndpointFromRow(row: WebhookEndpointRow): WebhookEndpointRecord {
   if (!row.signing_secret_ciphertext) throw new DomainError("webhook_secret_unavailable", "Webhook endpoint must rotate its signing secret before it can receive events.", 409);
