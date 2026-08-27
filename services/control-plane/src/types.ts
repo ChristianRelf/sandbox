@@ -140,6 +140,9 @@ export interface ControlPlaneRepository {
   upsertPluginRating(actor: AuthenticatedSession, pluginId: string, versionUsed: string, stars: number, review: string): Promise<PluginRatingRecord>;
   respondToPluginRating(actor: AuthenticatedSession, publisherId: string, pluginId: string, reviewId: string, response: string, correlationId: string): Promise<boolean>;
   reportPluginRating(actor: AuthenticatedSession, pluginId: string, reviewId: string, reason: string): Promise<boolean>;
+  updateRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, displayName: string | null, status: "online" | "offline" | "paused" | "draining" | "maintenance" | null, correlationId: string): Promise<RunnerRecord | null>;
+  moveRunner(actor: AuthenticatedSession, sourceWorkspaceId: string, targetWorkspaceId: string, runnerId: string, correlationId: string): Promise<RunnerRecord | null>;
+  rotateRunnerDeviceKey(device: RunnerDeviceSession, keyId: string, publicKeyDerBase64: string): Promise<{ keyId: string }>;
 }
 
 export class DomainError extends Error {

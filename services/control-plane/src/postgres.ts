@@ -1083,6 +1083,49 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async updateRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, displayName: string | null, status: "online" | "offline" | "paused" | "draining" | "maintenance" | null, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const before = await client.query<RunnerRow>(`SELECT id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at FROM runners WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL FOR UPDATE`, [runnerId, workspaceId]);
+      if (!before.rowCount) return null;
+      const result = await client.query<RunnerRow>(
+        `UPDATE runners SET display_name=COALESCE($1,display_name),status=COALESCE($2,status)
+          WHERE id=$3 RETURNING id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at`,
+        [displayName, status, runnerId]
+      );
+      await appendAudit(client, actor, workspaceId, "runner.updated", "runner", runnerId, { displayName: before.rows[0].display_name, status: before.rows[0].status }, { displayName: result.rows[0].display_name, status: result.rows[0].status }, correlationId);
+      return runnerFromRow(result.rows[0]);
+    });
+  }
+
+  async moveRunner(actor: AuthenticatedSession, sourceWorkspaceId: string, targetWorkspaceId: string, runnerId: string, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const target = await client.query(`SELECT 1 FROM workspace_memberships WHERE workspace_id=$1 AND account_id=$2`, [targetWorkspaceId, actor.accountId]);
+      if (!target.rowCount) throw new DomainError("runner_move_target_invalid", "Target workspace is not accessible.", 403);
+      const current = await client.query<{ current_workload: number }>(`SELECT current_workload FROM runners WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL FOR UPDATE`, [runnerId, sourceWorkspaceId]);
+      if (!current.rowCount) return null;
+      if (current.rows[0].current_workload > 0) throw new DomainError("runner_not_drained", "Drain active executions before moving this runner.", 409);
+      const result = await client.query<RunnerRow>(
+        `UPDATE runners SET workspace_id=$1,status='offline' WHERE id=$2 AND workspace_id=$3 AND revoked_at IS NULL
+         RETURNING id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at`,
+        [targetWorkspaceId, runnerId, sourceWorkspaceId]
+      );
+      if (!result.rowCount) return null;
+      await appendAudit(client, actor, sourceWorkspaceId, "runner.moved_out", "runner", runnerId, { workspaceId: sourceWorkspaceId }, { workspaceId: targetWorkspaceId }, correlationId);
+      await appendAudit(client, actor, targetWorkspaceId, "runner.moved_in", "runner", runnerId, { workspaceId: sourceWorkspaceId }, { workspaceId: targetWorkspaceId }, correlationId);
+      return runnerFromRow(result.rows[0]);
+    });
+  }
+
+  async rotateRunnerDeviceKey(device: RunnerDeviceSession, keyId: string, publicKeyDerBase64: string) {
+    return this.withAccount(device.accountId, async client => {
+      const runner = await client.query(`SELECT 1 FROM runners WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL FOR UPDATE`, [device.runnerId, device.workspaceId]);
+      if (!runner.rowCount) throw new DomainError("runner_revoked", "Runner is no longer active.", 403);
+      await client.query(`INSERT INTO runner_device_keys(runner_id,key_id,algorithm,public_key) VALUES($1,$2,'ed25519',decode($3,'base64'))`, [device.runnerId, keyId, publicKeyDerBase64]);
+      await client.query(`UPDATE runner_device_keys SET revoked_at=now() WHERE runner_id=$1 AND key_id<>$2 AND revoked_at IS NULL`, [device.runnerId, keyId]);
+      return { keyId };
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {

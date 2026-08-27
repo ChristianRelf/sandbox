@@ -73,6 +73,9 @@ const webhookEndpointInput = z.object({ workflowId: z.string().uuid(), allowedMe
 const pluginRatingInput = z.object({ versionUsed: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).max(50), stars: z.number().int().min(1).max(5), review: z.string().trim().max(5_000).default("") }).strict();
 const developerResponseInput = z.object({ response: z.string().trim().min(1).max(5_000) }).strict();
 const reviewReportInput = z.object({ reason: z.string().trim().min(10).max(2_000) }).strict();
+const runnerUpdateInput = z.object({ displayName: z.string().trim().min(1).max(100).nullable().default(null), status: z.enum(["offline", "paused", "draining", "maintenance"]).nullable().default(null) }).strict().refine(value => value.displayName !== null || value.status !== null, "At least one runner field must be changed.");
+const runnerMoveInput = z.object({ targetWorkspaceId: z.string().uuid() }).strict();
+const runnerKeyRotationInput = z.object({ keyId: z.string().regex(/^[A-Za-z0-9._-]+$/).max(120), publicKeyDerBase64: z.string().base64().max(256) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -432,10 +435,34 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { revoked: true, localDataDeleted: false };
   });
 
+  app.patch("/v1/workspaces/:workspaceId/runners/:runnerId", async request => {
+    const session = await authenticate(request, dependencies.sessions); requireFreshRequest(request);
+    const { workspaceId, runnerId } = z.object({ workspaceId: z.string().uuid(), runnerId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "runners.manage");
+    const input = runnerUpdateInput.parse(request.body);
+    const runner = await dependencies.repository.updateRunner(session, workspaceId, runnerId, input.displayName, input.status, request.id);
+    if (!runner) throw new DomainError("runner_not_found", "Runner was not found in this workspace.", 404);
+    return { runner };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/runners/:runnerId/move", async request => {
+    const session = await authenticate(request, dependencies.sessions); requireFreshRequest(request);
+    const { workspaceId, runnerId } = z.object({ workspaceId: z.string().uuid(), runnerId: z.string().uuid() }).parse(request.params); const { targetWorkspaceId } = runnerMoveInput.parse(request.body);
+    await authorizer.require(session, workspaceId, "runners.manage"); await authorizer.require(session, targetWorkspaceId, "runners.manage");
+    const runner = await dependencies.repository.moveRunner(session, workspaceId, targetWorkspaceId, runnerId, request.id);
+    if (!runner) throw new DomainError("runner_not_found", "Runner was not found in the source workspace.", 404);
+    return { runner };
+  });
+
   app.post("/v1/runner/heartbeat", async request => {
     const device = await authenticateRunnerDevice(request, dependencies.repository);
     const input = runnerHeartbeatInput.parse(request.body);
     return { runner: await dependencies.repository.recordRunnerHeartbeat(device, input.currentWorkload, input.status) };
+  });
+
+  app.post("/v1/runner/device-key/rotate", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository); const input = runnerKeyRotationInput.parse(request.body); validateEd25519PublicKey(input.publicKeyDerBase64);
+    return dependencies.repository.rotateRunnerDeviceKey(device, input.keyId, input.publicKeyDerBase64);
   });
 
   app.get("/v1/runner/commands", async request => {
