@@ -36,6 +36,7 @@ export interface QueuedExecutionInput {
   correlationId: string;
   queuedAt: Date;
   timeoutAt: Date;
+  runnerPoolId?: string | null;
 }
 
 interface ExecutionRow {
@@ -65,10 +66,10 @@ export class PostgresExecutionCoordinator {
     const requirements = runnerRequirementsSchema.parse(input.requirements);
     if (requirements.workspaceId !== input.workspaceId || requirements.environmentId !== input.environmentId) throw new DomainError("execution_routing_scope_invalid", "Routing requirements must match the execution workspace and environment.");
     const result = await this.pool.query<{ id: string }>(
-      `INSERT INTO executions(id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,trigger_type,trigger_reference,queue_event_id,idempotency_key,status,permission_snapshot_id,plugin_versions,connection_references,routing_requirements,encrypted_payload_reference,correlation_id,queued_at,timeout_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$15,$16,$17,$18)
+      `INSERT INTO executions(id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,trigger_type,trigger_reference,queue_event_id,idempotency_key,status,runner_pool_id,permission_snapshot_id,plugin_versions,connection_references,routing_requirements,encrypted_payload_reference,correlation_id,queued_at,timeout_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$15,$16,$17,$18,$19)
        ON CONFLICT(workspace_id,idempotency_key) DO NOTHING RETURNING id`,
-      [input.executionId,input.workspaceId,input.environmentId,input.deploymentId,input.workflowId,input.workflowRevisionId,input.triggerType,input.triggerReference,input.queueEventId,input.idempotencyKey,input.permissionSnapshotId,JSON.stringify(input.pluginVersions),JSON.stringify(input.connectionReferences),JSON.stringify(requirements),input.encryptedPayloadReference,input.correlationId,input.queuedAt,input.timeoutAt]
+      [input.executionId,input.workspaceId,input.environmentId,input.deploymentId,input.workflowId,input.workflowRevisionId,input.triggerType,input.triggerReference,input.queueEventId,input.idempotencyKey,input.runnerPoolId??null,input.permissionSnapshotId,JSON.stringify(input.pluginVersions),JSON.stringify(input.connectionReferences),JSON.stringify(requirements),input.encryptedPayloadReference,input.correlationId,input.queuedAt,input.timeoutAt]
     );
     if (result.rowCount) return { executionId: result.rows[0].id, created: true };
     const existing = await this.pool.query<{ id: string }>(`SELECT id FROM executions WHERE workspace_id=$1 AND idempotency_key=$2`, [input.workspaceId,input.idempotencyKey]);
@@ -112,7 +113,11 @@ export class PostgresExecutionCoordinator {
         `SELECT execution.id,execution.status,execution.state_version,execution.assigned_runner_id,NULL::uuid active_lease_id,execution.outcome_certainty,execution.workspace_id,execution.environment_id,execution.workflow_revision_id,execution.routing_requirements
          FROM executions execution
          WHERE execution.status IN ('waiting_for_runner','retrying') AND execution.workspace_id=$1 AND execution.environment_id=$2 AND execution.timeout_at>$3
-         ORDER BY execution.queued_at FOR UPDATE SKIP LOCKED LIMIT 25`, [identity.workspaceId, identity.environmentId, now]
+           AND (execution.runner_pool_id IS NULL OR EXISTS(
+             SELECT 1 FROM runner_pool_members member JOIN runner_pools pool ON pool.id=member.pool_id
+             WHERE member.pool_id=execution.runner_pool_id AND member.runner_id=$4 AND member.enabled AND pool.status='active'
+           ))
+         ORDER BY execution.queued_at FOR UPDATE SKIP LOCKED LIMIT 25`, [identity.workspaceId, identity.environmentId, now, identity.runnerId]
       );
       const selected = candidates.rows.find(row => checkRunnerCompatibility(identity, runnerRequirementsSchema.parse(row.routing_requirements)).compatible);
       if (!selected) { await client.query("COMMIT"); return null; }
