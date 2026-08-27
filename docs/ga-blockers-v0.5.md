@@ -1,0 +1,44 @@
+# v0.5.0 GA blocker register
+
+This is the authoritative blocker register for the first GA candidate. `Open` and `Blocked externally` items prevent a GA declaration according to the release criteria below. A passing component test is not substituted for an end-to-end operational exercise.
+
+Severity definitions:
+
+- **Critical**: security, isolation, data-loss, billing-integrity or claimed core execution behaviour that is absent or unsafe. Blocks all GA candidates.
+- **High**: required GA administration, recovery, compatibility or operability control is absent. Blocks stable production release.
+- **Medium**: material supportability or quality gap that may be accepted only as a documented, owned limitation.
+
+| ID | Severity | Owner | Required release | Status | Blocker / acceptance evidence |
+| --- | --- | --- | --- | --- | --- |
+| GA-001 | Critical | Execution | v0.5.0 | Open | Self-hosted agent must poll, verify, claim and execute exact approved revisions, report state, persist idempotency and recover after restart. Current service sends heartbeats only. |
+| GA-002 | Critical | Billing | v0.5.0 | Open | Implement immutable hosted/browser usage records, local-run exclusion and reconciliation to executions/invoice inputs. Reconciliation must pass with duplicate events. |
+| GA-003 | Critical | Security | v0.5.0 | Open | Resolve all external penetration-test criticals and attach retest evidence. No external report is available. |
+| GA-004 | Critical | Security | v0.5.0 | Open | Complete adversarial tenant-isolation review across control plane, runners, artifacts, browser profiles, queues and every v0.5 table. |
+| GA-005 | Critical | Reliability | v0.5.0 | Blocked externally | Restore the latest encrypted production backup into an isolated environment and reconcile application-level counts/hashes. Fresh staging schema restore passed, but is insufficient. |
+| GA-006 | High | Release engineering | v0.5.0 | Open | Align product/package/protocol versions, publish compatibility matrix and eliminate the current mixed 0.3/0.4 metadata. |
+| GA-007 | High | Release engineering | v0.5.0 | In progress | Ensure the default complete suite discovers scheduler, browser-worker, hosted-runner and agent tests; enforce database integrations in CI. |
+| GA-008 | High | Security | v0.5.0 | Blocked on tooling | Run Rust advisory, SBOM, container and supply-chain scans; `cargo-audit` is absent on the audit host. |
+| GA-009 | High | Execution | v0.5.0 | Open | Exercise hosted orchestration with real leases, short-lived workload identity, network policy, cgroup limits, artifact namespace and concurrent cross-tenant workloads. |
+| GA-010 | High | Browser | v0.5.0 | Open | Exercise DNS rebinding/redirect policy, download scanner, encrypted profile store and worker destruction in the target orchestrator. |
+| GA-011 | High | Platform security | v0.5.0 | Open | Consolidate authorisation for every resource/action and enforce environment/token restrictions again at the runner boundary. |
+| GA-012 | High | Identity | v0.5.0 | Open | Add scoped, expiring, hashed personal/service credentials and session/token revocation. |
+| GA-013 | High | API | v0.5.0 | Open | Define compatibility/deprecation policy before publishing stable API; add structured errors, idempotency storage, correlation IDs, rate-limit contract and OpenAPI drift gate. |
+| GA-014 | High | Reliability | v0.5.0 | Open | Add production readiness checks, SLI collection, alerts, synthetic workflows and tested incident/status communication. `/health` currently reports process health only. |
+| GA-015 | High | Reliability | v0.5.0 | Open | Exercise queue recovery, runner-capacity failure, regional recovery and incident lifecycle with an immutable timeline and post-incident report. |
+| GA-016 | High | Support | v0.5.0 | Open | Implement customer-approved, scoped, expiring support access plus redacted diagnostics. No production support-access path exists. |
+| GA-017 | High | Privacy | v0.5.0 | Open | Implement enforceable retention/export/deletion controls and data-classification mapping; current JSON retention metadata is not an enforcement system. |
+| GA-018 | High | Accessibility | v0.5.0 | Open | Complete WCAG 2.2 AA review and provide a keyboard/screen-reader alternative to drag-only graph editing. |
+| GA-019 | High | Release engineering | v0.5.0 | Open | Produce signed desktop, agent and container artifacts with provenance. Existing local packages and audit images are unsigned. |
+| GA-020 | Medium | Frontend | v0.5.0 | Open | Split the oversized desktop bundle or document measured startup impact; current production build emits the existing chunk warning. |
+| GA-021 | Medium | Marketplace | v0.5.0 | Open | Replace object-store/scanner/payout gaps or document them as unavailable; validate full webhook JSON Schema. |
+| GA-022 | Medium | Documentation | v0.5.0 | Open | Publish versioned support matrix, limitations, administration/API/CLI/GitOps/security/runbook documentation with tested commands. |
+
+## Closed evidence
+
+| ID | Closed | Evidence |
+| --- | --- | --- |
+| GA-C01 | 2026-08-27 | All 16 PostgreSQL migrations apply once and are checksum-idempotent. |
+| GA-C02 | 2026-08-27 | Control-plane and scheduler database integration suites pass against clean PostgreSQL 16. |
+| GA-C03 | 2026-08-27 | Fresh staging logical backup restores into an isolated database with matching schema inventory. Production-backup evidence remains GA-005. |
+| GA-C04 | 2026-08-27 | npm production advisory audit reports zero known vulnerabilities. |
+
