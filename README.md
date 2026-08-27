@@ -71,3 +71,9 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Public SDK and CLI: `docs/plugin-sdk.md`
 - Marketplace review: `docs/marketplace-review.md`
 - Baseline compatibility audit: `docs/stage-three-audit.md`
+- Team permissions and publication: `docs/team-permissions.md`
+- Runner pairing and command protocol: `docs/runner-protocol.md`
+- Sync and conflict handling: `docs/sync-and-conflicts.md`
+- v0.2 migration notes: `docs/migration-v0.2-to-v0.3.md`
+- Operations and release commands: `docs/operations-v0.3.md`
+- Security findings and open blockers: `docs/security-review-v0.3.md`, `docs/known-limitations-v0.3.md`

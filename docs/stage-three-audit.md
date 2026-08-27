@@ -174,3 +174,19 @@ These are additive test gaps, not reasons to rewrite the engine, editor, or brow
 ## Decision
 
 No v0.1/v0.2 subsystem requires replacement. Stage three can proceed with additive crates/packages and narrow registry/broker seams. The security gate is the Wasmtime proof: plugin execution will only be enabled after tests demonstrate missing ambient filesystem/process/socket imports, resource limits, host-mediated network enforcement, signature verification, storage isolation, and version pinning.
+
+## Implementation follow-up (2026-08-27)
+
+The Wasmtime security gate passed. The repository now contains the constrained runtime, capability broker, signed deterministic packages, exact workflow pins, SDK/CLI, two production-sandbox examples, desktop free-plugin installation, optional PKCE account flow, encrypted revision sync, publisher/review/marketplace services, team roles and invitations, governed draft approval/publication, per-runner shared connections, protected environment variables, signed runner pairing/commands/presence, encrypted webhook relay, central summaries/audit, Stripe checkout and signed offline entitlements.
+
+Current lightweight verification after the v0.3 work:
+
+- React catalogue tests: 4/4 pass.
+- Browser sidecar tests: 5/5 pass, including managed Chromium automation.
+- Control-plane tests: 29/29 pass at the latest checkpoint.
+- Frontend and control-plane TypeScript production builds pass.
+- The last Rust run before generated artifacts were cleaned passed 47 tests across the app, engine, plugin runtime and examples.
+
+The earlier v0.2 packaged desktop baseline passed. A v0.3 package attempt compiled the frontend and most Rust dependencies but was interrupted by a stale executable lock; the generated 49.3-GiB Rust target was subsequently removed at the user's direction. A v0.3 installer build and smoke test therefore remain a release gate, not a completed claim.
+
+See `security-review-v0.3.md` and `known-limitations-v0.3.md` for blockers that still prevent declaring the entire stage complete.
