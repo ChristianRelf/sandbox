@@ -51,6 +51,7 @@ Local personal workflows bypass organisation identity because they do not use or
 - `service_accounts` references a non-interactive principal and requires at least one human owner.
 - `service_account_role_assignments` bounds workspaces, roles and environments.
 - `access_tokens` stores prefix, HMAC digest, scope, restrictions, expiry, last use and revocation metadata; plaintext is never persisted.
+- `api_idempotency_records` binds caller, key and canonical request hash, and stores the replay response encrypted for 24 hours.
 
 ## Security boundaries
 
@@ -65,5 +66,4 @@ Local personal workflows bypass organisation identity because they do not use or
 
 ## Unfinished joins
 
-The self-hosted agent currently heartbeats but does not execute command payloads. Trusted orchestrator producers are not yet wired to the usage ledger. Public API compatibility, idempotency middleware, OpenAPI generation, SSO/SCIM and event export follow the ordered v0.5 plan. These are blockers or planned foundations, not placeholder product claims.
-
+The self-hosted agent currently heartbeats but does not execute command payloads. Trusted orchestrator producers are not yet wired to the usage ledger. The v1 API now has transport-level compatibility, idempotency and OpenAPI route contracts, but complete resource schemas remain unfinished. SSO/SCIM and event export follow later in the ordered v0.5 plan. These are blockers or planned foundations, not placeholder product claims.

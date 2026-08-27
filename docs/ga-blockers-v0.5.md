@@ -22,7 +22,7 @@ Severity definitions:
 | GA-010 | High | Browser | v0.5.0 | Open | Exercise DNS rebinding/redirect policy, download scanner, encrypted profile store and worker destruction in the target orchestrator. |
 | GA-011 | High | Platform security | v0.5.0 | Open | Consolidate authorisation for every resource/action and enforce environment/token restrictions again at the runner boundary. |
 | GA-012 | High | Identity | v0.5.0 | In progress | Workspace service principals and scoped, expiring, HMAC-hashed personal/service tokens are implemented with immediate revocation, human ownership, RLS and non-interactive login enforcement. Add organisation-wide assignment, client assertions, expiry notifications and access reviews before closure. |
-| GA-013 | High | API | v0.5.0 | Open | Define compatibility/deprecation policy before publishing stable API; add structured errors, idempotency storage, correlation IDs, rate-limit contract and OpenAPI drift gate. |
+| GA-013 | High | API | v0.5.0 | In progress | Compatibility/deprecation and rate-limit policies, structured transport errors, correlation IDs, encrypted 24-hour PostgreSQL idempotency replay, live OpenAPI route inventory and a checked-in drift gate are implemented. Complete resource request/response schemas and SDK compatibility tests before closure. |
 | GA-014 | High | Reliability | v0.5.0 | Open | Add production readiness checks, SLI collection, alerts, synthetic workflows and tested incident/status communication. `/health` currently reports process health only. |
 | GA-015 | High | Reliability | v0.5.0 | Open | Exercise queue recovery, runner-capacity failure, regional recovery and incident lifecycle with an immutable timeline and post-incident report. |
 | GA-016 | High | Support | v0.5.0 | Open | Implement customer-approved, scoped, expiring support access plus redacted diagnostics. No production support-access path exists. |
@@ -37,7 +37,8 @@ Severity definitions:
 
 | ID | Closed | Evidence |
 | --- | --- | --- |
-| GA-C01 | 2026-08-27 | All 16 PostgreSQL migrations apply once and are checksum-idempotent. |
+| GA-C01 | 2026-08-28 | All 19 PostgreSQL migrations apply once and are checksum-idempotent. |
 | GA-C02 | 2026-08-27 | Control-plane and scheduler database integration suites pass against clean PostgreSQL 16. |
 | GA-C03 | 2026-08-27 | Fresh staging logical backup restores into an isolated database with matching schema inventory. Production-backup evidence remains GA-005. |
 | GA-C04 | 2026-08-27 | npm production advisory audit reports zero known vulnerabilities. |
+| GA-C05 | 2026-08-28 | API contract tests prove structured transport errors, correlation propagation, rate-limit responses, exact idempotent replay and mutation rejection; PostgreSQL integration confirms replay bodies are encrypted at rest. |

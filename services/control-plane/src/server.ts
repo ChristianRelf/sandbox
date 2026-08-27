@@ -13,6 +13,7 @@ import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } fr
 import { DomainError } from "./types.js";
 import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
 import type { CredentialAdministration } from "./credentials.js";
+import { apiActorScope, apiRequestHash, buildOpenApiDocument, type ApiIdempotencyStore, type ApiRouteDescription } from "./api_contract.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -95,15 +96,41 @@ export interface ApiDependencies {
   webhookProtector?: WebhookProtector;
   protectedValueProtector?: WebhookProtector;
   credentialService?: CredentialAdministration;
+  idempotencyStore?: ApiIdempotencyStore;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
 }
 
+const documentedRoutes = new WeakMap<FastifyInstance, ApiRouteDescription[]>();
+
+export function getOpenApiDocument(app: FastifyInstance): Record<string, unknown> {
+  return buildOpenApiDocument(documentedRoutes.get(app) ?? []);
+}
+
 export async function createServer(dependencies: ApiDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","res.headers.set-cookie","body.token"] } : false, trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
-  await app.register(rateLimit, { max: 240, timeWindow: "1 minute", keyGenerator: request => request.ip });
+  const app = Fastify({
+    logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","res.headers.set-cookie","body.token"] } : false,
+    trustProxy: true,
+    bodyLimit: 2 * 1024 * 1024,
+    genReqId: request => {
+      const supplied = request.headers["x-correlation-id"];
+      return typeof supplied === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(supplied) ? supplied : randomUUID();
+    }
+  });
+  const routes: ApiRouteDescription[] = [];
+  documentedRoutes.set(app, routes);
+  app.addHook("onRoute", options => {
+    for (const method of Array.isArray(options.method) ? options.method : [options.method]) routes.push({ method: method.toUpperCase(), url: options.url });
+  });
+  await app.register(rateLimit, {
+    max: 240,
+    timeWindow: "1 minute",
+    keyGenerator: request => request.ip,
+    errorResponseBuilder: (_request, context) => ({ statusCode: context.statusCode, code: "FST_RATE_LIMIT" })
+  });
   const authorizer = new Authorizer(dependencies.repository);
+  const idempotencyContexts = new WeakMap<FastifyRequest, { scope: string; key: string; ownerToken: string }>();
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof DomainError) {
@@ -111,7 +138,14 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       return;
     }
     if (error instanceof z.ZodError) {
-      void reply.status(400).send({ error: { code: "invalid_request", message: z.prettifyError(error) }, correlationId: request.id });
+      void reply.status(400).send({ error: { code: "invalid_request", message: "The request did not match the API contract.", details: error.issues.map(issue => ({ path: issue.path.join("."), code: issue.code, message: issue.message })) }, correlationId: request.id });
+      return;
+    }
+    const transportError = error as { statusCode?: number; code?: string };
+    if (transportError.statusCode && transportError.statusCode >= 400 && transportError.statusCode < 500) {
+      const code = transportError.statusCode === 429 ? "rate_limit_exceeded" : transportError.code === "FST_ERR_CTP_INVALID_JSON_BODY" ? "invalid_json" : "request_rejected";
+      const message = code === "invalid_json" ? "The request body must be valid JSON." : transportError.statusCode === 429 ? "The request rate limit was exceeded." : "The request could not be accepted.";
+      void reply.status(transportError.statusCode).send({ error: { code, message }, correlationId: request.id });
       return;
     }
     request.log.error(error);
@@ -119,6 +153,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   });
 
   app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("x-correlation-id", _request.id);
     reply.header("cache-control", "no-store");
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "no-referrer");
@@ -126,7 +161,57 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return payload;
   });
 
+  app.addHook("preHandler", async (request, reply) => {
+    const store = dependencies.idempotencyStore;
+    if (!store || !request.url.startsWith("/v1/") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
+    const key = request.headers["idempotency-key"];
+    if (key === undefined) return;
+    if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) throw new DomainError("idempotency_key_invalid", "Idempotency-Key must contain 16 to 200 safe ASCII characters.", 400);
+    const authorization = typeof request.headers.authorization === "string" ? request.headers.authorization : undefined;
+    const runnerId = typeof request.headers["x-sandbox-runner-id"] === "string" ? request.headers["x-sandbox-runner-id"] : undefined;
+    const scope = apiActorScope(authorization, runnerId, request.ip);
+    const requestHash = apiRequestHash(request.method, request.url, typeof request.headers["content-type"] === "string" ? request.headers["content-type"] : undefined, request.body);
+    const claim = await store.claim(scope, key, requestHash);
+    if (claim.outcome === "conflict") throw new DomainError("idempotency_key_reused", "This idempotency key was already used for a different request.", 409);
+    if (claim.outcome === "in_progress") {
+      reply.header("retry-after", "1");
+      throw new DomainError("idempotency_request_in_progress", "An identical request with this idempotency key is still in progress.", 409);
+    }
+    if (claim.outcome === "replay") {
+      reply.header("idempotency-replayed", "true");
+      if (claim.response.contentType) reply.header("content-type", claim.response.contentType);
+      if (claim.response.location) reply.header("location", claim.response.location);
+      return reply.status(claim.response.statusCode).send(claim.response.body);
+    }
+    idempotencyContexts.set(request, { scope, key, ownerToken: claim.ownerToken });
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const context = idempotencyContexts.get(request);
+    if (!context || !dependencies.idempotencyStore) return payload;
+    idempotencyContexts.delete(request);
+    if (reply.statusCode >= 500) {
+      await dependencies.idempotencyStore.abandon(context.scope, context.key, context.ownerToken);
+      return payload;
+    }
+    try {
+      const serialized = Buffer.isBuffer(payload) ? payload.toString("utf8") : typeof payload === "string" ? payload : String(payload);
+      const body = serialized.length ? JSON.parse(serialized) as unknown : null;
+      await dependencies.idempotencyStore.complete(context.scope, context.key, context.ownerToken, {
+        statusCode: reply.statusCode,
+        body,
+        contentType: typeof reply.getHeader("content-type") === "string" ? String(reply.getHeader("content-type")) : null,
+        location: typeof reply.getHeader("location") === "string" ? String(reply.getHeader("location")) : null
+      });
+    } catch (error) {
+      await dependencies.idempotencyStore.abandon(context.scope, context.key, context.ownerToken);
+      throw error;
+    }
+    return payload;
+  });
+
   app.get("/health", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async () => ({ status: "ok", service: "sandbox-control-plane", execution: "local-only" }));
+  app.get("/v1/openapi.json", async () => getOpenApiDocument(app));
 
   app.get("/v1/marketplace/plugins", async request => {
     const query = marketplaceQuery.parse(request.query);

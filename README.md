@@ -71,6 +71,8 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 
 - Current architecture and security boundaries: `docs/architecture-v0.5.md`
 - Authoritative release blocker register: `docs/ga-blockers-v0.5.md`
+- Stable API, idempotency, rate-limit and deprecation policy: `docs/api-policy-v0.5.md`
+- Machine-readable v1 route contract: `docs/api/openapi-v1.json`
 - Stage-five baseline audit: `docs/stage-five-audit.md`
 
 ## Historical stage-three documentation

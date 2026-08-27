@@ -7,6 +7,7 @@ import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector, webhookSignature } from "./webhook_crypto.js";
 import type { CredentialAdministration } from "./credentials.js";
+import { MemoryApiIdempotencyStore } from "./api_contract.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -56,6 +57,41 @@ function dependencies(permissions: string[]) {
 }
 
 describe("control-plane API", () => {
+  it("returns stable structured transport errors and correlation headers",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);
+    const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","content-type":"application/json","x-correlation-id":"client-correlation-0001"},payload:'{"broken":'});
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-correlation-id"]).toBe("client-correlation-0001");
+    expect(response.json()).toEqual({error:{code:"invalid_json",message:"The request body must be valid JSON."},correlationId:"client-correlation-0001"});
+    await server.close();
+  });
+
+  it("replays identical mutating requests and rejects idempotency-key mutation",async()=>{
+    const deps={...dependencies(["members.manage"]),idempotencyStore:new MemoryApiIdempotencyStore()};
+    const server=await createServer(deps);const key="invitation-request-0001";
+    const request={method:"POST" as const,url:`/v1/workspaces/${workspaceId}/invitations`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString(),"idempotency-key":key},payload:{email:"developer@example.com",role:"developer",workspaceIds:[workspaceId],expiresInHours:24}};
+    const first=await server.inject(request);const replay=await server.inject(request);
+    expect(first.statusCode,first.body).toBe(200);expect(replay.statusCode,replay.body).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");expect(replay.json()).toEqual(first.json());
+    expect(deps.repository.createInvitation).toHaveBeenCalledTimes(1);expect(deps.email.sendInvitation).toHaveBeenCalledTimes(1);
+    const conflict=await server.inject({...request,payload:{...request.payload,email:"different@example.com"}});
+    expect(conflict.statusCode).toBe(409);expect(conflict.json().error.code).toBe("idempotency_key_reused");
+    await server.close();
+  });
+
+  it("publishes rate-limit headers and the machine-readable v1 route contract",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);
+    const health=await server.inject({method:"GET",url:"/health"});
+    expect(health.headers["x-ratelimit-limit"]).toBe("60");expect(health.headers["x-correlation-id"]).toBeTruthy();
+    let limited=health;
+    for(let index=1;index<=60;index+=1)limited=await server.inject({method:"GET",url:"/health"});
+    expect(limited.statusCode,limited.body).toBe(429);expect(limited.headers["retry-after"]).toBeTruthy();expect(limited.json()).toMatchObject({error:{code:"rate_limit_exceeded"},correlationId:expect.any(String)});
+    const contract=await server.inject({method:"GET",url:"/v1/openapi.json"});
+    expect(contract.statusCode,contract.body).toBe(200);
+    expect(contract.json()).toMatchObject({openapi:"3.1.0",info:{version:"0.5.0"},paths:{"/v1/personal-access-tokens":{get:expect.any(Object),post:expect.any(Object)}}});
+    await server.close();
+  });
+
   it("shows a newly issued personal token once and never asks the credential service to persist plaintext",async()=>{
     const deps=dependencies([]);const organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     vi.mocked(deps.credentialService.issuePersonalToken).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"CI",prefix:"sbx_pat_abcdefghijkl",token:"sbx_pat_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86_400_000).toISOString()});

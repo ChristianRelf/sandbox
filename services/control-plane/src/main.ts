@@ -9,6 +9,7 @@ import { StripeBillingProvider } from "./billing.js";
 import { Ed25519EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector } from "./webhook_crypto.js";
 import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
+import { PostgresApiIdempotencyStore } from "./api_contract.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -26,6 +27,8 @@ const pool = new Pool({
 
 const oidcSessions=new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") });
 const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"));
+const webhookProtector=new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"),"base64"));
+const idempotencyProtector=new WebhookProtector(Buffer.from(required("API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64"),"base64"));
 
 const server = await createServer({
   repository: new PostgresRepository(pool),
@@ -37,7 +40,8 @@ const server = await createServer({
   runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
   entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
-  webhookProtector: new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"), "base64")),
+  webhookProtector,
+  idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   protectedValueProtector: new WebhookProtector(Buffer.from(required("PROTECTED_VALUE_ENCRYPTION_KEY_BASE64"), "base64")),
   webhookBaseUrl: required("CONTROL_PLANE_PUBLIC_URL"),
   webBaseUrl: required("WEB_BASE_URL"),

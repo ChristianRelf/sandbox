@@ -9,7 +9,9 @@
     "migrate": "tsx src/migrate.ts",
     "build": "npm run build --workspace @sandbox/contracts && tsc -p tsconfig.json",
     "start": "node dist/main.js",
-    "test": "vitest run"
+    "test": "vitest run && npm run openapi:check",
+    "openapi:generate": "tsx scripts/generate-openapi.ts",
+    "openapi:check": "tsx scripts/generate-openapi.ts --check"
   },
   "dependencies": {
     "@fastify/rate-limit": "^10.3.0",
