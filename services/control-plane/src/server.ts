@@ -55,6 +55,7 @@ const governancePolicyValueSchemas = {
   screenshot_upload: z.boolean(), remote_execution: z.boolean(), webhook_retention_seconds: z.number().int().min(60).max(604_800)
 } as const;
 const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governancePolicyValueSchemas) as [keyof typeof governancePolicyValueSchemas, ...(keyof typeof governancePolicyValueSchemas)[]]), policyValue: z.unknown() });
+const memberRoleInput = z.object({ role: z.enum(["owner", "administrator", "developer", "operator", "viewer"]) });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -209,6 +210,42 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     requireFreshRequest(request);
     const input = acceptInvitationInput.parse(request.body);
     return dependencies.repository.acceptInvitation(session, input.token, request.id);
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/invitations/:invitationId", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, invitationId } = z.object({ workspaceId: z.string().uuid(), invitationId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "members.manage");
+    const revoked = await dependencies.repository.revokeInvitation(session, workspaceId, invitationId, request.id);
+    if (!revoked) throw new DomainError("invitation_not_found", "Pending invitation not found in this workspace.", 404);
+    return { revoked: true };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/members", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listWorkspaceMembers(session, workspaceId) };
+  });
+
+  app.put("/v1/workspaces/:workspaceId/members/:accountId/role", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, accountId } = z.object({ workspaceId: z.string().uuid(), accountId: z.string().uuid() }).parse(request.params);
+    const { role } = memberRoleInput.parse(request.body);
+    await authorizer.require(session, workspaceId, role === "owner" ? "organisation.owners.manage" : "members.manage");
+    return { member: await dependencies.repository.updateWorkspaceMemberRole(session, workspaceId, accountId, role, request.id) };
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/members/:accountId", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, accountId } = z.object({ workspaceId: z.string().uuid(), accountId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "members.manage");
+    const removed = await dependencies.repository.removeWorkspaceMember(session, workspaceId, accountId, request.id);
+    if (!removed) throw new DomainError("member_not_found", "Member was not found in this workspace.", 404);
+    return { removed: true };
   });
 
   app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {

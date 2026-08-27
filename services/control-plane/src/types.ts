@@ -62,6 +62,7 @@ export interface RunnerCommandInput {
 }
 export interface WorkflowApprovalRecord { approvalId: string; workflowId: string; revisionId: string; status: "pending" | "approved" | "rejected" | "expired"; requiredApprovals: number; approvalCount: number; createdAt: string }
 export type GovernancePolicies = Record<string, unknown>;
+export interface WorkspaceMemberRecord { accountId: string; email: string; displayName: string; role: BuiltInRole; joinedAt: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -100,6 +101,10 @@ export interface ControlPlaneRepository {
   rollbackWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, reason: string, correlationId: string): Promise<{ workflowId: string; publishedRevisionId: string; previousPublishedRevisionId: string | null }>;
   getGovernancePolicies(actor: AuthenticatedSession, workspaceId: string): Promise<GovernancePolicies>;
   setGovernancePolicy(actor: AuthenticatedSession, workspaceId: string, policyKey: string, policyValue: unknown, correlationId: string): Promise<{ policyKey: string; policyValue: unknown }>;
+  listWorkspaceMembers(actor: AuthenticatedSession, workspaceId: string): Promise<WorkspaceMemberRecord[]>;
+  updateWorkspaceMemberRole(actor: AuthenticatedSession, workspaceId: string, accountId: string, role: BuiltInRole, correlationId: string): Promise<WorkspaceMemberRecord>;
+  removeWorkspaceMember(actor: AuthenticatedSession, workspaceId: string, accountId: string, correlationId: string): Promise<boolean>;
+  revokeInvitation(actor: AuthenticatedSession, workspaceId: string, invitationId: string, correlationId: string): Promise<boolean>;
 }
 
 export class DomainError extends Error {

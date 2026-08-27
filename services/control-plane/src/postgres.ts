@@ -648,6 +648,59 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async listWorkspaceMembers(actor: AuthenticatedSession, workspaceId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{ account_id: string; primary_email: string; display_name: string; role_key: BuiltInRole; joined_at: Date }>(
+        `SELECT a.id AS account_id,a.primary_email,a.display_name,r.role_key,m.joined_at
+           FROM workspace_memberships wm JOIN accounts a ON a.id=wm.account_id JOIN roles r ON r.id=wm.role_id
+           JOIN memberships m ON m.account_id=wm.account_id AND m.organisation_id=r.organisation_id AND m.status='active'
+          WHERE wm.workspace_id=$1 ORDER BY a.display_name,a.id`, [workspaceId]
+      );
+      return result.rows.map(row => ({ accountId: row.account_id, email: row.primary_email, displayName: row.display_name, role: row.role_key, joinedAt: row.joined_at.toISOString() }));
+    });
+  }
+
+  async updateWorkspaceMemberRole(actor: AuthenticatedSession, workspaceId: string, accountId: string, role: BuiltInRole, correlationId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const member = await client.query<{ organisation_id: string; previous_role: BuiltInRole; primary_email: string; display_name: string; joined_at: Date }>(
+        `SELECT w.organisation_id,r.role_key AS previous_role,a.primary_email,a.display_name,m.joined_at
+           FROM workspace_memberships wm JOIN workspaces w ON w.id=wm.workspace_id JOIN roles r ON r.id=wm.role_id JOIN accounts a ON a.id=wm.account_id
+           JOIN memberships m ON m.account_id=wm.account_id AND m.organisation_id=w.organisation_id AND m.status='active'
+          WHERE wm.workspace_id=$1 AND wm.account_id=$2 FOR UPDATE`, [workspaceId, accountId]
+      );
+      if (!member.rowCount) throw new DomainError("member_not_found", "Member was not found in this workspace.", 404);
+      const selectedRole = await client.query<{ id: string }>(`SELECT id FROM roles WHERE organisation_id=$1 AND role_key=$2 AND built_in`, [member.rows[0].organisation_id, role]);
+      if (!selectedRole.rowCount) throw new DomainError("role_not_found", "Role is unavailable for this organisation.", 400);
+      await client.query(`UPDATE workspace_memberships SET role_id=$1 WHERE workspace_id=$2 AND account_id=$3`, [selectedRole.rows[0].id, workspaceId, accountId]);
+      await appendAudit(client, actor, workspaceId, "member.role_changed", "member", accountId, { role: member.rows[0].previous_role }, { role }, correlationId);
+      return { accountId, email: member.rows[0].primary_email, displayName: member.rows[0].display_name, role, joinedAt: member.rows[0].joined_at.toISOString() };
+    });
+  }
+
+  async removeWorkspaceMember(actor: AuthenticatedSession, workspaceId: string, accountId: string, correlationId: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      const member = await client.query<{ role_key: BuiltInRole }>(`SELECT r.role_key FROM workspace_memberships wm JOIN roles r ON r.id=wm.role_id WHERE wm.workspace_id=$1 AND wm.account_id=$2 FOR UPDATE`, [workspaceId, accountId]);
+      if (!member.rowCount) return false;
+      if (member.rows[0].role_key === "owner") throw new DomainError("owner_transfer_required", "Transfer or remove organisation ownership before removing this owner from the workspace.", 409);
+      await client.query(`DELETE FROM workspace_memberships WHERE workspace_id=$1 AND account_id=$2`, [workspaceId, accountId]);
+      await appendAudit(client, actor, workspaceId, "member.removed", "member", accountId, { role: member.rows[0].role_key }, null, correlationId);
+      return true;
+    });
+  }
+
+  async revokeInvitation(actor: AuthenticatedSession, workspaceId: string, invitationId: string, correlationId: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query(
+        `UPDATE invitations invitation SET status='revoked',revoked_at=now()
+          WHERE invitation.id=$1 AND invitation.status='pending' AND EXISTS(SELECT 1 FROM invitation_workspaces iw WHERE iw.invitation_id=invitation.id AND iw.workspace_id=$2)`,
+        [invitationId, workspaceId]
+      );
+      if (!result.rowCount) return false;
+      await appendAudit(client, actor, workspaceId, "member.invitation_revoked", "invitation", invitationId, null, { revoked: true }, correlationId);
+      return true;
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {

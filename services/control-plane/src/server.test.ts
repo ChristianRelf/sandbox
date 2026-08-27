@@ -32,7 +32,7 @@ function dependencies(permissions: string[]) {
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
-    getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn()
+    getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -216,6 +216,15 @@ describe("control-plane API", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toMatch(/remote_execution.*administrator.*local runner/i);
     expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("requires the distinct owner-management permission when assigning an owner", async () => {
+    const deps = dependencies(["members.manage"]);
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "PUT", url: `/v1/workspaces/${workspaceId}/members/33333333-3333-4333-8333-333333333333/role`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { role: "owner" } });
+    expect(response.statusCode).toBe(403);
+    expect(deps.repository.updateWorkspaceMemberRole).not.toHaveBeenCalled();
     await server.close();
   });
 });
