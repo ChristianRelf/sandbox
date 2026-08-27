@@ -37,6 +37,10 @@ pub struct PluginNodePin {
     pub plugin_version: String,
     pub package_integrity: String,
     pub publisher_id: String,
+    /// Friendly manifest references mapped to opaque host connection IDs. The
+    /// referenced secret remains in the operating-system credential store.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub credential_references: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -71,6 +75,10 @@ pub struct InstalledPlugin {
     pub package_integrity: String,
     pub publisher_id: String,
     pub publisher_key_id: String,
+    /// Public verification material retained so every execution can re-check
+    /// the immutable package instead of trusting installation-time state.
+    #[serde(skip, default)]
+    pub publisher_public_key_pem: Option<String>,
     pub owner_type: String,
     pub owner_id: String,
     pub source: String,

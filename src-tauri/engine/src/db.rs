@@ -77,6 +77,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/005_plugin_installations.sql"))
                 .map_err(storage)?;
         }
+        if version < 6 {
+            connection
+                .execute_batch(include_str!("../migrations/006_plugin_execution.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         Ok(())
     }
@@ -149,7 +154,7 @@ impl Database {
             .lock()
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .execute(
-                "INSERT INTO installed_plugins(plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO installed_plugins(plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at,publisher_public_key_pem) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 params![
                     plugin.plugin_id,
                     plugin.version,
@@ -168,6 +173,7 @@ impl Database {
                     plugin.package_path,
                     plugin.installed_at.to_rfc3339(),
                     plugin.updated_at.to_rfc3339(),
+                    plugin.publisher_public_key_pem,
                 ],
             )
             .map_err(storage)?;
@@ -184,7 +190,7 @@ impl Database {
             .lock()
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
         let mut statement = connection
-            .prepare("SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at FROM installed_plugins WHERE owner_type=? AND owner_id=? ORDER BY plugin_id,installed_at DESC")
+            .prepare("SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at,publisher_public_key_pem FROM installed_plugins WHERE owner_type=? AND owner_id=? ORDER BY plugin_id,installed_at DESC")
             .map_err(storage)?;
         let values = statement
             .query_map(params![owner_type, owner_id], parse_installed_plugin)
@@ -206,7 +212,7 @@ impl Database {
             .lock()
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .query_row(
-                "SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at FROM installed_plugins WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=?",
+                "SELECT plugin_id,version,package_integrity,publisher_id,publisher_key_id,owner_type,owner_id,source,development,state,manifest_json,requested_permissions_json,approved_permissions_json,update_requires_review,package_path,installed_at,updated_at,publisher_public_key_pem FROM installed_plugins WHERE plugin_id=? AND version=? AND package_integrity=? AND owner_type=? AND owner_id=?",
                 params![plugin_id, version, integrity, owner_type, owner_id],
                 parse_installed_plugin,
             )
@@ -385,6 +391,139 @@ impl Database {
                 )));
             }
         }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn plugin_storage_get(
+        &self,
+        plugin_id: &str,
+        publisher_id: &str,
+        owner_id: &str,
+        workspace_id: &str,
+        major_version: u64,
+        temporary_execution_id: &str,
+        key: &str,
+    ) -> Result<Option<Vec<u8>>, EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT value FROM plugin_storage WHERE plugin_id=? AND publisher_id=? AND owner_id=? AND workspace_id=? AND major_version=? AND temporary_execution_id=? AND storage_key=?",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id, key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn plugin_storage_put(
+        &self,
+        plugin_id: &str,
+        publisher_id: &str,
+        owner_id: &str,
+        workspace_id: &str,
+        major_version: u64,
+        temporary_execution_id: &str,
+        key: &str,
+        value: &[u8],
+        quota: u64,
+    ) -> Result<(), EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let used: u64 = transaction
+            .query_row(
+                "SELECT COALESCE(SUM(length(value)),0) FROM plugin_storage WHERE plugin_id=? AND publisher_id=? AND owner_id=? AND workspace_id=? AND major_version=? AND temporary_execution_id=?",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(storage)?
+            .max(0) as u64;
+        let previous: u64 = transaction
+            .query_row(
+                "SELECT length(value) FROM plugin_storage WHERE plugin_id=? AND publisher_id=? AND owner_id=? AND workspace_id=? AND major_version=? AND temporary_execution_id=? AND storage_key=?",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id, key],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(storage)?
+            .unwrap_or(0)
+            .max(0) as u64;
+        let next = used
+            .saturating_sub(previous)
+            .saturating_add(value.len() as u64);
+        if next > quota {
+            return Err(EngineError::Storage(format!(
+                "Plugin storage quota of {quota} bytes would be exceeded."
+            )));
+        }
+        transaction
+            .execute(
+                "INSERT INTO plugin_storage(plugin_id,publisher_id,owner_id,workspace_id,major_version,temporary_execution_id,storage_key,value,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(plugin_id,publisher_id,owner_id,workspace_id,major_version,temporary_execution_id,storage_key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id, key, value, Utc::now().to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn plugin_storage_delete(
+        &self,
+        plugin_id: &str,
+        publisher_id: &str,
+        owner_id: &str,
+        workspace_id: &str,
+        major_version: u64,
+        temporary_execution_id: &str,
+        key: &str,
+    ) -> Result<(), EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "DELETE FROM plugin_storage WHERE plugin_id=? AND publisher_id=? AND owner_id=? AND workspace_id=? AND major_version=? AND temporary_execution_id=? AND storage_key=?",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id, key],
+            )
+            .map_err(storage)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn plugin_storage_used_bytes(
+        &self,
+        plugin_id: &str,
+        publisher_id: &str,
+        owner_id: &str,
+        workspace_id: &str,
+        major_version: u64,
+        temporary_execution_id: &str,
+    ) -> Result<u64, EngineError> {
+        let used = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT COALESCE(SUM(length(value)),0) FROM plugin_storage WHERE plugin_id=? AND publisher_id=? AND owner_id=? AND workspace_id=? AND major_version=? AND temporary_execution_id=?",
+                params![plugin_id, publisher_id, owner_id, workspace_id, major_version, temporary_execution_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(storage)?;
+        Ok(used.max(0) as u64)
+    }
+
+    pub fn clear_temporary_plugin_storage(&self, execution_id: &str) -> Result<(), EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "DELETE FROM plugin_storage WHERE temporary_execution_id=?",
+                [execution_id],
+            )
+            .map_err(storage)?;
         Ok(())
     }
 
@@ -1070,6 +1209,7 @@ fn parse_installed_plugin(row: &rusqlite::Row) -> rusqlite::Result<InstalledPlug
         package_integrity: row.get(2)?,
         publisher_id: row.get(3)?,
         publisher_key_id: row.get(4)?,
+        publisher_public_key_pem: row.get(17)?,
         owner_type: row.get(5)?,
         owner_id: row.get(6)?,
         source: row.get(7)?,
@@ -1201,7 +1341,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 5);
+            assert_eq!(db.schema_version().unwrap(), 6);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
