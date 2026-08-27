@@ -24,6 +24,8 @@ export const permissions = [
   "workflows.pause",
   "workflows.publish",
   "workflows.approve",
+  "deployments.manage",
+  "deployments.promote",
   "workflows.view",
   "executions.view_summary",
   "executions.view_detail",
@@ -37,7 +39,7 @@ export type BuiltInRole = "owner" | "administrator" | "developer" | "operator" |
 
 export const rolePermissionMatrix: Readonly<Record<BuiltInRole, readonly Permission[]>> = {
   owner: permissions,
-  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
+  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
   developer: ["plugins.develop_private", "plugins.permissions.request", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.view", "executions.view_summary"],
   operator: ["connections.use", "workflows.run", "workflows.pause", "workflows.view", "executions.view_summary", "approvals.handle"],
   viewer: ["workflows.view", "executions.view_summary"]
@@ -379,6 +381,61 @@ export function checkRunnerCompatibility(identity: RunnerIdentity, requirements:
   }
   return { compatible: reasons.length === 0, reasons };
 }
+
+export const environmentKeySchema = z.enum(["development", "staging", "production"]);
+export type EnvironmentKey = z.infer<typeof environmentKeySchema>;
+
+export const executionTargetSchema = z.enum(["this_computer", "paired_desktop", "managed_cloud_runner", "managed_browser_worker", "self_hosted_server", "nas_or_raspberry_pi", "runner_pool"]);
+export type ExecutionTarget = z.infer<typeof executionTargetSchema>;
+
+export const deploymentStatusSchema = z.enum(["draft", "validating", "awaiting_approval", "deploying", "active", "degraded", "paused", "failed", "superseded", "rolled_back"]);
+export type DeploymentStatus = z.infer<typeof deploymentStatusSchema>;
+
+export const usageEstimateSchema = z.object({
+  periodDays: z.number().int().min(1).max(366),
+  expectedExecutions: z.number().int().nonnegative(),
+  hostedExecutionSeconds: z.number().nonnegative(),
+  browserWorkerSeconds: z.number().nonnegative(),
+  expectedConcurrentExecutions: z.number().int().nonnegative(),
+  retryMultiplier: z.number().min(1).max(100),
+  confidence: z.enum(["low", "medium", "high"]),
+  basis: z.array(z.string().min(1).max(500)).max(50),
+  disclaimer: z.literal("Estimate only; actual usage and cost may differ.")
+}).strict();
+export type UsageEstimate = z.infer<typeof usageEstimateSchema>;
+
+export const deploymentRecordSchema = z.object({
+  deploymentId: idSchema,
+  workspaceId: idSchema,
+  workflowId: idSchema,
+  workflowRevisionId: idSchema,
+  environmentId: idSchema,
+  environment: environmentKeySchema,
+  target: executionTargetSchema,
+  targetRunnerId: idSchema.nullable(),
+  runnerPoolId: idSchema.nullable(),
+  region: z.string().min(1).max(80),
+  requiredConnectionIds: z.array(idSchema).max(1_000),
+  requiredPlugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  permissionSnapshotId: idSchema,
+  status: deploymentStatusSchema,
+  validation: z.record(z.string(), z.unknown()),
+  usageEstimate: usageEstimateSchema,
+  createdBy: idSchema,
+  createdAt: z.string().datetime(),
+  activatedAt: z.string().datetime().nullable(),
+  supersedesDeploymentId: idSchema.nullable()
+}).strict();
+export type DeploymentRecord = z.infer<typeof deploymentRecordSchema>;
+
+export const deploymentValidationIssueSchema = z.object({
+  code: z.string().min(1).max(120),
+  severity: z.enum(["error", "warning", "info"]),
+  message: z.string().min(1).max(1_000),
+  nodeId: z.string().max(200).nullable(),
+  resourceId: z.string().max(200).nullable()
+}).strict();
+export type DeploymentValidationIssue = z.infer<typeof deploymentValidationIssueSchema>;
 
 export const runSummarySchema = z.object({
   id: idSchema,
