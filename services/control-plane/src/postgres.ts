@@ -482,7 +482,8 @@ export class PostgresRepository implements ControlPlaneRepository {
       }
       const metadata = result.rows[0].metadata;
       const runnerId = randomUUID();
-      const keyId = `device-${randomUUID()}`;
+      // The freshly paired runner derives this identifier from its returned ID.
+      const keyId = `device-${runnerId}`;
       const inserted = await client.query<{ paired_at: Date }>(
         `INSERT INTO runners(id,account_id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'offline') RETURNING paired_at`,
