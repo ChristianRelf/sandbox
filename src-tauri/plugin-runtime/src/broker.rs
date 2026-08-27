@@ -851,6 +851,11 @@ mod tests {
             .approved_capabilities
             .insert("credential_operations:gmail".into());
         context
+            .approved_credential_operations
+            .entry("gmail".into())
+            .or_default()
+            .insert("gmail.messages.list".into());
+        context
             .approved_credential_references
             .insert("company-gmail".into(), "vault-id".into());
         let response = broker
