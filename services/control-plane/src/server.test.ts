@@ -5,6 +5,7 @@ import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } fr
 import type { RunnerCommandSigner } from "./runner_protocol.js";
 import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
+import { WebhookProtector, webhookSignature } from "./webhook_crypto.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -37,7 +38,8 @@ function dependencies(permissions: string[]) {
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
     authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
-    getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn()
+    getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
+    createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
@@ -46,7 +48,7 @@ function dependencies(permissions: string[]) {
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webBaseUrl: "https://app.sandbox.test" };
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -263,6 +265,23 @@ describe("control-plane API", () => {
     expect(response.json().checkout.url).toContain("checkout.stripe.com");
     expect(deps.billing.createCheckout).toHaveBeenCalledWith(expect.objectContaining({ priceId: "price_123", mode: "subscription" }));
     expect(deps.repository.recordMarketplaceCheckout).toHaveBeenCalledWith(session, "cs_test_123", "personal", session.accountId, "com.example.weather", "pro", expect.any(String));
+    await server.close();
+  });
+
+  it("accepts a signed webhook once and queues only encrypted redacted payload", async () => {
+    const deps = dependencies([]);
+    const publicId = "abcdefghijklmnopqrstuvwxABCDEFGH";
+    const secret = Buffer.alloc(32, 6);
+    vi.mocked(deps.repository.getWebhookEndpointByPublicId).mockResolvedValue({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", publicId, workspaceId, workflowId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", signingSecretCiphertext: deps.webhookProtector.encrypt(secret), allowedMethods: ["POST"], schema: { type: "object", required: ["event"] }, maximumRequestBytes: 1024, rateLimitPerMinute: 10, retentionSeconds: 3600, runnerPolicy: {}, offlineExpirySeconds: 900, redactedFields: ["user.token"], disabled: false });
+    vi.mocked(deps.repository.enqueueWebhookDelivery).mockResolvedValue({ status: "queued", expiresAt: new Date(Date.now()+900_000).toISOString() });
+    const server = await createServer(deps);
+    const body = Buffer.from(JSON.stringify({ event: "created", user: { token: "secret" } })); const timestamp = new Date().toISOString(); const nonce = "unique-webhook-nonce-1";
+    const response = await server.inject({ method: "POST", url: `/hooks/${publicId}`, headers: { "content-type": "application/json", "x-sandbox-webhook-timestamp": timestamp, "x-sandbox-webhook-nonce": nonce, "x-sandbox-webhook-signature": webhookSignature(secret, timestamp, nonce, body) }, payload: body });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().execution).toBe("waiting_for_local_runner");
+    const encrypted = vi.mocked(deps.repository.enqueueWebhookDelivery).mock.calls[0][4];
+    expect(deps.webhookProtector.decrypt(encrypted).toString()).toContain("[REDACTED]");
+    expect(deps.webhookProtector.decrypt(encrypted).toString()).not.toContain("secret");
     await server.close();
   });
 });

@@ -7,6 +7,7 @@ import { createServer } from "./server.js";
 import { Ed25519RunnerCommandSigner } from "./runner_protocol.js";
 import { StripeBillingProvider } from "./billing.js";
 import { Ed25519EntitlementClaimSigner } from "./entitlement.js";
+import { WebhookProtector } from "./webhook_crypto.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -31,6 +32,8 @@ const server = await createServer({
   runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
   entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
+  webhookProtector: new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"), "base64")),
+  webhookBaseUrl: required("CONTROL_PLANE_PUBLIC_URL"),
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true
 });

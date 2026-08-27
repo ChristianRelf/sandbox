@@ -70,6 +70,8 @@ export interface WorkspaceEnvironmentRecord { environmentId: string; environment
 export interface SharedConnectionRecord { id: string; workspaceId: string; environmentId: string; provider: string; displayName: string; accountIdentity: string | null; grantedScopes: string[]; permittedWorkflowIds: string[]; permittedRoleIds: string[]; health: string; expiresAt: string | null; lastUsedAt: string | null; createdBy: string; approvalRequirements: Record<string, unknown> }
 export interface PluginBillingPlan { pluginId: string; planId: string; stripePriceId: string; mode: "payment" | "subscription"; offlineGraceDays: number; seatAllowance: number | null; customerId: string | null }
 export interface EntitlementRecord { entitlementId: string; ownerType: "personal" | "workspace" | "organisation" | "publisher"; ownerId: string; pluginId: string; planId: string; status: "trial" | "active" | "past_due" | "expired" | "refunded" | "revoked"; seatAllowance: number | null; startsAt: string; renewsAt: string | null; offlineGraceUntil: string }
+export interface WebhookEndpointRecord { id: string; publicId: string; workspaceId: string; workflowId: string; signingSecretCiphertext: Buffer; allowedMethods: string[]; schema: Record<string, unknown> | null; maximumRequestBytes: number; rateLimitPerMinute: number; retentionSeconds: number; runnerPolicy: Record<string, unknown>; offlineExpirySeconds: number; redactedFields: string[]; disabled: boolean }
+export interface WebhookDeliveryRecord { deliveryId: string; endpointId: string; workspaceId: string; workflowId: string; payloadCiphertext: Buffer; idempotencyKey: string; receivedAt: string; expiresAt: string; attemptCount: number }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -126,6 +128,13 @@ export interface ControlPlaneRepository {
   recordMarketplaceCheckout(actor: AuthenticatedSession, checkoutId: string, ownerType: "personal" | "workspace", ownerId: string, pluginId: string, planId: string, expiresAt: string): Promise<void>;
   applyBillingEvent(event: BillingEvent): Promise<void>;
   getActiveEntitlement(actor: AuthenticatedSession, ownerType: "personal" | "workspace", ownerId: string, pluginId: string): Promise<EntitlementRecord | null>;
+  createWebhookEndpoint(actor: AuthenticatedSession, workspaceId: string, input: Omit<WebhookEndpointRecord, "id" | "publicId" | "workspaceId" | "signingSecretCiphertext" | "disabled">, publicId: string, signingSecretHash: Buffer, signingSecretCiphertext: Buffer, correlationId: string): Promise<WebhookEndpointRecord>;
+  listWebhookEndpoints(actor: AuthenticatedSession, workspaceId: string): Promise<Array<Omit<WebhookEndpointRecord, "signingSecretCiphertext">>>;
+  getWebhookEndpointByPublicId(publicId: string): Promise<WebhookEndpointRecord | null>;
+  rotateWebhookSecret(actor: AuthenticatedSession, workspaceId: string, endpointId: string, signingSecretHash: Buffer, signingSecretCiphertext: Buffer, correlationId: string): Promise<boolean>;
+  enqueueWebhookDelivery(endpoint: WebhookEndpointRecord, deliveryId: string, nonce: string, idempotencyKey: string, payloadCiphertext: Buffer, payloadHash: string, receivedAt: Date): Promise<{ status: "queued"; expiresAt: string }>;
+  dequeueWebhookDeliveries(device: RunnerDeviceSession, limit: number): Promise<WebhookDeliveryRecord[]>;
+  acknowledgeWebhookDelivery(device: RunnerDeviceSession, deliveryId: string, outcome: "delivered" | "retry" | "failed"): Promise<boolean>;
 }
 
 export class DomainError extends Error {

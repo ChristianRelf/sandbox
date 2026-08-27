@@ -3,7 +3,7 @@ import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCom
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SharedConnectionRecord, SyncedWorkflowInput, SyncWriteResult, WorkflowApprovalRecord } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SharedConnectionRecord, SyncedWorkflowInput, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 import type { BillingEvent } from "./billing.js";
@@ -935,6 +935,103 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async createWebhookEndpoint(actor: AuthenticatedSession, workspaceId: string, input: Omit<WebhookEndpointRecord, "id" | "publicId" | "workspaceId" | "signingSecretCiphertext" | "disabled">, publicId: string, signingSecretHash: Buffer, signingSecretCiphertext: Buffer, correlationId: string): Promise<WebhookEndpointRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const workflow = await client.query(`SELECT 1 FROM synced_workflows WHERE id=$1 AND workspace_id=$2 AND current_published_revision_id IS NOT NULL`, [input.workflowId, workspaceId]);
+      if (!workflow.rowCount) throw new DomainError("webhook_workflow_not_published", "Webhook endpoints require a published workflow in this workspace.", 409);
+      const id = randomUUID();
+      await client.query(
+        `INSERT INTO webhook_endpoints(id,public_id,workspace_id,workflow_id,signing_secret_hash,signing_secret_ciphertext,allowed_methods,schema,maximum_request_bytes,rate_limit_per_minute,retention_seconds,runner_policy,offline_expiry_seconds,redacted_fields,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [id, publicId, workspaceId, input.workflowId, signingSecretHash, signingSecretCiphertext, input.allowedMethods, input.schema, input.maximumRequestBytes, input.rateLimitPerMinute, input.retentionSeconds, input.runnerPolicy, input.offlineExpirySeconds, input.redactedFields, actor.accountId]
+      );
+      await appendAudit(client, actor, workspaceId, "webhook.created", "webhook_endpoint", id, null, { workflowId: input.workflowId, allowedMethods: input.allowedMethods, maximumRequestBytes: input.maximumRequestBytes, retentionSeconds: input.retentionSeconds, offlineExpirySeconds: input.offlineExpirySeconds }, correlationId);
+      return { id, publicId, workspaceId, signingSecretCiphertext, disabled: false, ...input };
+    });
+  }
+
+  async listWebhookEndpoints(actor: AuthenticatedSession, workspaceId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<WebhookEndpointRow>(`SELECT id,public_id,workspace_id,workflow_id,signing_secret_ciphertext,allowed_methods,schema,maximum_request_bytes,rate_limit_per_minute,retention_seconds,runner_policy,offline_expiry_seconds,redacted_fields,disabled_at FROM webhook_endpoints WHERE workspace_id=$1 ORDER BY created_at DESC,id`, [workspaceId]);
+      return result.rows.map(row => { const { signingSecretCiphertext: _secret, ...publicRecord } = webhookEndpointFromRow(row); return publicRecord; });
+    });
+  }
+
+  async getWebhookEndpointByPublicId(publicId: string): Promise<WebhookEndpointRecord | null> {
+    const result = await this.pool.query<WebhookEndpointRow>(`SELECT id,public_id,workspace_id,workflow_id,signing_secret_ciphertext,allowed_methods,schema,maximum_request_bytes,rate_limit_per_minute,retention_seconds,runner_policy,offline_expiry_seconds,redacted_fields,disabled_at FROM webhook_endpoints WHERE public_id=$1 AND disabled_at IS NULL`, [publicId]);
+    if (!result.rowCount || !result.rows[0].signing_secret_ciphertext) return null;
+    return webhookEndpointFromRow(result.rows[0]);
+  }
+
+  async rotateWebhookSecret(actor: AuthenticatedSession, workspaceId: string, endpointId: string, signingSecretHash: Buffer, signingSecretCiphertext: Buffer, correlationId: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query(`UPDATE webhook_endpoints SET signing_secret_hash=$1,signing_secret_ciphertext=$2,rotated_at=now() WHERE id=$3 AND workspace_id=$4 AND disabled_at IS NULL`, [signingSecretHash, signingSecretCiphertext, endpointId, workspaceId]);
+      if (!result.rowCount) return false;
+      await appendAudit(client, actor, workspaceId, "webhook.secret_rotated", "webhook_endpoint", endpointId, null, { rotated: true }, correlationId);
+      return true;
+    });
+  }
+
+  async enqueueWebhookDelivery(endpoint: WebhookEndpointRecord, deliveryId: string, nonce: string, idempotencyKey: string, payloadCiphertext: Buffer, payloadHash: string, receivedAt: Date) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const rate = await client.query<{ request_count: number }>(
+        `INSERT INTO webhook_rate_windows(endpoint_id,window_started_at,request_count) VALUES($1,now(),1)
+         ON CONFLICT(endpoint_id) DO UPDATE SET window_started_at=CASE WHEN webhook_rate_windows.window_started_at<=now()-interval '1 minute' THEN now() ELSE webhook_rate_windows.window_started_at END,
+           request_count=CASE WHEN webhook_rate_windows.window_started_at<=now()-interval '1 minute' THEN 1 ELSE webhook_rate_windows.request_count+1 END RETURNING request_count`, [endpoint.id]
+      );
+      if (rate.rows[0].request_count > endpoint.rateLimitPerMinute) throw new DomainError("webhook_rate_limited", "Webhook endpoint rate limit exceeded.", 429);
+      const expirySeconds = Math.min(endpoint.retentionSeconds, endpoint.offlineExpirySeconds);
+      const expiresAt = new Date(receivedAt.getTime() + expirySeconds * 1_000);
+      try {
+        await client.query(
+          `INSERT INTO webhook_deliveries(id,endpoint_id,workspace_id,payload_ciphertext,payload_hash,request_nonce,idempotency_key,received_at,expires_at,status,next_attempt_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',now())`,
+          [deliveryId, endpoint.id, endpoint.workspaceId, payloadCiphertext, payloadHash, nonce, idempotencyKey, receivedAt, expiresAt]
+        );
+      } catch (error) {
+        if (isPostgresUniqueViolation(error)) throw new DomainError("webhook_replay_detected", "Webhook nonce or idempotency key has already been received.", 409);
+        throw error;
+      }
+      await client.query("COMMIT");
+      return { status: "queued" as const, expiresAt: expiresAt.toISOString() };
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  }
+
+  async dequeueWebhookDeliveries(device: RunnerDeviceSession, limit: number) {
+    return this.withAccount(device.accountId, async client => {
+      await client.query(`UPDATE webhook_deliveries SET status='expired' WHERE workspace_id=$1 AND status='queued' AND expires_at<=now()`, [device.workspaceId]);
+      await client.query(`UPDATE webhook_deliveries SET status='failed' WHERE workspace_id=$1 AND status='queued' AND attempt_count>=8`, [device.workspaceId]);
+      const result = await client.query<{ id: string; endpoint_id: string; workspace_id: string; workflow_id: string; payload_ciphertext: Buffer; idempotency_key: string; received_at: Date; expires_at: Date; attempt_count: number }>(
+        `SELECT d.id,d.endpoint_id,d.workspace_id,e.workflow_id,d.payload_ciphertext,d.idempotency_key,d.received_at,d.expires_at,d.attempt_count
+           FROM webhook_deliveries d JOIN webhook_endpoints e ON e.id=d.endpoint_id JOIN runners runner ON runner.id=$2
+          WHERE d.workspace_id=$1 AND d.status='queued' AND d.expires_at>now() AND (d.next_attempt_at IS NULL OR d.next_attempt_at<=now())
+            AND e.disabled_at IS NULL AND (e.runner_policy->>'runnerId' IS NULL OR e.runner_policy->>'runnerId'=$2::text)
+            AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(COALESCE(e.runner_policy->'tags','[]'::jsonb)) AS required_tag(value) WHERE NOT (required_tag.value=ANY(runner.tags)))
+          ORDER BY d.received_at,d.id FOR UPDATE SKIP LOCKED LIMIT $3`, [device.workspaceId, device.runnerId, limit]
+      );
+      for (const row of result.rows) {
+        const delaySeconds = Math.min(300, 2 ** Math.min(row.attempt_count, 8));
+        await client.query(`UPDATE webhook_deliveries SET delivered_runner_id=$1,attempt_count=attempt_count+1,next_attempt_at=now()+($2::text||' seconds')::interval WHERE id=$3`, [device.runnerId, delaySeconds, row.id]);
+      }
+      return result.rows.map(row => ({ deliveryId: row.id, endpointId: row.endpoint_id, workspaceId: row.workspace_id, workflowId: row.workflow_id, payloadCiphertext: row.payload_ciphertext, idempotencyKey: row.idempotency_key, receivedAt: row.received_at.toISOString(), expiresAt: row.expires_at.toISOString(), attemptCount: row.attempt_count + 1 }));
+    });
+  }
+
+  async acknowledgeWebhookDelivery(device: RunnerDeviceSession, deliveryId: string, outcome: "delivered" | "retry" | "failed"): Promise<boolean> {
+    return this.withAccount(device.accountId, async client => {
+      const status = outcome === "retry" ? "queued" : outcome;
+      const result = await client.query(
+        `UPDATE webhook_deliveries SET status=$1,delivered_runner_id=CASE WHEN $1='queued' THEN NULL ELSE delivered_runner_id END,next_attempt_at=CASE WHEN $1='queued' THEN now()+interval '5 seconds' ELSE NULL END
+          WHERE id=$2 AND workspace_id=$3 AND delivered_runner_id=$4 AND status='queued' AND expires_at>now()`,
+        [status, deliveryId, device.workspaceId, device.runnerId]
+      );
+      return (result.rowCount ?? 0) > 0;
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -992,6 +1089,13 @@ interface RunnerCommandRow {
 interface RunSummaryRow { id: string; workspace_id: string; workflow_id: string; revision_id: string; runner_id: string; trigger: string; status: RunSummary["status"]; started_at: Date | null; duration_ms: string | number | null; failed_node_id: string | null; redacted_error_summary: string | null }
 
 interface SharedConnectionRow { id: string; workspace_id: string; environment_id: string; provider: string; display_name: string; account_identity: string | null; granted_scopes: string[]; permitted_workflow_ids: string[]; permitted_role_ids: string[]; health: string; expires_at: Date | null; last_used_at: Date | null; created_by: string; approval_requirements: Record<string, unknown> }
+
+interface WebhookEndpointRow { id: string; public_id: string; workspace_id: string; workflow_id: string; signing_secret_ciphertext: Buffer | null; allowed_methods: string[]; schema: Record<string, unknown> | null; maximum_request_bytes: number; rate_limit_per_minute: number; retention_seconds: number; runner_policy: Record<string, unknown>; offline_expiry_seconds: number; redacted_fields: string[]; disabled_at: Date | null }
+
+function webhookEndpointFromRow(row: WebhookEndpointRow): WebhookEndpointRecord {
+  if (!row.signing_secret_ciphertext) throw new DomainError("webhook_secret_unavailable", "Webhook endpoint must rotate its signing secret before it can receive events.", 409);
+  return { id: row.id, publicId: row.public_id, workspaceId: row.workspace_id, workflowId: row.workflow_id, signingSecretCiphertext: row.signing_secret_ciphertext, allowedMethods: row.allowed_methods, schema: row.schema, maximumRequestBytes: row.maximum_request_bytes, rateLimitPerMinute: row.rate_limit_per_minute, retentionSeconds: row.retention_seconds, runnerPolicy: row.runner_policy, offlineExpirySeconds: row.offline_expiry_seconds, redactedFields: row.redacted_fields, disabled: row.disabled_at !== null };
+}
 
 function sharedConnectionFromRow(row: SharedConnectionRow): SharedConnectionRecord {
   return { id: row.id, workspaceId: row.workspace_id, environmentId: row.environment_id, provider: row.provider, displayName: row.display_name, accountIdentity: row.account_identity, grantedScopes: row.granted_scopes, permittedWorkflowIds: row.permitted_workflow_ids, permittedRoleIds: row.permitted_role_ids, health: row.health, expiresAt: row.expires_at?.toISOString() ?? null, lastUsedAt: row.last_used_at?.toISOString() ?? null, createdBy: row.created_by, approvalRequirements: row.approval_requirements };

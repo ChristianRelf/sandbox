@@ -27,7 +27,8 @@ function repository(permissionByWorkspace: Record<string, Permission[]>): Contro
     getGovernancePolicies: vi.fn(), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
     authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
-    getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn()
+    getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
+    createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn()
   };
 }
 

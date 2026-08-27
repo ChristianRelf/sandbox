@@ -7,6 +7,7 @@ import { Authorizer } from "./authorization.js";
 import type { TransactionalEmail } from "./email.js";
 import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
+import { redactWebhookPayload, verifyWebhookSignature, type WebhookProtector } from "./webhook_crypto.js";
 import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_services.js";
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
@@ -60,6 +61,7 @@ const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governanc
 const memberRoleInput = z.object({ role: z.enum(["owner", "administrator", "developer", "operator", "viewer"]) });
 const runnerHeartbeatInput = z.object({ currentWorkload: z.number().int().min(0).max(10_000), status: z.enum(["online", "paused", "draining", "maintenance"]).default("online") });
 const runnerCommandStatusInput = z.object({ status: z.enum(["accepted", "rejected", "completed"]), resultSummary: z.record(z.string(), z.unknown()).nullable().default(null) });
+const webhookDeliveryStatusInput = z.object({ outcome: z.enum(["delivered", "retry", "failed"]) }).strict();
 const sharedConnectionInput = z.object({
   environmentId: z.string().uuid(), provider: z.string().regex(/^[a-z0-9._-]+$/).max(100), displayName: z.string().trim().min(1).max(120), accountIdentity: z.string().trim().max(200).nullable().default(null),
   grantedScopes: z.array(z.string().min(1).max(200)).max(200).default([]), permittedWorkflowIds: z.array(z.string().uuid()).max(500).default([]), permittedRoleIds: z.array(z.string().uuid()).max(50).default([]),
@@ -67,6 +69,7 @@ const sharedConnectionInput = z.object({
 }).strict();
 const sharedConnectionDeploymentInput = z.object({ runnerId: z.string().uuid(), status: z.enum(["authorization_required", "available", "unavailable"]), localCredentialLabel: z.string().trim().min(1).max(120).nullable().default(null) }).strict();
 const checkoutInput = z.object({ ownerType: z.enum(["personal", "workspace"]), ownerId: z.string().uuid(), planId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(100) }).strict();
+const webhookEndpointInput = z.object({ workflowId: z.string().uuid(), allowedMethods: z.array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"])).min(1).max(5), schema: z.record(z.string(), z.unknown()).nullable().default(null), maximumRequestBytes: z.number().int().min(1).max(1_048_576).default(262_144), rateLimitPerMinute: z.number().int().min(1).max(1_000).default(60), retentionSeconds: z.number().int().min(60).max(604_800).default(86_400), runnerPolicy: z.record(z.string(), z.unknown()).default({}), offlineExpirySeconds: z.number().int().min(60).max(604_800).default(3_600), redactedFields: z.array(z.string().regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/)).max(100).default([]) }).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -77,6 +80,8 @@ export interface ApiDependencies {
   runnerCommandSigner?: RunnerCommandSigner;
   billing?: BillingProvider;
   entitlementSigner?: EntitlementClaimSigner;
+  webhookProtector?: WebhookProtector;
+  webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
 }
@@ -419,6 +424,23 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { recorded: true };
   });
 
+  app.get("/v1/runner/webhook-deliveries", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    if (!dependencies.webhookProtector) throw new DomainError("webhook_relay_unavailable", "Webhook relay encryption is not configured.", 503);
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(25).default(10) }).parse(request.query);
+    const deliveries = await dependencies.repository.dequeueWebhookDeliveries(device, limit);
+    return { items: deliveries.map(delivery => ({ deliveryId: delivery.deliveryId, endpointId: delivery.endpointId, workspaceId: delivery.workspaceId, workflowId: delivery.workflowId, payload: JSON.parse(dependencies.webhookProtector!.decrypt(delivery.payloadCiphertext).toString("utf8")), idempotencyKey: delivery.idempotencyKey, receivedAt: delivery.receivedAt, expiresAt: delivery.expiresAt, attemptCount: delivery.attemptCount })) };
+  });
+
+  app.post("/v1/runner/webhook-deliveries/:deliveryId/status", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const { deliveryId } = z.object({ deliveryId: z.string().uuid() }).parse(request.params);
+    const { outcome } = webhookDeliveryStatusInput.parse(request.body);
+    const updated = await dependencies.repository.acknowledgeWebhookDelivery(device, deliveryId, outcome);
+    if (!updated) throw new DomainError("webhook_delivery_not_found", "Webhook delivery is unavailable or assigned to another runner.", 404);
+    return { updated: true, outcome };
+  });
+
   app.get("/v1/workspaces/:workspaceId/activity", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -600,6 +622,38 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.listAuditEvents(session, workspaceId, cursor, limit);
   });
 
+  app.get("/v1/workspaces/:workspaceId/webhooks", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "webhooks.manage");
+    return { items: await dependencies.repository.listWebhookEndpoints(session, workspaceId) };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/webhooks", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "webhooks.manage");
+    if (!dependencies.webhookProtector || !dependencies.webhookBaseUrl) throw new DomainError("webhook_relay_unavailable", "Webhook relay encryption is not configured.", 503);
+    const input = webhookEndpointInput.parse(request.body);
+    const secret = randomBytes(32); const publicId = randomBytes(24).toString("base64url");
+    const endpoint = await dependencies.repository.createWebhookEndpoint(session, workspaceId, input, publicId, createHash("sha256").update(secret).digest(), dependencies.webhookProtector.encrypt(secret), request.id);
+    const { signingSecretCiphertext: _secretCiphertext, ...publicEndpoint } = endpoint;
+    return { endpoint: { ...publicEndpoint, url: `${dependencies.webhookBaseUrl.replace(/\/$/, "")}/hooks/${publicId}` }, signingSecret: secret.toString("base64url"), secretShownOnce: true };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/webhooks/:endpointId/rotate-secret", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, endpointId } = z.object({ workspaceId: z.string().uuid(), endpointId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "webhooks.manage");
+    if (!dependencies.webhookProtector) throw new DomainError("webhook_relay_unavailable", "Webhook relay encryption is not configured.", 503);
+    const secret = randomBytes(32);
+    const rotated = await dependencies.repository.rotateWebhookSecret(session, workspaceId, endpointId, createHash("sha256").update(secret).digest(), dependencies.webhookProtector.encrypt(secret), request.id);
+    if (!rotated) throw new DomainError("webhook_endpoint_not_found", "Webhook endpoint was not found in this workspace.", 404);
+    return { signingSecret: secret.toString("base64url"), secretShownOnce: true };
+  });
+
   await app.register(async stripeWebhook => {
     stripeWebhook.removeContentTypeParser("application/json");
     stripeWebhook.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
@@ -614,6 +668,34 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       return { received: true };
     });
   }, { prefix: "/v1/billing/stripe" });
+
+  await app.register(async relay => {
+    relay.removeContentTypeParser("application/json");
+    relay.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
+    relay.route({ method: ["GET", "POST", "PUT", "PATCH", "DELETE"], url: "/:publicId", handler: async request => {
+      if (!dependencies.webhookProtector) throw new DomainError("webhook_relay_unavailable", "Webhook relay encryption is not configured.", 503);
+      const { publicId } = z.object({ publicId: z.string().regex(/^[A-Za-z0-9_-]{32}$/) }).parse(request.params);
+      const endpoint = await dependencies.repository.getWebhookEndpointByPublicId(publicId);
+      if (!endpoint || endpoint.disabled) throw new DomainError("webhook_endpoint_not_found", "Webhook endpoint is unavailable.", 404);
+      if (!endpoint.allowedMethods.includes(request.method.toUpperCase())) throw new DomainError("webhook_method_not_allowed", `This webhook accepts ${endpoint.allowedMethods.join(", ")}.`, 405);
+      const rawBody = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+      if (rawBody.length > endpoint.maximumRequestBytes) throw new DomainError("webhook_payload_too_large", "Webhook request exceeds the endpoint size limit.", 413);
+      const timestamp = singleHeader(request, "x-sandbox-webhook-timestamp"); const nonce = singleHeader(request, "x-sandbox-webhook-nonce"); const signature = singleHeader(request, "x-sandbox-webhook-signature");
+      const parsedTime = Date.parse(timestamp);
+      if (!Number.isFinite(parsedTime) || Math.abs(Date.now()-parsedTime)>5*60_000) throw new DomainError("webhook_request_stale", "Webhook timestamp is outside the five-minute replay window.", 400);
+      const secret = dependencies.webhookProtector.decrypt(endpoint.signingSecretCiphertext);
+      if (!verifyWebhookSignature(secret, timestamp, nonce, rawBody, signature)) throw new DomainError("webhook_signature_invalid", "Webhook signature is invalid.", 401);
+      let payload: unknown = null;
+      if (rawBody.length) { try { payload = JSON.parse(rawBody.toString("utf8")); } catch { throw new DomainError("webhook_json_invalid", "Webhook body must be valid JSON.", 400); } }
+      const schemaError = validateWebhookSchema(payload, endpoint.schema);
+      if (schemaError) throw new DomainError("webhook_schema_invalid", schemaError, 400);
+      const redacted = redactWebhookPayload(payload, endpoint.redactedFields);
+      const receivedAt = new Date(); const deliveryId = randomUUID(); const idempotencyKey = typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : createHash("sha256").update(endpoint.id).update(nonce).digest("hex");
+      const envelope = Buffer.from(JSON.stringify({ method: request.method, contentType: request.headers["content-type"] ?? null, payload: redacted }), "utf8");
+      const queued = await dependencies.repository.enqueueWebhookDelivery(endpoint, deliveryId, nonce, idempotencyKey, dependencies.webhookProtector.encrypt(envelope), `sha256:${createHash("sha256").update(envelope).digest("hex")}`, receivedAt);
+      return { deliveryId, status: queued.status, expiresAt: queued.expiresAt, execution: "waiting_for_local_runner" };
+    }});
+  }, { prefix: "/hooks" });
 
   return app;
 }
@@ -668,8 +750,16 @@ async function authenticateRunnerDevice(request: FastifyRequest, repository: Con
 
 function singleHeader(request: FastifyRequest, name: string): string {
   const value = request.headers[name];
-  if (typeof value !== "string" || !value || value.length > 512) throw new DomainError("runner_authentication_required", `Runner authentication header '${name}' is required.`, 401);
+  if (typeof value !== "string" || !value || value.length > 512) throw new DomainError("required_header_missing", `Required authentication header '${name}' is missing or invalid.`, 401);
   return value;
+}
+
+function validateWebhookSchema(value: unknown, schema: Record<string, unknown> | null): string | null {
+  if (!schema) return null;
+  if (schema.type === "object" && (!value || typeof value !== "object" || Array.isArray(value))) return "Webhook payload must be an object.";
+  const required = Array.isArray(schema.required) ? schema.required.filter(item => typeof item === "string") : [];
+  if (required.length && value && typeof value === "object") for (const key of required) if (!(key in value)) return `Webhook payload is missing required field '${key}'.`;
+  return null;
 }
 
 export function correlationId(): string {
