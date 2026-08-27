@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/target
+**/dist
+**/.next
+browser-sidecar/browsers
+browser-sidecar/runtime
+screenshots
+*.tsbuildinfo
+*.log
