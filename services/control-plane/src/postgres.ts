@@ -372,7 +372,7 @@ export class PostgresRepository implements ControlPlaneRepository {
   }
 
   async getMarketplaceListing(actor: AuthenticatedSession | null, pluginId: string, workspaceId: string | null) {
-    const result = await this.searchMarketplace(actor, { search: pluginId, category: null, pricing: "all", verifiedOnly: false, visibility: workspaceId ? "all" : "public", workspaceId, teamApprovedOnly: false, sort: "recent", cursor: null, limit: 1, hostVersion: "0.3.0" });
+    const result = await this.searchMarketplace(actor, { search: pluginId, category: null, pricing: "all", verifiedOnly: false, visibility: workspaceId ? "all" : "public", workspaceId, teamApprovedOnly: false, sort: "recent", cursor: null, limit: 1, hostVersion: "0.5.0" });
     return result.items.find(item => item.pluginId === pluginId) ?? null;
   }
 

@@ -15,7 +15,7 @@ Severity definitions:
 | GA-003 | Critical | Security | v0.5.0 | Open | Resolve all external penetration-test criticals and attach retest evidence. No external report is available. |
 | GA-004 | Critical | Security | v0.5.0 | Open | Complete adversarial tenant-isolation review across control plane, runners, artifacts, browser profiles, queues and every v0.5 table. |
 | GA-005 | Critical | Reliability | v0.5.0 | Blocked externally | Restore the latest encrypted production backup into an isolated environment and reconcile application-level counts/hashes. Fresh staging schema restore passed, but is insufficient. |
-| GA-006 | High | Release engineering | v0.5.0 | Open | Align product/package/protocol versions, publish compatibility matrix and eliminate the current mixed 0.3/0.4 metadata. |
+| GA-006 | High | Release engineering | v0.5.0 | In progress | Product, desktop, web, service, SDK, sidecar and runner metadata now align on 0.5.0. Publish and test the compatibility/support matrix before closure. |
 | GA-007 | High | Release engineering | v0.5.0 | In progress | Ensure the default complete suite discovers scheduler, browser-worker, hosted-runner and agent tests; enforce database integrations in CI. |
 | GA-008 | High | Security | v0.5.0 | In progress | Rust advisory scans report no known vulnerabilities; the desktop graph has 18 maintenance/unsound/yanked warnings requiring disposition. SBOM, container and provenance scans remain. |
 | GA-009 | High | Execution | v0.5.0 | Open | Exercise hosted orchestration with real leases, short-lived workload identity, network policy, cgroup limits, artifact namespace and concurrent cross-tenant workloads. |

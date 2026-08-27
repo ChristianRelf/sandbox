@@ -21,7 +21,7 @@ export default async function MarketplacePage({
       : "recent";
   const verified = values.verified === "true";
   const query = new URLSearchParams({
-    hostVersion: "0.3.0",
+    hostVersion: "0.5.0",
     limit: "24",
     pricing,
     sort,

@@ -34,7 +34,7 @@ export default function RootLayout({
         </header>
         {children}
         <footer className="site-footer">
-          <span>Sandbox v0.3 ecosystem</span>
+          <span>Sandbox v0.5 ecosystem</span>
           <span>
             Plugins run locally inside a capability-controlled Wasm sandbox.
           </span>

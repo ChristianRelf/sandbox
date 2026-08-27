@@ -20,5 +20,5 @@ pub use package::{package_digest, PackageTrustStore, RevocationList, VerifiedPac
 pub use runtime::{PluginRuntime, RuntimeLimits, SandboxDiagnostic};
 pub use schema::validate_schema_instance;
 
-pub const HOST_VERSION: &str = "0.3.0";
+pub const HOST_VERSION: &str = "0.5.0";
 pub const MANIFEST_VERSION: u32 = 1;

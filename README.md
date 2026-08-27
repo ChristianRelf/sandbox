@@ -1,8 +1,11 @@
-# Sandbox v0.3.0
+# Sandbox v0.5.0 GA candidate
 
-Sandbox is a local-first visual desktop automation platform. v0.3 adds a capability-controlled WebAssembly plugin ecosystem, signed packages and exact workflow pins, optional encrypted sync, marketplace and publisher services, team workspaces, governed workflow publication, shared-connection deployment, and signed coordination of multiple local runners. Workflow execution remains local and existing personal workflows continue without an account or network connection.
+Sandbox is a local-first visual desktop automation platform. The v0.5 branch builds GA governance and operability on the existing desktop, browser automation, plugin ecosystem, team control plane and always-on runner architecture. Existing personal workflows continue without an account or network connection. This branch is not GA until the blockers in `docs/ga-blockers-v0.5.md` are closed.
 
 ## Architecture
+
+The current cross-component architecture and security boundaries are documented in
+`docs/architecture-v0.5.md`.
 
 ```text
 React + xyflow
@@ -64,7 +67,13 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Credential references are defined in the schema, but there is no credential vault or OAuth provider yet.
 - Workflows are DAGs only; loops and arbitrary expression execution are intentionally unsupported.
 
-## Stage-three documentation
+## GA candidate documentation
+
+- Current architecture and security boundaries: `docs/architecture-v0.5.md`
+- Authoritative release blocker register: `docs/ga-blockers-v0.5.md`
+- Stage-five baseline audit: `docs/stage-five-audit.md`
+
+## Historical stage-three documentation
 
 - Architecture and service boundaries: `docs/architecture-v0.3.md`
 - Plugin sandbox and threat model: `docs/plugin-sandbox.md`, `docs/plugin-threat-model.md`
