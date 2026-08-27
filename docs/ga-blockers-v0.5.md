@@ -15,7 +15,7 @@ Severity definitions:
 | GA-003 | Critical | Security | v0.5.0 | Open | Resolve all external penetration-test criticals and attach retest evidence. No external report is available. |
 | GA-004 | Critical | Security | v0.5.0 | Open | Complete adversarial tenant-isolation review across control plane, runners, artifacts, browser profiles, queues and every v0.5 table. |
 | GA-005 | Critical | Reliability | v0.5.0 | Blocked externally | Restore the latest encrypted production backup into an isolated environment and reconcile application-level counts/hashes. Fresh staging schema restore passed, but is insufficient. |
-| GA-006 | High | Release engineering | v0.5.0 | In progress | Product, desktop, web, service, SDK, sidecar and runner metadata now align on 0.5.0. Publish and test the compatibility/support matrix before closure. |
+| GA-006 | High | Release engineering | v0.5.0 | Closed | Product, desktop, web, service, SDK, sidecar and runner metadata align on 0.5.0. The published support matrix defines API, runner-protocol, host, plugin, database and mixed-version boundaries and is enforced by the default test suite. |
 | GA-007 | High | Release engineering | v0.5.0 | In progress | Ensure the default complete suite discovers scheduler, browser-worker, hosted-runner and agent tests; enforce database integrations in CI. |
 | GA-008 | High | Security | v0.5.0 | In progress | Rust advisory scans report no known vulnerabilities; the desktop graph has 18 maintenance/unsound/yanked warnings requiring disposition. SBOM, container and provenance scans remain. |
 | GA-009 | High | Execution | v0.5.0 | Open | Exercise hosted orchestration with real leases, short-lived workload identity, network policy, cgroup limits, artifact namespace and concurrent cross-tenant workloads. |
@@ -44,3 +44,4 @@ Severity definitions:
 | GA-C05 | 2026-08-28 | API contract tests prove structured transport errors, correlation propagation, rate-limit responses, exact idempotent replay and mutation rejection; PostgreSQL integration confirms replay bodies are encrypted at rest. |
 | GA-C06 | 2026-08-28 | The public API client executes a privileged typed credential mutation against the real Fastify server, supplies freshness/correlation/idempotency headers, and replays without repeating the side effect. |
 | GA-C07 | 2026-08-28 | Every published v1 operation resolves to a named request/response schema; compatibility tests reject unresolved references and the former `JsonValue` fallback. |
+| GA-C08 | 2026-08-28 | The versioned support matrix is published and its release, runtime and protocol claims are checked against package, crate, desktop and source metadata by the default test suite. |

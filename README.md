@@ -83,6 +83,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Public SDK and CLI: `docs/plugin-sdk.md`
 - Marketplace review: `docs/marketplace-review.md`
 - Baseline compatibility audit: `docs/stage-three-audit.md`
+- v0.5 compatibility and support matrix: `docs/support-matrix-v0.5.md`
 - Team permissions and publication: `docs/team-permissions.md`
 - Runner pairing and command protocol: `docs/runner-protocol.md`
 - Sync and conflict handling: `docs/sync-and-conflicts.md`
