@@ -39,6 +39,7 @@ url = "2"
 semver = "1"
 aes-gcm = "0.10"
 urlencoding = "2"
+ed25519-dalek = { version = "3", features = ["pem"] }
 
 [dev-dependencies]
 ed25519-dalek = { version = "3", features = ["pem", "rand_core"] }

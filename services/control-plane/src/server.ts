@@ -8,6 +8,7 @@ import type { TransactionalEmail } from "./email.js";
 import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_services.js";
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
+import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -32,6 +33,21 @@ const revocationInput = z.object({ reason: z.string().trim().min(10).max(2_000),
 const publisherInput = z.object({ publicId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/).max(200), ownerType: z.enum(["personal", "organisation"]), ownerId: z.string().uuid(), publicName: z.string().trim().min(2).max(120), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63), description: z.string().max(2_000).default(""), website: z.string().url().startsWith("https://").nullable(), supportContact: z.string().email(), securityContact: z.string().email() });
 const publisherKeyInput = z.object({ keyId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(120), algorithm: z.literal("ed25519"), publicKeyDerBase64: z.string().base64().max(256) });
 const marketplaceQuery = z.object({ search: z.string().trim().max(200).nullable().default(null), category: z.string().trim().max(80).nullable().default(null), pricing: z.enum(["all", "free", "paid"]).default("all"), verifiedOnly: z.stringbool().default(false), visibility: z.enum(["public", "workspace", "all"]).default("public"), workspaceId: z.string().uuid().nullable().default(null), teamApprovedOnly: z.stringbool().default(false), sort: z.enum(["recent", "installs", "rating"]).default("recent"), cursor: z.string().max(200).nullable().default(null), limit: z.coerce.number().int().min(1).max(50).default(24), hostVersion: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).default("0.3.0") });
+const installedPluginVersion = z.object({ pluginId: z.string().min(3).max(200), version: z.string().min(1).max(50), packageIntegrity: z.string().regex(/^sha256:[a-f0-9]{64}$/) });
+const runnerPairingInput = z.object({
+  devicePublicKeyDerBase64: z.string().base64().max(256), operatingSystem: z.string().trim().min(1).max(80), architecture: z.string().trim().min(1).max(80),
+  applicationVersion: z.string().trim().min(1).max(50), protocolVersion: z.number().int().positive().max(10_000), pluginRuntimeVersion: z.string().trim().min(1).max(50),
+  capabilities: z.record(z.string(), z.unknown()), safeFolderLabels: z.array(z.string().trim().min(1).max(100)).max(100).default([]), browserEngine: z.record(z.string(), z.unknown()).nullable().default(null),
+  installedPluginVersions: z.array(installedPluginVersion).max(500).default([]), tags: z.array(z.string().trim().min(1).max(50)).max(50).default([])
+});
+const runnerPairingConfirmation = z.object({ challengeId: z.string().uuid(), challenge: z.string().min(32).max(256), signatureBase64: z.string().base64().max(256), workspaceId: z.string().uuid().nullable(), displayName: z.string().trim().min(1).max(100) });
+const runnerCommandInput = z.object({
+  targetRunnerId: z.string().uuid(), action: z.enum(["run_workflow", "cancel_execution", "pause_workflow", "resume_workflow", "request_diagnostics", "sync_revision"]),
+  workflowRevisionId: z.string().uuid().nullable().default(null), payload: z.record(z.string(), z.unknown()).default({}), idempotencyKey: z.string().min(16).max(200), expiresInSeconds: z.number().int().min(15).max(86_400).default(300)
+});
+const approvalDecisionInput = z.object({ decision: z.enum(["approved", "rejected"]), reason: z.string().trim().min(1).max(2_000).nullable().default(null) });
+const publishWorkflowInput = z.object({ changeSummary: z.string().trim().min(1).max(2_000) });
+const rollbackWorkflowInput = z.object({ revisionId: z.string().uuid(), reason: z.string().trim().min(1).max(2_000) });
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -39,6 +55,7 @@ export interface ApiDependencies {
   email: TransactionalEmail;
   packageStorage: ImmutablePackageStorage;
   packageScanner: PackageReviewScanner;
+  runnerCommandSigner?: RunnerCommandSigner;
   webBaseUrl: string;
   logger?: boolean;
 }
@@ -187,6 +204,57 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.acceptInvitation(session, input.token, request.id);
   });
 
+  app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const input = runnerPairingInput.parse(request.body);
+    validateEd25519PublicKey(input.devicePublicKeyDerBase64);
+    const challenge = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + 10 * 60_000);
+    return dependencies.repository.createRunnerPairingChallenge(session, input, challenge, expiresAt);
+  });
+
+  app.post("/v1/runners/pairing/confirm", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const input = runnerPairingConfirmation.parse(request.body);
+    if (input.workspaceId) await authorizer.require(session, input.workspaceId, "runners.manage");
+    return { runner: await dependencies.repository.confirmRunnerPairing(session, input, request.id) };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/runners", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listRunners(session, workspaceId) };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/runner-commands", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const input = runnerCommandInput.parse(request.body);
+    await authorizer.require(session, workspaceId, input.action === "request_diagnostics" ? "runners.manage" : "workflows.run");
+    if (!dependencies.runnerCommandSigner) throw new DomainError("runner_signing_unavailable", "Remote commands are unavailable because the control-plane signing key is not configured.", 503);
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + input.expiresInSeconds * 1_000);
+    const command = buildSignedRunnerCommand(dependencies.runnerCommandSigner, {
+      commandId: randomUUID(), issuerAccountId: session.accountId, workspaceId, targetRunnerId: input.targetRunnerId, action: input.action,
+      workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload
+    });
+    return { command: await dependencies.repository.createRunnerCommand(session, command, request.id) };
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/runners/:runnerId", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, runnerId } = z.object({ workspaceId: z.string().uuid(), runnerId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "runners.manage");
+    const revoked = await dependencies.repository.revokeRunner(session, workspaceId, runnerId, request.id);
+    if (!revoked) throw new DomainError("runner_not_found", "Runner not found in this workspace or already revoked.", 404);
+    return { revoked: true, localDataDeleted: false };
+  });
+
   app.post("/v1/workspaces/:workspaceId/sync/revisions", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -231,6 +299,42 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     await authorizer.require(session, workspaceId, "workflows.edit");
     const { revisionId } = syncConflictResolutionInput.parse(request.body);
     return dependencies.repository.resolveSyncConflict(session, workspaceId, workflowId, revisionId, request.id);
+  });
+
+  app.post("/v1/workspaces/:workspaceId/workflows/:workflowId/revisions/:revisionId/request-approval", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, workflowId, revisionId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid(), revisionId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.edit");
+    return { approval: await dependencies.repository.requestWorkflowApproval(session, workspaceId, workflowId, revisionId, request.id) };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/workflow-approvals/:approvalId/decision", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, approvalId } = z.object({ workspaceId: z.string().uuid(), approvalId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.approve");
+    const input = approvalDecisionInput.parse(request.body);
+    if (input.decision === "rejected" && !input.reason) throw new DomainError("approval_reason_required", "A rejection reason is required.", 400);
+    return { approval: await dependencies.repository.decideWorkflowApproval(session, workspaceId, approvalId, input.decision, input.reason, request.id) };
+  });
+
+  app.post("/v1/workspaces/:workspaceId/workflows/:workflowId/revisions/:revisionId/publish", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, workflowId, revisionId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid(), revisionId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.publish");
+    const input = publishWorkflowInput.parse(request.body);
+    return dependencies.repository.publishWorkflowRevision(session, workspaceId, workflowId, revisionId, input.changeSummary, request.id);
+  });
+
+  app.post("/v1/workspaces/:workspaceId/workflows/:workflowId/rollback", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    requireFreshRequest(request);
+    const { workspaceId, workflowId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.publish");
+    const input = rollbackWorkflowInput.parse(request.body);
+    return dependencies.repository.rollbackWorkflowRevision(session, workspaceId, workflowId, input.revisionId, input.reason, request.id);
   });
 
   app.post("/v1/publishers/:publisherId/plugins/submissions", async request => {
@@ -356,6 +460,12 @@ function requirePlatform(session: AuthenticatedSession, permission: string): voi
 function publicKeyPem(derBase64: string): string {
   const lines = derBase64.match(/.{1,64}/g)?.join("\n") ?? derBase64;
   return `-----BEGIN PUBLIC KEY-----\n${lines}\n-----END PUBLIC KEY-----`;
+}
+
+function validateEd25519PublicKey(derBase64: string): void {
+  const key = Buffer.from(derBase64, "base64");
+  const prefix = Buffer.from("302a300506032b6570032100", "hex");
+  if (key.length !== 44 || !key.subarray(0, prefix.length).equals(prefix)) throw new DomainError("runner_key_invalid", "Runner public key must be an Ed25519 SubjectPublicKeyInfo DER value.", 400);
 }
 
 export function correlationId(): string {

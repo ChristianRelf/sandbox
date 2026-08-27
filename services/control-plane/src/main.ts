@@ -4,6 +4,7 @@ import { HttpTransactionalEmail } from "./email.js";
 import { HttpImmutablePackageStorage, HttpPackageReviewScanner } from "./package_services.js";
 import { PostgresRepository } from "./postgres.js";
 import { createServer } from "./server.js";
+import { Ed25519RunnerCommandSigner } from "./runner_protocol.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -25,6 +26,7 @@ const server = await createServer({
   email: new HttpTransactionalEmail(required("EMAIL_API_URL"), required("EMAIL_API_KEY"), required("EMAIL_SENDER")),
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
+  runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true
 });

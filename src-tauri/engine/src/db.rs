@@ -82,6 +82,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/006_plugin_execution.sql"))
                 .map_err(storage)?;
         }
+        if version < 7 {
+            connection
+                .execute_batch(include_str!("../migrations/007_runner_command_receipts.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         Ok(())
     }
@@ -133,6 +138,53 @@ impl Database {
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .execute("DELETE FROM settings WHERE key=?", [key])
             .map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn claim_remote_command(
+        &self,
+        command_id: &str,
+        runner_id: &str,
+        workspace_id: &str,
+        idempotency_key: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<bool, EngineError> {
+        if [command_id, runner_id, workspace_id, idempotency_key]
+            .iter()
+            .any(|value| value.is_empty() || value.len() > 200)
+        {
+            return Err(EngineError::Validation(
+                "Remote command identity is invalid.".into(),
+            ));
+        }
+        let changed = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "INSERT OR IGNORE INTO runner_command_receipts(command_id,runner_id,workspace_id,idempotency_key,status,received_at,expires_at) VALUES(?,?,?,?,?,?,?)",
+                params![command_id, runner_id, workspace_id, idempotency_key, "claimed", Utc::now().to_rfc3339(), expires_at.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        Ok(changed == 1)
+    }
+
+    pub fn complete_remote_command(&self, command_id: &str, status: &str) -> Result<(), EngineError> {
+        if !matches!(status, "accepted" | "rejected" | "completed" | "expired") {
+            return Err(EngineError::Validation("Remote command receipt status is invalid.".into()));
+        }
+        let changed = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "UPDATE runner_command_receipts SET status=?,completed_at=? WHERE command_id=?",
+                params![status, Utc::now().to_rfc3339(), command_id],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(EngineError::Storage("Remote command receipt was not found.".into()));
+        }
         Ok(())
     }
 
@@ -1341,7 +1393,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 6);
+            assert_eq!(db.schema_version().unwrap(), 7);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -1389,6 +1441,15 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn remote_command_claim_is_atomic_and_idempotent() {
+        let db = Database::in_memory().unwrap();
+        let expiry = Utc::now() + chrono::Duration::minutes(5);
+        assert!(db.claim_remote_command("command-1", "runner-1", "workspace-1", "idempotency-key-0001", expiry).unwrap());
+        assert!(!db.claim_remote_command("command-2", "runner-1", "workspace-1", "idempotency-key-0001", expiry).unwrap());
+        db.complete_remote_command("command-1", "completed").unwrap();
     }
     #[test]
     fn recovers_running_records() {

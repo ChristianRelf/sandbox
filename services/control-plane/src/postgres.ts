@@ -1,9 +1,9 @@
-import { createHash, randomUUID } from "node:crypto";
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, WorkflowRevision } from "@sandbox/contracts";
+import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SyncedWorkflowInput, SyncWriteResult } from "./types.js";
 import { DomainError } from "./types.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
@@ -449,6 +449,96 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async createRunnerPairingChallenge(actor: AuthenticatedSession, input: RunnerPairingChallengeInput, challenge: string, expiresAt: Date) {
+    return this.withAccount(actor.accountId, async client => {
+      const challengeId = randomUUID();
+      const metadata = { operatingSystem: input.operatingSystem, architecture: input.architecture, applicationVersion: input.applicationVersion, protocolVersion: input.protocolVersion, pluginRuntimeVersion: input.pluginRuntimeVersion, capabilities: input.capabilities, safeFolderLabels: input.safeFolderLabels, browserEngine: input.browserEngine, installedPluginVersions: input.installedPluginVersions, tags: input.tags };
+      await client.query(
+        `INSERT INTO runner_pairing_challenges(id, account_id, challenge_hash, device_public_key, expires_at, metadata)
+         VALUES($1,$2,$3,decode($4,'base64'),$5,$6)`,
+        [challengeId, actor.accountId, createHash("sha256").update(challenge, "utf8").digest(), input.devicePublicKeyDerBase64, expiresAt, metadata]
+      );
+      return { challengeId, challenge, expiresAt: expiresAt.toISOString() };
+    });
+  }
+
+  async confirmRunnerPairing(actor: AuthenticatedSession, input: RunnerPairingConfirmationInput, correlationId: string): Promise<RunnerRecord> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{ device_public_key: Buffer; challenge_hash: Buffer; metadata: RunnerPairingMetadata }>(
+        `SELECT device_public_key, challenge_hash, metadata FROM runner_pairing_challenges
+          WHERE id=$1 AND account_id=$2 AND consumed_at IS NULL AND expires_at > now() FOR UPDATE`,
+        [input.challengeId, actor.accountId]
+      );
+      if (!result.rowCount) throw new DomainError("pairing_challenge_invalid", "Pairing challenge is expired, consumed, or unavailable.", 409);
+      const challengeHash = createHash("sha256").update(input.challenge, "utf8").digest();
+      if (!challengeHash.equals(result.rows[0].challenge_hash)) throw new DomainError("pairing_challenge_invalid", "Pairing challenge does not match.", 403);
+      const publicKey = createPublicKey({ key: result.rows[0].device_public_key, format: "der", type: "spki" });
+      if (!verify(null, Buffer.from(input.challenge, "utf8"), publicKey, Buffer.from(input.signatureBase64, "base64"))) throw new DomainError("pairing_signature_invalid", "Runner did not prove possession of the device private key.", 403);
+      if (input.workspaceId) {
+        const membership = await client.query(`SELECT 1 FROM workspace_memberships WHERE workspace_id=$1 AND account_id=$2`, [input.workspaceId, actor.accountId]);
+        if (!membership.rowCount) throw new DomainError("workspace_not_found", "Workspace not found or not accessible.", 404);
+      }
+      const metadata = result.rows[0].metadata;
+      const runnerId = randomUUID();
+      const keyId = `device-${randomUUID()}`;
+      const inserted = await client.query<{ paired_at: Date }>(
+        `INSERT INTO runners(id,account_id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'offline') RETURNING paired_at`,
+        [runnerId, actor.accountId, input.workspaceId, input.displayName, metadata.operatingSystem, metadata.architecture, metadata.applicationVersion, metadata.protocolVersion, metadata.pluginRuntimeVersion, metadata.capabilities, metadata.safeFolderLabels, metadata.browserEngine, metadata.installedPluginVersions, metadata.tags]
+      );
+      await client.query(`INSERT INTO runner_device_keys(runner_id,key_id,algorithm,public_key) VALUES($1,$2,'ed25519',$3)`, [runnerId, keyId, result.rows[0].device_public_key]);
+      await client.query(`UPDATE runner_pairing_challenges SET consumed_at=now() WHERE id=$1`, [input.challengeId]);
+      if (input.workspaceId) await appendAudit(client, actor, input.workspaceId, "runner.paired", "runner", runnerId, null, { displayName: input.displayName, operatingSystem: metadata.operatingSystem, architecture: metadata.architecture }, correlationId);
+      return { runnerId, displayName: input.displayName, workspaceId: input.workspaceId, ...metadata, status: "offline", currentWorkload: 0, pairedAt: inserted.rows[0].paired_at.toISOString(), lastSeenAt: null };
+    });
+  }
+
+  async listRunners(actor: AuthenticatedSession, workspaceId: string): Promise<RunnerRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<RunnerRow>(`SELECT id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status,current_workload,paired_at,last_seen_at FROM runners WHERE workspace_id=$1 AND revoked_at IS NULL ORDER BY display_name,id`, [workspaceId]);
+      return result.rows.map(runnerFromRow);
+    });
+  }
+
+  async createRunnerCommand(actor: AuthenticatedSession, input: RunnerCommandInput, correlationId: string): Promise<RunnerCommand> {
+    return this.withAccount(actor.accountId, async client => {
+      const existing = await client.query<RunnerCommandRow>(`SELECT id,issuer_account_id,workspace_id,target_runner_id,action,workflow_revision_id,convert_from(payload_ciphertext,'utf8')::jsonb AS payload,created_at,expires_at,idempotency_key,key_id,encode(signature,'base64') AS signature,status FROM runner_commands WHERE target_runner_id=$1 AND idempotency_key=$2`, [input.targetRunnerId, input.idempotencyKey]);
+      if (existing.rowCount) return runnerCommandFromRow(existing.rows[0]);
+      const runner = await client.query<{ status: string; installed_plugin_versions: Array<{ pluginId: string; version: string; packageIntegrity: string }> }>(`SELECT status,installed_plugin_versions FROM runners WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL FOR UPDATE`, [input.targetRunnerId, input.workspaceId]);
+      if (!runner.rowCount) throw new DomainError("runner_not_found", "Target runner is not registered in this workspace.", 404);
+      if (!["online", "offline"].includes(runner.rows[0].status)) throw new DomainError("runner_unavailable", `Runner is ${runner.rows[0].status} and cannot accept new execution commands.`, 409);
+      if (new Date(input.expiresAt).getTime() <= Date.now()) throw new DomainError("command_expired", "Runner command expiry must be in the future.", 400);
+      if (["run_workflow", "sync_revision"].includes(input.action)) {
+        if (!input.workflowRevisionId) throw new DomainError("workflow_revision_required", "This command requires an exact approved workflow revision.", 400);
+        const revision = await client.query<{ plugin_requirements: Array<{ pluginId: string; version: string; packageIntegrity: string }> }>(
+          `SELECT r.plugin_requirements FROM workflow_revisions r JOIN synced_workflows w ON w.id=r.workflow_id
+            WHERE r.id=$1 AND w.workspace_id=$2 AND r.publish_status IN ('approved','published')`, [input.workflowRevisionId, input.workspaceId]
+        );
+        if (!revision.rowCount) throw new DomainError("workflow_revision_not_approved", "The exact workflow revision is not approved in this workspace.", 409);
+        const missing = incompatiblePluginRequirements(revision.rows[0].plugin_requirements, runner.rows[0].installed_plugin_versions);
+        if (missing.length) throw new DomainError("runner_incompatible", `Runner is missing exact plugin requirements: ${missing.join(", ")}.`, 409);
+      }
+      await client.query(
+        `INSERT INTO runner_commands(id,issuer_account_id,workspace_id,target_runner_id,action,workflow_revision_id,payload_ciphertext,created_at,expires_at,idempotency_key,key_id,signature,status)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,decode($12,'base64'),'queued')`,
+        [input.commandId, actor.accountId, input.workspaceId, input.targetRunnerId, input.action, input.workflowRevisionId, Buffer.from(JSON.stringify(input.payload), "utf8"), input.createdAt, input.expiresAt, input.idempotencyKey, input.keyId, input.signature]
+      );
+      await appendAudit(client, actor, input.workspaceId, "remote_execution.requested", "runner_command", input.commandId, null, { runnerId: input.targetRunnerId, action: input.action, workflowRevisionId: input.workflowRevisionId, expiresAt: input.expiresAt, idempotencyKey: input.idempotencyKey }, correlationId);
+      return { ...input, issuerAccountId: actor.accountId, status: "queued" };
+    });
+  }
+
+  async revokeRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, correlationId: string): Promise<boolean> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query(`UPDATE runners SET status='revoked',revoked_at=now() WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL`, [runnerId, workspaceId]);
+      if (!result.rowCount) return false;
+      await client.query(`UPDATE runner_device_keys SET revoked_at=now() WHERE runner_id=$1 AND revoked_at IS NULL`, [runnerId]);
+      await client.query(`UPDATE runner_commands SET status='expired' WHERE target_runner_id=$1 AND status IN ('queued','delivered')`, [runnerId]);
+      await appendAudit(client, actor, workspaceId, "runner.revoked", "runner", runnerId, null, { localDataDeleted: false }, correlationId);
+      return true;
+    });
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -483,6 +573,37 @@ interface WorkflowRevisionRow {
   encryption_algorithm: "aes-256-gcm";
   encryption_key_version: number;
   sync_state: WorkflowRevision["syncState"];
+}
+
+interface RunnerPairingMetadata {
+  operatingSystem: string; architecture: string; applicationVersion: string; protocolVersion: number; pluginRuntimeVersion: string;
+  capabilities: Record<string, unknown>; safeFolderLabels: string[]; browserEngine: Record<string, unknown> | null;
+  installedPluginVersions: Array<{ pluginId: string; version: string; packageIntegrity: string }>; tags: string[];
+}
+
+interface RunnerRow {
+  id: string; workspace_id: string | null; display_name: string; operating_system: string; architecture: string; application_version: string;
+  protocol_version: number; plugin_runtime_version: string; capabilities: Record<string, unknown>; safe_folder_labels: string[];
+  browser_engine: Record<string, unknown> | null; installed_plugin_versions: RunnerPairingMetadata["installedPluginVersions"]; tags: string[];
+  status: RunnerRecord["status"]; current_workload: number; paired_at: Date; last_seen_at: Date | null;
+}
+
+interface RunnerCommandRow {
+  id: string; issuer_account_id: string; workspace_id: string; target_runner_id: string; action: RunnerCommand["action"]; workflow_revision_id: string | null;
+  payload: Record<string, unknown>; created_at: Date; expires_at: Date; idempotency_key: string; key_id: string; signature: string; status: RunnerCommand["status"];
+}
+
+function runnerFromRow(row: RunnerRow): RunnerRecord {
+  return { runnerId: row.id, workspaceId: row.workspace_id, displayName: row.display_name, operatingSystem: row.operating_system, architecture: row.architecture, applicationVersion: row.application_version, protocolVersion: row.protocol_version, pluginRuntimeVersion: row.plugin_runtime_version, capabilities: row.capabilities, safeFolderLabels: row.safe_folder_labels, browserEngine: row.browser_engine, installedPluginVersions: row.installed_plugin_versions, tags: row.tags, status: row.status, currentWorkload: row.current_workload, pairedAt: row.paired_at.toISOString(), lastSeenAt: row.last_seen_at?.toISOString() ?? null };
+}
+
+function runnerCommandFromRow(row: RunnerCommandRow): RunnerCommand {
+  return { commandId: row.id, issuerAccountId: row.issuer_account_id, workspaceId: row.workspace_id, targetRunnerId: row.target_runner_id, action: row.action, workflowRevisionId: row.workflow_revision_id, payload: row.payload, createdAt: row.created_at.toISOString(), expiresAt: row.expires_at.toISOString(), idempotencyKey: row.idempotency_key, keyId: row.key_id, signature: row.signature.replace(/\s/g, ""), status: row.status };
+}
+
+export function incompatiblePluginRequirements(required: RunnerPairingMetadata["installedPluginVersions"], installed: RunnerPairingMetadata["installedPluginVersions"]): string[] {
+  const available = new Set(installed.map(plugin => `${plugin.pluginId}@${plugin.version}#${plugin.packageIntegrity}`));
+  return required.filter(plugin => !available.has(`${plugin.pluginId}@${plugin.version}#${plugin.packageIntegrity}`)).map(plugin => `${plugin.pluginId}@${plugin.version}`);
 }
 
 function workflowRevisionFromRow(row: WorkflowRevisionRow): WorkflowRevision {

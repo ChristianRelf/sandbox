@@ -6,6 +6,7 @@ mod integrations;
 mod marketplace;
 mod oauth;
 mod plugin_manager;
+pub mod remote_runner;
 mod runner;
 mod sync_crypto;
 mod templates;

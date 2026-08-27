@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { TransactionalEmail } from "./email.js";
 import { createServer } from "./server.js";
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
+import type { RunnerCommandSigner } from "./runner_protocol.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -28,13 +29,16 @@ function dependencies(permissions: string[]) {
     resolveSyncConflict: vi.fn(),
     createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), publishPluginVersion: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
     searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
-    listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn()
+    listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
+    createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
+    requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
   const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
   const packageStorage = { createUpload: vi.fn(), createDownload: vi.fn(), inspect: vi.fn() };
   const packageScanner = { scan: vi.fn() };
-  return { repository, sessions, email, packageStorage, packageScanner, webBaseUrl: "https://app.sandbox.test" };
+  const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -150,6 +154,56 @@ describe("control-plane API", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json().publisher.publicKeyPem).toContain("BEGIN PUBLIC KEY");
     expect(response.json().download.downloadUrl).toContain("signature=short-lived");
+    await server.close();
+  });
+
+  it("pairs a runner only after workspace authorization and proof of possession", async () => {
+    const deps = dependencies(["runners.manage"]);
+    const challengeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const runnerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const der = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.alloc(32, 9)]).toString("base64");
+    vi.mocked(deps.repository.createRunnerPairingChallenge).mockResolvedValue({ challengeId, challenge: "challenge-value-with-enough-entropy-123", expiresAt: new Date(Date.now()+600_000).toISOString() });
+    vi.mocked(deps.repository.confirmRunnerPairing).mockResolvedValue({ runnerId, displayName: "Studio PC", workspaceId, operatingSystem: "windows", architecture: "x86_64", applicationVersion: "0.3.0", protocolVersion: 1, pluginRuntimeVersion: "0.3.0", capabilities: {}, safeFolderLabels: [], browserEngine: null, installedPluginVersions: [], tags: ["studio"], status: "offline", currentWorkload: 0, pairedAt: new Date().toISOString(), lastSeenAt: null });
+    const server = await createServer(deps);
+    const started = await server.inject({ method: "POST", url: "/v1/runners/pairing/challenges", headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { devicePublicKeyDerBase64: der, operatingSystem: "windows", architecture: "x86_64", applicationVersion: "0.3.0", protocolVersion: 1, pluginRuntimeVersion: "0.3.0", capabilities: {}, tags: ["studio"] } });
+    expect(started.statusCode, started.body).toBe(200);
+    const confirmed = await server.inject({ method: "POST", url: "/v1/runners/pairing/confirm", headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { challengeId, challenge: started.json().challenge, signatureBase64: Buffer.alloc(64, 3).toString("base64"), workspaceId, displayName: "Studio PC" } });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(deps.repository.confirmRunnerPairing).toHaveBeenCalledWith(session, expect.objectContaining({ workspaceId, displayName: "Studio PC" }), expect.any(String));
+    await server.close();
+  });
+
+  it("creates signed expiring idempotent commands for an exact workflow revision", async () => {
+    const deps = dependencies(["workflows.run"]);
+    const targetRunnerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const revisionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    vi.mocked(deps.repository.createRunnerCommand).mockImplementation(async (_actor, command) => ({ ...command, issuerAccountId: session.accountId, status: "queued" }));
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId, action: "run_workflow", workflowRevisionId: revisionId, payload: { trigger: "remote" }, idempotencyKey: "remote-run-unique-0001", expiresInSeconds: 300 } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().command).toMatchObject({ workspaceId, targetRunnerId, workflowRevisionId: revisionId, keyId: "control-plane-1", status: "queued" });
+    expect(response.json().command.signature).toBeTruthy();
+    await server.close();
+  });
+
+  it("keeps draft approval and publication as explicit authorized transitions", async () => {
+    const deps = dependencies(["workflows.edit", "workflows.approve", "workflows.publish"]);
+    const workflowId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const revisionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const approvalId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const createdAt = new Date().toISOString();
+    vi.mocked(deps.repository.requestWorkflowApproval).mockResolvedValue({ approvalId, workflowId, revisionId, status: "pending", requiredApprovals: 1, approvalCount: 0, createdAt });
+    vi.mocked(deps.repository.decideWorkflowApproval).mockResolvedValue({ approvalId, workflowId, revisionId, status: "approved", requiredApprovals: 1, approvalCount: 1, createdAt });
+    vi.mocked(deps.repository.publishWorkflowRevision).mockResolvedValue({ workflowId, publishedRevisionId: revisionId, previousPublishedRevisionId: null });
+    const server = await createServer(deps);
+    const headers = { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() };
+    const requested = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/workflows/${workflowId}/revisions/${revisionId}/request-approval`, headers });
+    expect(requested.statusCode, requested.body).toBe(200);
+    const decided = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/workflow-approvals/${approvalId}/decision`, headers, payload: { decision: "approved" } });
+    expect(decided.statusCode, decided.body).toBe(200);
+    const published = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/workflows/${workflowId}/revisions/${revisionId}/publish`, headers, payload: { changeSummary: "Approved production revision" } });
+    expect(published.statusCode, published.body).toBe(200);
+    expect(deps.repository.publishWorkflowRevision).toHaveBeenCalledWith(session, workspaceId, workflowId, revisionId, "Approved production revision", expect.any(String));
     await server.close();
   });
 });

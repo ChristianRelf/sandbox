@@ -100,6 +100,31 @@ export const runnerCommandSchema = z.object({
 });
 export type RunnerCommand = z.infer<typeof runnerCommandSchema>;
 
+export const runnerRecordSchema = z.object({
+  runnerId: idSchema,
+  displayName: z.string().min(1).max(100),
+  workspaceId: idSchema.nullable(),
+  operatingSystem: z.string().min(1).max(80),
+  architecture: z.string().min(1).max(80),
+  applicationVersion: z.string().min(1).max(50),
+  protocolVersion: z.number().int().positive(),
+  pluginRuntimeVersion: z.string().min(1).max(50),
+  capabilities: z.record(z.string(), z.unknown()),
+  safeFolderLabels: z.array(z.string().min(1).max(100)).max(100),
+  browserEngine: z.record(z.string(), z.unknown()).nullable(),
+  installedPluginVersions: z.array(z.object({
+    pluginId: z.string().min(3).max(200),
+    version: z.string().min(1).max(50),
+    packageIntegrity: z.string().regex(/^sha256:[a-f0-9]{64}$/)
+  })).max(500),
+  tags: z.array(z.string().min(1).max(50)).max(50),
+  status: z.enum(["online", "offline", "paused", "draining", "maintenance", "revoked"]),
+  currentWorkload: z.number().int().nonnegative(),
+  pairedAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime().nullable()
+});
+export type RunnerRecord = z.infer<typeof runnerRecordSchema>;
+
 export const runSummarySchema = z.object({
   id: idSchema,
   workspaceId: idSchema,

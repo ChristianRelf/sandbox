@@ -1,4 +1,4 @@
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, WorkflowRevision } from "@sandbox/contracts";
 
 export interface AuthenticatedSession {
   accountId: string;
@@ -32,6 +32,35 @@ export interface PluginSubmissionRecord { reviewId: string; pluginVersionId: str
 export interface PublisherInput { publicId: string; ownerType: "personal" | "organisation"; ownerId: string; publicName: string; slug: string; description: string; website: string | null; supportContact: string; securityContact: string }
 export interface MarketplaceQuery { search: string | null; category: string | null; pricing: "all" | "free" | "paid"; verifiedOnly: boolean; visibility: "public" | "workspace" | "all"; workspaceId: string | null; teamApprovedOnly: boolean; sort: "recent" | "installs" | "rating"; cursor: string | null; limit: number; hostVersion: string }
 export interface MarketplacePackage { pluginId: string; version: string; packageIntegrity: string; packageSize: number; packageObjectKey: string; publisherPublicId: string; publisherKeyId: string; publisherPublicKeyDerBase64: string; pricingModel: string }
+export interface RunnerPairingChallengeInput {
+  devicePublicKeyDerBase64: string;
+  operatingSystem: string;
+  architecture: string;
+  applicationVersion: string;
+  protocolVersion: number;
+  pluginRuntimeVersion: string;
+  capabilities: Record<string, unknown>;
+  safeFolderLabels: string[];
+  browserEngine: Record<string, unknown> | null;
+  installedPluginVersions: Array<{ pluginId: string; version: string; packageIntegrity: string }>;
+  tags: string[];
+}
+export interface RunnerPairingChallengeRecord { challengeId: string; challenge: string; expiresAt: string }
+export interface RunnerPairingConfirmationInput { challengeId: string; challenge: string; signatureBase64: string; workspaceId: string | null; displayName: string }
+export interface RunnerCommandInput {
+  commandId: string;
+  workspaceId: string;
+  targetRunnerId: string;
+  action: RunnerCommand["action"];
+  workflowRevisionId: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  expiresAt: string;
+  idempotencyKey: string;
+  keyId: string;
+  signature: string;
+}
+export interface WorkflowApprovalRecord { approvalId: string; workflowId: string; revisionId: string; status: "pending" | "approved" | "rejected" | "expired"; requiredApprovals: number; approvalCount: number; createdAt: string }
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
@@ -59,6 +88,15 @@ export interface ControlPlaneRepository {
   requestAccountDeletion(actor: AuthenticatedSession, correlationId: string): Promise<void>;
   listSessions(actor: AuthenticatedSession): Promise<Array<{ id: string; deviceName: string; createdAt: string; lastSeenAt: string; expiresAt: string; current: boolean }>>;
   revokeSession(actor: AuthenticatedSession, sessionId: string, correlationId: string): Promise<boolean>;
+  createRunnerPairingChallenge(actor: AuthenticatedSession, input: RunnerPairingChallengeInput, challenge: string, expiresAt: Date): Promise<RunnerPairingChallengeRecord>;
+  confirmRunnerPairing(actor: AuthenticatedSession, input: RunnerPairingConfirmationInput, correlationId: string): Promise<RunnerRecord>;
+  listRunners(actor: AuthenticatedSession, workspaceId: string): Promise<RunnerRecord[]>;
+  createRunnerCommand(actor: AuthenticatedSession, input: RunnerCommandInput, correlationId: string): Promise<RunnerCommand>;
+  revokeRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, correlationId: string): Promise<boolean>;
+  requestWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<WorkflowApprovalRecord>;
+  decideWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, approvalId: string, decision: "approved" | "rejected", reason: string | null, correlationId: string): Promise<WorkflowApprovalRecord>;
+  publishWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, changeSummary: string, correlationId: string): Promise<{ workflowId: string; publishedRevisionId: string; previousPublishedRevisionId: string | null }>;
+  rollbackWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, reason: string, correlationId: string): Promise<{ workflowId: string; publishedRevisionId: string; previousPublishedRevisionId: string | null }>;
 }
 
 export class DomainError extends Error {
