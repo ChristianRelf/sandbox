@@ -1,37 +1,56 @@
-# Runner pairing and command protocol
+# Runner protocol v2
 
-Workflow execution remains local. The control plane coordinates signed commands and summaries; it never evaluates workflow nodes.
+Protocol v2 is shared by desktop, hosted, managed-browser, self-hosted Linux, NAS and Raspberry Pi runners. It carries coordination only; workflow semantics remain in the versioned Rust engine.
 
-## Pairing
+## Identity
 
-1. The desktop creates an Ed25519 device key pair and keeps the private key in the operating-system credential store.
-2. It sends the public SPKI key and non-sensitive compatibility metadata to create a ten-minute pairing challenge.
-3. The desktop signs the exact challenge and the user selects a permitted workspace and runner name.
-4. The server verifies possession, consumes the challenge once, registers the public key, and returns a revocable runner identity.
+Every runner registers a unique runner ID and Ed25519 device/workload key, runner type, protocol/engine/plugin-runtime versions, OS and architecture, workspace and environment assignment, region, tags, concurrency limit, maintenance state, node capabilities, exact plugins and connection availability. Registration uses a short-lived pairing token and requires fingerprint confirmation for self-hosted devices. Permanent account credentials are never placed in pairing commands.
 
-Raw local paths are not registered. Runners report safe folder labels, OS/architecture, application and protocol versions, browser availability, exact installed plugin versions, tags, status, last-seen time and workload.
+The supported protocol is currently exactly version 2. Messages with another version or unknown fields fail strict schema validation. Engine and plugin-runtime compatibility are exact at this stage; supported version ranges may be introduced only with conformance tests.
 
-## Device-authenticated requests
+## Authentication
 
-Runner requests contain `x-sandbox-runner-id`, `x-sandbox-key-id`, `x-sandbox-request-time`, `x-sandbox-request-nonce` and `x-sandbox-signature`. The signature covers a canonical object containing runner/key IDs, time, nonce, HTTP method, complete request path and body. Requests outside five minutes are rejected. Nonces are stored uniquely and expire after ten minutes, preventing replay.
+Device requests retain the v1 canonical request signature covering runner/key IDs, time, nonce, method, full path and body. The server rejects stale times, reused nonces, revoked keys and signatures over mutated bodies. Workload identities use the same canonical request semantics with shorter credential lifetimes.
 
-Device keys can be rotated through a request authenticated by the current key. Successful rotation revokes older keys. Runner revocation also revokes keys and expires queued commands without deleting local data.
+Control-plane work commands remain signed independently of runner requests. A compromised runner device key cannot mint a control-plane command.
 
-## Commands
+## Message families
 
-The control plane signs canonical Ed25519 command envelopes containing command ID, issuer, workspace, target runner, action, exact workflow revision, payload, creation/expiry, idempotency key and signing-key ID. A command is queued only if:
+| Message | Purpose |
+| --- | --- |
+| `registration` | identity, key, fingerprint, versions, placement and update channel |
+| `heartbeat` | health, capacity, maintenance, capabilities, plugins, connections and bounded resource use |
+| `work_claim` / `work_claim_result` | capability-matched assignments and short leases |
+| `lease_renewal` | authenticated bounded extension of the current lease generation |
+| `cancellation_ack` | cancelled, already terminal, not running or unable to confirm |
+| `progress` | ordered node lifecycle, redacted logs, output metadata and artifact grants |
+| `drain_status` | active executions and expected drain completion |
+| `update_status` | selected channel, current/target version and update lifecycle |
 
-- the issuer has the required explicit workspace permission;
-- remote execution governance permits it;
-- the runner belongs to the workspace and accepts new work;
-- the exact workflow revision is approved/published;
-- every required plugin version and integrity digest exists on the runner.
+Progress metadata is redacted before upload. Artifacts use separate size-bounded, expiring upload grants. A runner never sends raw connection material as availability metadata.
 
-Offline runners retain a visible queued command until its expiry. Delivery changes its state to `delivered`; the runner then reports accepted, rejected or completed. The desktop verifier independently checks the signature, target/workspace, time window, local action policy and exact approved revision. SQLite atomically claims `(runnerId, idempotencyKey)` before execution, so reconnect delivery cannot run twice.
+## Compatibility
 
-## Administration and presence
+Dispatch evaluates every declared requirement:
 
-Administrators can rename, pause, drain, place into maintenance, resume to offline, move, or revoke runners. A move requires `runners.manage` in both workspaces and zero current workload. Heartbeats are device-signed; an absent heartbeat is displayed as offline/last seen, never as idle.
+- protocol, engine and plugin-runtime versions;
+- runner type and architecture;
+- workspace, environment and optional region;
+- every required tag;
+- active maintenance state and concurrency;
+- every node type and node version;
+- exact plugin ID, version and package integrity;
+- every environment-scoped connection in available state.
 
-Central run records are summaries only: workflow/revision, runner, trigger, status, start, duration, failed node and redacted error. Detailed inputs, outputs, screenshots and logs stay local by default.
+Online status alone never makes a runner compatible. The same compatibility function is used for pre-deployment validation and work claiming.
+
+## Work claiming and leases
+
+The dispatcher selects compatible waiting work under a database row lock with `SKIP LOCKED`. It creates one active lease per execution, assigns a monotonically increasing generation and returns an opaque 256-bit token. Only the token hash is stored. A lease is short, renewable and bounded to five minutes per extension.
+
+Runner-owned transitions and checkpoints require the current runner, lease ID and an unexpired matching token. Duplicate claim attempts cannot create a second active lease. Revocation or drain prevents new claims but does not erase local data.
+
+## At-least-once semantics
+
+Leases prevent normal concurrent claims; they do not provide exactly-once external effects. After lease loss, the control plane records `lost`, examines the last checkpoint and interrupted node, and either resumes safe work or blocks for review. Reused work preserves its original idempotency key when supported.
 
