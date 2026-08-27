@@ -265,18 +265,19 @@ impl PluginManager {
             )
         })?;
         let package_bytes = std::fs::read(&installed.package_path).map_err(storage)?;
-        let verified = self.verify(
-            &package_bytes,
-            &PackageTrustMetadata {
-                publisher_id: installed.publisher_id.clone(),
-                key_id: installed.publisher_key_id.clone(),
-                publisher_public_key_pem: public_key.to_string(),
-                owner_type: installed.owner_type.clone(),
-                owner_id: installed.owner_id.clone(),
-                source: installed.source.clone(),
-            },
-        )
-        .map_err(|error| EngineError::Permission(error.to_string()))?;
+        let verified = self
+            .verify(
+                &package_bytes,
+                &PackageTrustMetadata {
+                    publisher_id: installed.publisher_id.clone(),
+                    key_id: installed.publisher_key_id.clone(),
+                    publisher_public_key_pem: public_key.to_string(),
+                    owner_type: installed.owner_type.clone(),
+                    owner_id: installed.owner_id.clone(),
+                    source: installed.source.clone(),
+                },
+            )
+            .map_err(|error| EngineError::Permission(error.to_string()))?;
         if verified.digest != pin.package_integrity
             || verified.manifest.plugin_id != pin.plugin_id
             || verified.manifest.version.to_string() != pin.plugin_version
@@ -341,8 +342,8 @@ impl PluginManager {
             &node.id,
         );
         context.owner_id = workflow.owner.owner_id.clone();
-        context.workspace_id = (workflow.owner.owner_type == "workspace")
-            .then(|| workflow.owner.owner_id.clone());
+        context.workspace_id =
+            (workflow.owner.owner_type == "workspace").then(|| workflow.owner.owner_id.clone());
         context.plugin_major_version = if verified
             .manifest
             .storage_requirements
@@ -607,7 +608,10 @@ mod tests {
     use sandbox_engine::{
         PluginNodePin, Position, Workflow, WorkflowNode, WorkflowSettings, CURRENT_SCHEMA_VERSION,
     };
-    use sandbox_plugin_runtime::package_digest;
+    use sandbox_plugin_runtime::{
+        package_digest, CredentialOperationBroker, HttpRequest, HttpResponse, NetworkTransport,
+        PluginError,
+    };
     use std::{collections::BTreeMap, io::Write};
     use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
@@ -704,6 +708,40 @@ mod tests {
             settings: WorkflowSettings::default(),
             created_at: now,
             updated_at: now,
+        }
+    }
+
+    struct WeatherNetwork;
+
+    impl NetworkTransport for WeatherNetwork {
+        fn send(&self, request: &HttpRequest) -> Result<HttpResponse, PluginError> {
+            assert!(request.url.starts_with("https://api.open-meteo.com/"));
+            Ok(HttpResponse {
+                status: 200,
+                headers: BTreeMap::new(),
+                body: serde_json::to_vec(&serde_json::json!({
+                    "current_weather": {
+                        "temperature": 12.5,
+                        "windspeed": 4.0,
+                        "weathercode": 1
+                    }
+                }))
+                .unwrap(),
+            })
+        }
+    }
+
+    struct NoCredentials;
+
+    impl CredentialOperationBroker for NoCredentials {
+        fn execute(
+            &self,
+            _credential_id: &str,
+            _credential_type: &str,
+            _operation: &str,
+            _input: &Value,
+        ) -> Result<Value, PluginError> {
+            panic!("weather plugin must not request credential operations")
         }
     }
 
@@ -845,6 +883,75 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("revoked"));
+    }
+
+    #[test]
+    fn executes_exact_installed_package_and_rejects_tampering() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = Database::in_memory().unwrap();
+        let manager = PluginManager::with_host_services(
+            database.clone(),
+            directory.path().join("packages"),
+            Arc::new(WeatherNetwork),
+            Arc::new(NoCredentials),
+        )
+        .unwrap();
+        let signing = SigningKey::from_bytes(&[17; 32]);
+        let inspected = manager
+            .inspect_bytes(
+                signed_weather_package(&signing, "1.0.0", false),
+                trust(&signing),
+            )
+            .unwrap();
+        let installed = manager.install_inspected(&inspected.inspection_id).unwrap();
+        assert!(installed.publisher_public_key_pem.is_some());
+        database
+            .approve_plugin_permissions(
+                &installed.plugin_id,
+                &installed.version,
+                &installed.package_integrity,
+                "personal",
+                "local",
+            )
+            .unwrap();
+        let enabled = database
+            .set_plugin_enabled(
+                &installed.plugin_id,
+                &installed.version,
+                &installed.package_integrity,
+                "personal",
+                "local",
+                true,
+            )
+            .unwrap();
+        let mut workflow = workflow(&enabled);
+        workflow.nodes[0].configuration =
+            serde_json::json!({"latitude":51.5,"longitude":-0.12,"units":"celsius"});
+        let result = manager
+            .execute_node(
+                &workflow,
+                &workflow.nodes[0],
+                "run-weather",
+                serde_json::json!({}),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .unwrap();
+        assert_eq!(result.output["temperature"], 12.5);
+
+        let mut tampered = std::fs::read(&enabled.package_path).unwrap();
+        tampered[0] ^= 0xff;
+        std::fs::write(&enabled.package_path, tampered).unwrap();
+        assert!(manager
+            .execute_node(
+                &workflow,
+                &workflow.nodes[0],
+                "run-tampered",
+                serde_json::json!({}),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("package"));
     }
 
     fn hex(value: &[u8]) -> String {

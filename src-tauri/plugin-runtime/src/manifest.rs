@@ -368,10 +368,7 @@ impl Manifest {
                 ("configurationSchema", &node.configuration_schema),
             ] {
                 if let Err(error) = validate_declared_schema(schema) {
-                    errors.push(format!(
-                        "Node '{}' {label} {error}.",
-                        node.node_type
-                    ));
+                    errors.push(format!("Node '{}' {label} {error}.", node.node_type));
                 }
             }
         }
@@ -412,14 +409,20 @@ impl Manifest {
             errors
                 .push("Plugin storage requirements cannot exceed 100 MB per storage class.".into());
         }
-        let declared_persistent = self.capabilities.iter().find_map(|capability| match capability {
-            Capability::PersistentStorage { max_bytes } => Some(*max_bytes),
-            _ => None,
-        });
-        let declared_temporary = self.capabilities.iter().find_map(|capability| match capability {
-            Capability::TemporaryStorage { max_bytes } => Some(*max_bytes),
-            _ => None,
-        });
+        let declared_persistent =
+            self.capabilities
+                .iter()
+                .find_map(|capability| match capability {
+                    Capability::PersistentStorage { max_bytes } => Some(*max_bytes),
+                    _ => None,
+                });
+        let declared_temporary = self
+            .capabilities
+            .iter()
+            .find_map(|capability| match capability {
+                Capability::TemporaryStorage { max_bytes } => Some(*max_bytes),
+                _ => None,
+            });
         if self.storage_requirements.persistent_bytes > declared_persistent.unwrap_or(0) {
             errors.push(
                 "storageRequirements.persistentBytes exceeds the declared persistent storage capability."

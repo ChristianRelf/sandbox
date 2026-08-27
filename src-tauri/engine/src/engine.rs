@@ -690,17 +690,10 @@ impl Engine {
                 let pin = node.plugin.as_ref().expect("guarded plugin pin");
                 let input = resolve_value(&pin.input, trigger, outputs)?;
                 let mut resolved_node = node.clone();
-                resolved_node.configuration =
-                    resolve_value(&node.configuration, trigger, outputs)?;
+                resolved_node.configuration = resolve_value(&node.configuration, trigger, outputs)?;
                 let result = self
                     .host
-                    .plugin_operation(
-                        workflow,
-                        &resolved_node,
-                        execution_id,
-                        input,
-                        cancellation,
-                    )
+                    .plugin_operation(workflow, &resolved_node, execution_id, input, cancellation)
                     .await?;
                 let mut node_result = NodeResult::new(result.output).log(format!(
                     "{} completed through its pinned sandbox package.",
@@ -1329,6 +1322,35 @@ mod tests {
             Ok(())
         }
     }
+    struct PluginDispatchHost(Arc<std::sync::Mutex<Vec<Value>>>);
+    #[async_trait]
+    impl HostServices for PluginDispatchHost {
+        async fn desktop_notification(
+            &self,
+            _title: &str,
+            _message: &str,
+        ) -> Result<(), EngineError> {
+            Ok(())
+        }
+
+        async fn plugin_operation(
+            &self,
+            _workflow: &Workflow,
+            node: &WorkflowNode,
+            execution_id: &str,
+            input: Value,
+            _cancellation: CancellationToken,
+        ) -> Result<PluginHostResult, EngineError> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(json!({"configuration":node.configuration,"input":input,"executionId":execution_id}));
+            Ok(PluginHostResult {
+                output: json!({"dispatched":true}),
+                diagnostics: vec!["sandbox: isolated".into()],
+            })
+        }
+    }
     fn node(id: &str, node_type: &str, config: Value) -> WorkflowNode {
         WorkflowNode {
             id: id.into(),
@@ -1416,6 +1438,50 @@ mod tests {
                 .status,
             NodeStatus::Skipped
         );
+    }
+
+    #[tokio::test]
+    async fn plugin_nodes_resolve_input_and_dispatch_only_through_host() {
+        let calls = Arc::new(std::sync::Mutex::new(vec![]));
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(PluginDispatchHost(calls.clone())),
+        );
+        let mut plugin = node(
+            "plugin",
+            "example.echo",
+            json!({"label":"{{trigger.label}}"}),
+        );
+        plugin.plugin = Some(crate::PluginNodePin {
+            plugin_id: "com.example.echo".into(),
+            plugin_version: "1.0.0".into(),
+            package_integrity: format!("sha256:{}", "a".repeat(64)),
+            publisher_id: "com.example".into(),
+            input: json!({"value":"{{trigger.value}}"}),
+            credential_references: Default::default(),
+        });
+        let workflow = base(
+            vec![node("trigger", "manual_trigger", json!({})), plugin.clone()],
+            vec![edge("plugin-edge", "trigger", "output", "plugin")],
+        );
+        let result = engine
+            .execute_node(
+                &plugin,
+                &workflow,
+                "run-plugin",
+                &json!({"label":"resolved","value":42}),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.output["dispatched"], true);
+        assert!(result.logs.iter().any(|log| log.contains("sandbox")));
+        assert_eq!(
+            calls.lock().unwrap()[0]["configuration"]["label"],
+            "resolved"
+        );
+        assert_eq!(calls.lock().unwrap()[0]["input"]["value"], 42);
     }
     #[tokio::test]
     async fn condition_follows_false_branch() {

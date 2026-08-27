@@ -1350,6 +1350,46 @@ mod tests {
         assert_eq!(saved.schema_version, crate::model::CURRENT_SCHEMA_VERSION);
         assert!(!saved.settings.permissions.browser_automation_permitted);
     }
+
+    #[test]
+    fn plugin_storage_enforces_quota_and_owner_isolation() {
+        let db = Database::in_memory().unwrap();
+        db.plugin_storage_put("plugin", "publisher", "alice", "", 1, "", "key", b"1234", 4)
+            .unwrap();
+        assert_eq!(
+            db.plugin_storage_get("plugin", "publisher", "alice", "", 1, "", "key")
+                .unwrap(),
+            Some(b"1234".to_vec())
+        );
+        assert_eq!(
+            db.plugin_storage_get("plugin", "publisher", "bob", "", 1, "", "key")
+                .unwrap(),
+            None
+        );
+        assert!(db
+            .plugin_storage_put("plugin", "publisher", "alice", "", 1, "", "other", b"x", 4)
+            .unwrap_err()
+            .to_string()
+            .contains("quota"));
+        db.plugin_storage_put(
+            "plugin",
+            "publisher",
+            "alice",
+            "",
+            1,
+            "run-1",
+            "temp",
+            b"x",
+            4,
+        )
+        .unwrap();
+        db.clear_temporary_plugin_storage("run-1").unwrap();
+        assert_eq!(
+            db.plugin_storage_used_bytes("plugin", "publisher", "alice", "", 1, "run-1")
+                .unwrap(),
+            0
+        );
+    }
     #[test]
     fn recovers_running_records() {
         let db = Database::in_memory().unwrap();

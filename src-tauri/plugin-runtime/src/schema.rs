@@ -39,8 +39,7 @@ fn reject_external_references(value: &Value) -> Result<(), String> {
             if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
                 if !reference.starts_with('#') {
                     return Err(
-                        "external JSON Schema references are not allowed in plugin packages"
-                            .into(),
+                        "external JSON Schema references are not allowed in plugin packages".into(),
                     );
                 }
             }
@@ -68,10 +67,12 @@ mod tests {
         let schema = json!({"type":"object","required":["name"],"properties":{"name":{"type":"string","pattern":"^[a-z]+$"}},"additionalProperties":false});
         validate_declared_schema(&schema).unwrap();
         validate_schema_instance(&schema, &json!({"name":"safe"}), "Input").unwrap();
-        assert!(validate_schema_instance(&schema, &json!({"name":"123"}), "Input")
-            .unwrap_err()
-            .to_string()
-            .contains("declared schema"));
+        assert!(
+            validate_schema_instance(&schema, &json!({"name":"123"}), "Input")
+                .unwrap_err()
+                .to_string()
+                .contains("declared schema")
+        );
         assert!(validate_declared_schema(&json!({"$ref":"file:///etc/passwd"})).is_err());
         assert!(validate_declared_schema(&json!({"$ref":"https://example.com/schema"})).is_err());
     }
