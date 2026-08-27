@@ -24,6 +24,8 @@ export const permissions = [
   "workflows.pause",
   "workflows.publish",
   "workflows.approve",
+  "deployments.manage",
+  "deployments.promote",
   "workflows.view",
   "executions.view_summary",
   "executions.view_detail",
@@ -37,7 +39,7 @@ export type BuiltInRole = "owner" | "administrator" | "developer" | "operator" |
 
 export const rolePermissionMatrix: Readonly<Record<BuiltInRole, readonly Permission[]>> = {
   owner: permissions,
-  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
+  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
   developer: ["plugins.develop_private", "plugins.permissions.request", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.view", "executions.view_summary"],
   operator: ["connections.use", "workflows.run", "workflows.pause", "workflows.view", "executions.view_summary", "approvals.handle"],
   viewer: ["workflows.view", "executions.view_summary"]
@@ -125,6 +127,316 @@ export const runnerRecordSchema = z.object({
 });
 export type RunnerRecord = z.infer<typeof runnerRecordSchema>;
 
+export const RUNNER_PROTOCOL_VERSION = 2 as const;
+export const RUNNER_PROTOCOL_MINIMUM_VERSION = 2 as const;
+
+export const runnerTypeSchema = z.enum([
+  "desktop",
+  "hosted",
+  "managed_browser",
+  "self_hosted_server",
+  "nas",
+  "raspberry_pi"
+]);
+export type RunnerType = z.infer<typeof runnerTypeSchema>;
+
+export const runnerArchitectureSchema = z.enum(["x86_64", "aarch64"]);
+export type RunnerArchitecture = z.infer<typeof runnerArchitectureSchema>;
+
+export const runnerMaintenanceStateSchema = z.enum(["active", "draining", "maintenance", "updating", "revoked"]);
+export type RunnerMaintenanceState = z.infer<typeof runnerMaintenanceStateSchema>;
+
+export const nodeCapabilitySchema = z.object({
+  nodeType: z.string().min(1).max(200),
+  nodeVersions: z.array(z.number().int().positive()).min(1).max(100),
+  constraints: z.record(z.string(), z.unknown()).default({})
+}).strict();
+export type NodeCapability = z.infer<typeof nodeCapabilitySchema>;
+
+export const runnerPluginAvailabilitySchema = z.object({
+  pluginId: z.string().min(3).max(200),
+  version: z.string().min(1).max(50),
+  packageIntegrity: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  nodeVersions: z.record(z.string(), z.array(z.number().int().positive()).min(1)).default({})
+}).strict();
+
+export const runnerConnectionAvailabilitySchema = z.object({
+  connectionId: idSchema,
+  environmentId: idSchema,
+  operations: z.array(z.string().min(1).max(120)).max(200),
+  status: z.enum(["available", "authorization_required", "expired", "unavailable"])
+}).strict();
+
+export const runnerIdentitySchema = z.object({
+  runnerId: idSchema,
+  keyId: z.string().min(1).max(200),
+  runnerType: runnerTypeSchema,
+  protocolVersion: z.number().int().positive(),
+  engineVersion: z.string().min(1).max(50),
+  pluginRuntimeVersion: z.string().min(1).max(50),
+  architecture: runnerArchitectureSchema,
+  operatingSystem: z.string().min(1).max(80),
+  workspaceId: idSchema,
+  environmentId: idSchema,
+  region: z.string().min(1).max(80),
+  tags: z.array(z.string().min(1).max(50)).max(50),
+  concurrencyLimit: z.number().int().min(1).max(1_000),
+  maintenanceState: runnerMaintenanceStateSchema,
+  nodeCapabilities: z.array(nodeCapabilitySchema).max(1_000),
+  plugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  connections: z.array(runnerConnectionAvailabilitySchema).max(1_000)
+}).strict();
+export type RunnerIdentity = z.infer<typeof runnerIdentitySchema>;
+
+const runnerProtocolBaseSchema = z.object({
+  protocolVersion: z.literal(RUNNER_PROTOCOL_VERSION),
+  messageId: idSchema,
+  runnerId: idSchema,
+  sentAt: z.string().datetime(),
+  correlationId: idSchema
+});
+
+export const runnerRegistrationSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("registration"),
+  identity: runnerIdentitySchema,
+  publicKeyDerBase64: z.string().base64().max(2_048),
+  pairingToken: z.string().min(32).max(1_024),
+  fingerprint: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  updateChannel: z.enum(["stable", "preview", "development"])
+}).strict();
+
+export const runnerHeartbeatSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("heartbeat"),
+  health: z.enum(["healthy", "degraded", "unhealthy"]),
+  currentWorkload: z.number().int().nonnegative(),
+  availableConcurrency: z.number().int().nonnegative(),
+  maintenanceState: runnerMaintenanceStateSchema,
+  nodeCapabilities: z.array(nodeCapabilitySchema).max(1_000),
+  plugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  connections: z.array(runnerConnectionAvailabilitySchema).max(1_000),
+  resourceUsage: z.object({ cpuPercent: z.number().min(0).max(100), memoryBytes: z.number().int().nonnegative(), temporaryStorageBytes: z.number().int().nonnegative() }).strict(),
+  warnings: z.array(z.string().max(500)).max(100)
+}).strict();
+
+export const workClaimRequestSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("work_claim"),
+  maximumItems: z.number().int().min(1).max(100),
+  availableConcurrency: z.number().int().positive()
+}).strict();
+
+export const executionLeaseSchema = z.object({
+  leaseId: idSchema,
+  executionId: idSchema,
+  runnerId: idSchema,
+  generation: z.number().int().positive(),
+  issuedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  renewalAfter: z.string().datetime(),
+  leaseToken: z.string().min(32).max(1_024)
+}).strict();
+export type ExecutionLease = z.infer<typeof executionLeaseSchema>;
+
+export const workAssignmentSchema = z.object({
+  executionId: idSchema,
+  eventId: idSchema,
+  workspaceId: idSchema,
+  environmentId: idSchema,
+  deploymentId: idSchema,
+  workflowId: idSchema,
+  workflowRevisionId: idSchema,
+  trigger: z.string().min(1).max(120),
+  encryptedPayloadReference: z.string().min(1).max(2_048),
+  permissionSnapshotId: idSchema,
+  region: z.string().min(1).max(80),
+  requiredCapabilities: z.array(nodeCapabilitySchema).max(1_000),
+  requiredPlugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  requiredConnectionIds: z.array(idSchema).max(1_000),
+  lease: executionLeaseSchema,
+  timeoutAt: z.string().datetime(),
+  recoveryMode: z.enum(["fresh", "resume", "operator_resolved"]),
+  checkpointId: idSchema.nullable()
+}).strict();
+export type WorkAssignment = z.infer<typeof workAssignmentSchema>;
+
+export const workClaimResponseSchema = z.object({
+  protocolVersion: z.literal(RUNNER_PROTOCOL_VERSION),
+  kind: z.literal("work_claim_result"),
+  messageId: idSchema,
+  runnerId: idSchema,
+  sentAt: z.string().datetime(),
+  correlationId: idSchema,
+  assignments: z.array(workAssignmentSchema).max(100),
+  retryAfterMs: z.number().int().min(100).max(300_000)
+}).strict();
+
+export const leaseRenewalSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("lease_renewal"),
+  executionId: idSchema,
+  leaseId: idSchema,
+  generation: z.number().int().positive(),
+  leaseToken: z.string().min(32).max(1_024),
+  requestedExtensionSeconds: z.number().int().min(5).max(300)
+}).strict();
+
+export const runnerCancellationSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("cancellation_ack"),
+  executionId: idSchema,
+  leaseId: idSchema,
+  outcome: z.enum(["cancelled", "already_terminal", "not_running", "unable_to_confirm"]),
+  checkpointId: idSchema.nullable()
+}).strict();
+
+export const sideEffectClassificationSchema = z.enum(["none", "idempotent", "safe_retry", "unsafe", "unknown"]);
+export type SideEffectClassification = z.infer<typeof sideEffectClassificationSchema>;
+
+export const runnerProgressEventSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("progress"),
+  executionId: idSchema,
+  leaseId: idSchema,
+  generation: z.number().int().positive(),
+  sequence: z.number().int().nonnegative(),
+  eventType: z.enum(["starting", "node_started", "node_completed", "node_failed", "approval_wait", "retrying", "log", "artifact", "completed", "health"]),
+  nodeId: z.string().min(1).max(200).nullable(),
+  nodeVersion: z.number().int().positive().nullable(),
+  level: z.enum(["trace", "debug", "info", "warn", "error"]).nullable(),
+  message: z.string().max(8_192).nullable(),
+  redactedMetadata: z.record(z.string(), z.unknown()),
+  outputMetadata: z.object({ reference: z.string().max(2_048), contentType: z.string().max(200), sizeBytes: z.number().int().nonnegative(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().nullable(),
+  artifact: z.object({ artifactId: idSchema, uploadUrl: z.string().url(), expiresAt: z.string().datetime(), maximumBytes: z.number().int().positive() }).strict().nullable(),
+  sideEffect: sideEffectClassificationSchema.nullable(),
+  idempotencyKey: z.string().min(16).max(200).nullable()
+}).strict();
+
+export const runnerDrainSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("drain_status"),
+  maintenanceState: z.enum(["draining", "maintenance"]),
+  activeExecutionIds: z.array(idSchema).max(1_000),
+  estimatedCompleteAt: z.string().datetime().nullable()
+}).strict();
+
+export const runnerUpdateStatusSchema = runnerProtocolBaseSchema.extend({
+  kind: z.literal("update_status"),
+  channel: z.enum(["stable", "preview", "development"]),
+  currentVersion: z.string().min(1).max(50),
+  targetVersion: z.string().min(1).max(50).nullable(),
+  status: z.enum(["idle", "available", "downloading", "ready", "installing", "failed", "pinned"]),
+  detail: z.string().max(1_000).nullable()
+}).strict();
+
+export const runnerProtocolMessageSchema = z.discriminatedUnion("kind", [
+  runnerRegistrationSchema,
+  runnerHeartbeatSchema,
+  workClaimRequestSchema,
+  leaseRenewalSchema,
+  runnerCancellationSchema,
+  runnerProgressEventSchema,
+  runnerDrainSchema,
+  runnerUpdateStatusSchema
+]);
+export type RunnerProtocolMessage = z.infer<typeof runnerProtocolMessageSchema>;
+
+export const runnerRequirementsSchema = z.object({
+  protocolVersion: z.literal(RUNNER_PROTOCOL_VERSION),
+  engineVersion: z.string().min(1).max(50),
+  pluginRuntimeVersion: z.string().min(1).max(50),
+  runnerTypes: z.array(runnerTypeSchema).min(1),
+  architectures: z.array(runnerArchitectureSchema).min(1),
+  workspaceId: idSchema,
+  environmentId: idSchema,
+  region: z.string().min(1).max(80).nullable(),
+  requiredTags: z.array(z.string().min(1).max(50)).max(50),
+  capabilities: z.array(nodeCapabilitySchema).max(1_000),
+  plugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  connectionIds: z.array(idSchema).max(1_000),
+  minimumAvailableConcurrency: z.number().int().positive().default(1)
+}).strict();
+export type RunnerRequirements = z.infer<typeof runnerRequirementsSchema>;
+
+export interface RunnerCompatibilityResult { compatible: boolean; reasons: string[] }
+
+export function checkRunnerCompatibility(identity: RunnerIdentity, requirements: RunnerRequirements): RunnerCompatibilityResult {
+  const reasons: string[] = [];
+  if (identity.protocolVersion !== requirements.protocolVersion) reasons.push(`Protocol ${identity.protocolVersion} does not satisfy ${requirements.protocolVersion}.`);
+  if (identity.engineVersion !== requirements.engineVersion) reasons.push(`Engine ${identity.engineVersion} does not satisfy ${requirements.engineVersion}.`);
+  if (identity.pluginRuntimeVersion !== requirements.pluginRuntimeVersion) reasons.push(`Plugin runtime ${identity.pluginRuntimeVersion} does not satisfy ${requirements.pluginRuntimeVersion}.`);
+  if (!requirements.runnerTypes.includes(identity.runnerType)) reasons.push(`Runner type ${identity.runnerType} is not allowed.`);
+  if (!requirements.architectures.includes(identity.architecture)) reasons.push(`Architecture ${identity.architecture} is not allowed.`);
+  if (identity.workspaceId !== requirements.workspaceId) reasons.push("Runner belongs to a different workspace.");
+  if (identity.environmentId !== requirements.environmentId) reasons.push("Runner belongs to a different environment.");
+  if (requirements.region !== null && identity.region !== requirements.region) reasons.push(`Region ${identity.region} does not satisfy ${requirements.region}.`);
+  for (const tag of requirements.requiredTags) if (!identity.tags.includes(tag)) reasons.push(`Missing runner tag ${tag}.`);
+  if (identity.maintenanceState !== "active") reasons.push(`Runner is ${identity.maintenanceState}.`);
+  if (identity.concurrencyLimit < requirements.minimumAvailableConcurrency) reasons.push("Runner concurrency limit is insufficient.");
+  for (const required of requirements.capabilities) {
+    const available = identity.nodeCapabilities.find(item => item.nodeType === required.nodeType);
+    if (!available) { reasons.push(`Missing capability ${required.nodeType}.`); continue; }
+    for (const version of required.nodeVersions) if (!available.nodeVersions.includes(version)) reasons.push(`Missing capability ${required.nodeType}@${version}.`);
+  }
+  for (const required of requirements.plugins) {
+    const available = identity.plugins.find(item => item.pluginId === required.pluginId && item.version === required.version && item.packageIntegrity === required.packageIntegrity);
+    if (!available) reasons.push(`Missing exact plugin ${required.pluginId}@${required.version}.`);
+  }
+  for (const connectionId of requirements.connectionIds) {
+    if (!identity.connections.some(item => item.connectionId === connectionId && item.environmentId === requirements.environmentId && item.status === "available")) reasons.push(`Connection ${connectionId} is unavailable.`);
+  }
+  return { compatible: reasons.length === 0, reasons };
+}
+
+export const environmentKeySchema = z.enum(["development", "staging", "production"]);
+export type EnvironmentKey = z.infer<typeof environmentKeySchema>;
+
+export const executionTargetSchema = z.enum(["this_computer", "paired_desktop", "managed_cloud_runner", "managed_browser_worker", "self_hosted_server", "nas_or_raspberry_pi", "runner_pool"]);
+export type ExecutionTarget = z.infer<typeof executionTargetSchema>;
+
+export const deploymentStatusSchema = z.enum(["draft", "validating", "awaiting_approval", "deploying", "active", "degraded", "paused", "failed", "superseded", "rolled_back"]);
+export type DeploymentStatus = z.infer<typeof deploymentStatusSchema>;
+
+export const usageEstimateSchema = z.object({
+  periodDays: z.number().int().min(1).max(366),
+  expectedExecutions: z.number().int().nonnegative(),
+  hostedExecutionSeconds: z.number().nonnegative(),
+  browserWorkerSeconds: z.number().nonnegative(),
+  expectedConcurrentExecutions: z.number().int().nonnegative(),
+  retryMultiplier: z.number().min(1).max(100),
+  confidence: z.enum(["low", "medium", "high"]),
+  basis: z.array(z.string().min(1).max(500)).max(50),
+  disclaimer: z.literal("Estimate only; actual usage and cost may differ.")
+}).strict();
+export type UsageEstimate = z.infer<typeof usageEstimateSchema>;
+
+export const deploymentRecordSchema = z.object({
+  deploymentId: idSchema,
+  workspaceId: idSchema,
+  workflowId: idSchema,
+  workflowRevisionId: idSchema,
+  environmentId: idSchema,
+  environment: environmentKeySchema,
+  target: executionTargetSchema,
+  targetRunnerId: idSchema.nullable(),
+  runnerPoolId: idSchema.nullable(),
+  region: z.string().min(1).max(80),
+  requiredConnectionIds: z.array(idSchema).max(1_000),
+  requiredPlugins: z.array(runnerPluginAvailabilitySchema).max(1_000),
+  permissionSnapshotId: idSchema,
+  status: deploymentStatusSchema,
+  validation: z.record(z.string(), z.unknown()),
+  usageEstimate: usageEstimateSchema,
+  createdBy: idSchema,
+  createdAt: z.string().datetime(),
+  activatedAt: z.string().datetime().nullable(),
+  supersedesDeploymentId: idSchema.nullable()
+}).strict();
+export type DeploymentRecord = z.infer<typeof deploymentRecordSchema>;
+
+export const deploymentValidationIssueSchema = z.object({
+  code: z.string().min(1).max(120),
+  severity: z.enum(["error", "warning", "info"]),
+  message: z.string().min(1).max(1_000),
+  nodeId: z.string().max(200).nullable(),
+  resourceId: z.string().max(200).nullable()
+}).strict();
+export type DeploymentValidationIssue = z.infer<typeof deploymentValidationIssueSchema>;
+
 export const runSummarySchema = z.object({
   id: idSchema,
   workspaceId: idSchema,
@@ -139,6 +451,77 @@ export const runSummarySchema = z.object({
   redactedErrorSummary: z.string().max(2_000).nullable()
 });
 export type RunSummary = z.infer<typeof runSummarySchema>;
+
+export const executionStateSchema = z.enum([
+  "queued",
+  "waiting_for_runner",
+  "claimed",
+  "starting",
+  "running",
+  "waiting_for_approval",
+  "retrying",
+  "cancelling",
+  "succeeded",
+  "failed",
+  "timed_out",
+  "skipped",
+  "cancelled",
+  "lost",
+  "expired"
+]);
+export type ExecutionState = z.infer<typeof executionStateSchema>;
+
+export const executionActorSchema = z.object({
+  actorType: z.enum(["system", "account", "runner"]),
+  actorId: idSchema.nullable(),
+  runnerId: idSchema.nullable()
+}).strict().superRefine((actor, context) => {
+  if (actor.actorType === "runner" && actor.runnerId === null) context.addIssue({ code: "custom", message: "Runner transitions require runnerId." });
+  if (actor.actorType === "account" && actor.actorId === null) context.addIssue({ code: "custom", message: "Account transitions require actorId." });
+});
+export type ExecutionActor = z.infer<typeof executionActorSchema>;
+
+export const executionTransitionSchema = z.object({
+  transitionId: idSchema,
+  executionId: idSchema,
+  fromState: executionStateSchema,
+  toState: executionStateSchema,
+  occurredAt: z.string().datetime(),
+  actor: executionActorSchema,
+  reason: z.string().min(1).max(500),
+  expectedVersion: z.number().int().nonnegative(),
+  leaseId: idSchema.nullable(),
+  correlationId: idSchema,
+  metadata: z.record(z.string(), z.unknown()).default({})
+}).strict();
+export type ExecutionTransition = z.infer<typeof executionTransitionSchema>;
+
+export const executionCheckpointSchema = z.object({
+  checkpointId: idSchema,
+  executionId: idSchema,
+  workflowRevisionId: idSchema,
+  nodeId: z.string().min(1).max(200),
+  nodeVersion: z.number().int().positive(),
+  attempt: z.number().int().positive(),
+  status: z.enum(["completed", "failed"]),
+  inputHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  outputReference: z.string().max(2_048).nullable(),
+  sideEffect: sideEffectClassificationSchema,
+  idempotencyKey: z.string().min(16).max(200).nullable(),
+  completedAt: z.string().datetime(),
+  runnerId: idSchema
+}).strict();
+export type ExecutionCheckpoint = z.infer<typeof executionCheckpointSchema>;
+
+export const executionRecoverySchema = z.object({
+  disposition: z.enum(["resume", "restart", "review_required", "abandon"]),
+  certainty: z.enum(["certain", "uncertain"]),
+  checkpointId: idSchema.nullable(),
+  resumeAfterNodeId: z.string().max(200).nullable(),
+  reason: z.string().min(1).max(1_000),
+  preserveIdempotencyKey: z.boolean()
+}).strict();
+export type ExecutionRecovery = z.infer<typeof executionRecoverySchema>;
 
 export const auditEventSchema = z.object({
   eventId: idSchema,

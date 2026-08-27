@@ -1,0 +1,41 @@
+{
+  "workflow": {
+    "id": "example-hosted-workflow",
+    "schemaVersion": 3,
+    "owner": { "ownerType": "workspace", "ownerId": "example-workspace" },
+    "name": "Hosted runner smoke test",
+    "description": "Executes through sandbox-engine.",
+    "enabled": true,
+    "triggerNodeId": "trigger",
+    "nodes": [
+      { "id": "trigger", "type": "manual_trigger", "version": 1, "name": "Manual", "position": { "x": 0, "y": 0 }, "configuration": {}, "disabled": false },
+      { "id": "data", "type": "set_data", "version": 1, "name": "Set data", "position": { "x": 240, "y": 0 }, "configuration": { "values": { "host": "managed", "sameEngine": true } }, "disabled": false }
+    ],
+    "edges": [
+      { "id": "edge", "sourceNodeId": "trigger", "sourceHandle": "output", "targetNodeId": "data", "targetHandle": "input" }
+    ],
+    "settings": { "defaultNodeTimeoutMs": 5000, "maxConcurrentNodes": 1, "permissions": {} },
+    "createdAt": "2026-08-27T12:00:00Z",
+    "updatedAt": "2026-08-27T12:00:00Z"
+  },
+  "trigger": { "source": "container-smoke-test" },
+  "policy": {
+    "workspaceId": "example-workspace",
+    "workflowRevisionId": "example-revision",
+    "executionId": "example-execution",
+    "region": "eu-west-2",
+    "cpuMillis": 500,
+    "memoryBytes": 134217728,
+    "durationSeconds": 30,
+    "temporaryStorageBytes": 67108864,
+    "logBytes": 1048576,
+    "artifactBytes": 10485760,
+    "allowedNetworkOrigins": [],
+    "allowPrivateNetwork": false,
+    "pluginCapabilities": [],
+    "secretGrantReferences": []
+  },
+  "plugins": [],
+  "connectionIds": []
+}
+

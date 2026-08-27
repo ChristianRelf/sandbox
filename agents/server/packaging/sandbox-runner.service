@@ -1,0 +1,28 @@
+[Unit]
+Description=Sandbox self-hosted workflow runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sandbox-runner
+Group=sandbox-runner
+ExecStart=/usr/local/bin/sandbox-runner --config /etc/sandbox-runner/config.toml run
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=75
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/sandbox-runner
+
+[Install]
+WantedBy=multi-user.target

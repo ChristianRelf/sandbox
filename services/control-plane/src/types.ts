@@ -66,7 +66,7 @@ export type GovernancePolicies = Record<string, unknown>;
 export interface WorkspaceMemberRecord { accountId: string; email: string; displayName: string; role: BuiltInRole; joinedAt: string }
 export interface RunnerDeviceRequestInput { runnerId: string; keyId: string; requestTime: string; nonce: string; signatureBase64: string; method: string; path: string; body: unknown }
 export interface RunnerDeviceSession { runnerId: string; accountId: string; workspaceId: string; keyId: string }
-export interface WorkspaceEnvironmentRecord { environmentId: string; environment: "development" | "production" }
+export interface WorkspaceEnvironmentRecord { environmentId: string; environment: "development" | "staging" | "production" }
 export interface SharedConnectionRecord { id: string; workspaceId: string; environmentId: string; provider: string; displayName: string; accountIdentity: string | null; grantedScopes: string[]; permittedWorkflowIds: string[]; permittedRoleIds: string[]; health: string; expiresAt: string | null; lastUsedAt: string | null; createdBy: string; approvalRequirements: Record<string, unknown> }
 export interface PluginBillingPlan { pluginId: string; planId: string; stripePriceId: string; mode: "payment" | "subscription"; offlineGraceDays: number; seatAllowance: number | null; customerId: string | null }
 export interface EntitlementRecord { entitlementId: string; ownerType: "personal" | "workspace" | "organisation" | "publisher"; ownerId: string; pluginId: string; planId: string; status: "trial" | "active" | "past_due" | "expired" | "refunded" | "revoked"; seatAllowance: number | null; startsAt: string; renewsAt: string | null; offlineGraceUntil: string }

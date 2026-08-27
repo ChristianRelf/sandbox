@@ -49,7 +49,7 @@ export class PostgresRepository implements ControlPlaneRepository {
       const ownerRole = roleIds.get("owner")!;
       await client.query(`INSERT INTO memberships(organisation_id, account_id, role_id) VALUES($1, $2, $3)`, [organisationId, actor.accountId, ownerRole]);
       await client.query(`INSERT INTO workspace_memberships(workspace_id, account_id, role_id) VALUES($1, $2, $3)`, [workspace.rows[0].id, actor.accountId, ownerRole]);
-      await client.query(`INSERT INTO environments(workspace_id, environment_key) VALUES($1, 'development'), ($1, 'production')`, [workspace.rows[0].id]);
+      await client.query(`INSERT INTO environments(workspace_id, environment_key) VALUES($1, 'development'), ($1, 'staging'), ($1, 'production')`, [workspace.rows[0].id]);
       await appendAudit(client, actor, workspace.rows[0].id, "organisation.created", "organisation", organisationId, null, { name: input.name, slug: input.slug }, correlationId);
       return {
         organisation: { id: organisationId, name: input.name, slug: input.slug, createdAt: organisation.rows[0].created_at.toISOString() },
@@ -482,7 +482,8 @@ export class PostgresRepository implements ControlPlaneRepository {
       }
       const metadata = result.rows[0].metadata;
       const runnerId = randomUUID();
-      const keyId = `device-${randomUUID()}`;
+      // The freshly paired runner derives this identifier from its returned ID.
+      const keyId = `device-${runnerId}`;
       const inserted = await client.query<{ paired_at: Date }>(
         `INSERT INTO runners(id,account_id,workspace_id,display_name,operating_system,architecture,application_version,protocol_version,plugin_runtime_version,capabilities,safe_folder_labels,browser_engine,installed_plugin_versions,tags,status)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'offline') RETURNING paired_at`,
@@ -792,7 +793,7 @@ export class PostgresRepository implements ControlPlaneRepository {
 
   async listWorkspaceEnvironments(actor: AuthenticatedSession, workspaceId: string) {
     return this.withAccount(actor.accountId, async client => {
-      const result = await client.query<{ id: string; environment_key: "development" | "production" }>(`SELECT id,environment_key FROM environments WHERE workspace_id=$1 ORDER BY CASE environment_key WHEN 'development' THEN 0 ELSE 1 END`, [workspaceId]);
+      const result = await client.query<{ id: string; environment_key: "development" | "staging" | "production" }>(`SELECT id,environment_key FROM environments WHERE workspace_id=$1 ORDER BY CASE environment_key WHEN 'development' THEN 0 WHEN 'staging' THEN 1 ELSE 2 END`, [workspaceId]);
       return result.rows.map(row => ({ environmentId: row.id, environment: row.environment_key }));
     });
   }

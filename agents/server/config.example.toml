@@ -1,0 +1,20 @@
+config_version = 1
+control_plane_url = "https://control.example.com"
+runner_name = "production-runner"
+workspace_id = "replace-with-workspace-id"
+environment = "production"
+tags = ["linux", "always-on"]
+concurrency = 2
+data_directory = "/var/lib/sandbox-runner"
+plugin_cache = "/var/lib/sandbox-runner/plugins"
+allowed_working_directories = ["/srv/automation"]
+approved_network_targets = []
+log_level = "info"
+update_channel = "stable"
+update_mode = "notify_only"
+pinned_version_range = ">=0.4,<0.5"
+drain_timeout_seconds = 60
+enable_managed_chromium = false
+allow_simple_commands = false
+
+[certificate]
