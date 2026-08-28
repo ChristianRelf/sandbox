@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -60,6 +61,7 @@ pub struct RunnerConfig {
     pub drain_timeout_seconds: u32,
     pub enable_managed_chromium: bool,
     pub allow_simple_commands: bool,
+    pub command_signing_keys: BTreeMap<String, String>,
 }
 impl RunnerConfig {
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
@@ -187,6 +189,21 @@ impl RunnerConfig {
                 ));
             }
         }
+        if self.command_signing_keys.is_empty()
+            || self
+                .command_signing_keys
+                .iter()
+                .any(|(key_id, public_key)| {
+                    key_id.is_empty()
+                        || key_id.len() > 120
+                        || public_key.is_empty()
+                        || public_key.len() > 256
+                })
+        {
+            return Err(ConfigError::Policy(
+                "at least one bounded command_signing_keys entry is required".into(),
+            ));
+        }
         Ok(())
     }
 }
@@ -214,6 +231,8 @@ drain_timeout_seconds=30
 enable_managed_chromium=false
 allow_simple_commands=false
 privileged=true
+[command_signing_keys]
+release-2026="MCowBQYDK2VwAyEAmvioumjf5SNvG9DZASLr1oYC3fz5MV9NVC11o7DFrZQ="
 [certificate]
 "#;
         assert!(toml::from_str::<RunnerConfig>(input)

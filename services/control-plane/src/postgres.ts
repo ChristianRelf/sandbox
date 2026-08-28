@@ -513,11 +513,16 @@ export class PostgresRepository implements ControlPlaneRepository {
       if (new Date(input.expiresAt).getTime() <= Date.now()) throw new DomainError("command_expired", "Runner command expiry must be in the future.", 400);
       if (["run_workflow", "sync_revision"].includes(input.action)) {
         if (!input.workflowRevisionId) throw new DomainError("workflow_revision_required", "This command requires an exact approved workflow revision.", 400);
-        const revision = await client.query<{ plugin_requirements: Array<{ pluginId: string; version: string; packageIntegrity: string }> }>(
-          `SELECT r.plugin_requirements FROM workflow_revisions r JOIN synced_workflows w ON w.id=r.workflow_id
+        const revision = await client.query<{ workflow_id: string; content_hash: string; plugin_requirements: Array<{ pluginId: string; version: string; packageIntegrity: string }> }>(
+          `SELECT r.workflow_id,r.content_hash,r.plugin_requirements FROM workflow_revisions r JOIN synced_workflows w ON w.id=r.workflow_id
             WHERE r.id=$1 AND w.workspace_id=$2 AND r.publish_status IN ('approved','published')`, [input.workflowRevisionId, input.workspaceId]
         );
         if (!revision.rowCount) throw new DomainError("workflow_revision_not_approved", "The exact workflow revision is not approved in this workspace.", 409);
+        if (input.action === "run_workflow") {
+          if (!executablePayloadMatchesRevision(input.payload, input.workflowRevisionId, revision.rows[0].workflow_id, revision.rows[0].content_hash)) {
+            throw new DomainError("workflow_payload_revision_mismatch", "The executable workflow payload must match the exact approved revision identity and content hash.", 409);
+          }
+        }
         const missing = incompatiblePluginRequirements(revision.rows[0].plugin_requirements, runner.rows[0].installed_plugin_versions);
         if (missing.length) throw new DomainError("runner_incompatible", `Runner is missing exact plugin requirements: ${missing.join(", ")}.`, 409);
       }
@@ -747,13 +752,14 @@ export class PostgresRepository implements ControlPlaneRepository {
 
   async dequeueRunnerCommands(device: RunnerDeviceSession, limit: number): Promise<RunnerCommand[]> {
     return this.withAccount(device.accountId, async client => {
-      await client.query(`UPDATE runner_commands SET status='expired' WHERE target_runner_id=$1 AND status IN ('queued','delivered') AND expires_at<=now()`, [device.runnerId]);
+      await client.query(`UPDATE runner_commands SET status='expired' WHERE target_runner_id=$1 AND status IN ('queued','delivered','accepted') AND expires_at<=now()`, [device.runnerId]);
       const result = await client.query<RunnerCommandRow>(
         `SELECT id,issuer_account_id,workspace_id,target_runner_id,action,workflow_revision_id,convert_from(payload_ciphertext,'utf8')::jsonb AS payload,created_at,expires_at,idempotency_key,key_id,encode(signature,'base64') AS signature,status
-           FROM runner_commands WHERE target_runner_id=$1 AND workspace_id=$2 AND status='queued' AND expires_at>now()
+           FROM runner_commands WHERE target_runner_id=$1 AND workspace_id=$2
+            AND (status='queued' OR (status IN ('delivered','accepted') AND delivered_at<=now()-interval '30 seconds')) AND expires_at>now()
           ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT $3`, [device.runnerId, device.workspaceId, limit]
       );
-      if (result.rowCount) await client.query(`UPDATE runner_commands SET status='delivered',delivered_at=COALESCE(delivered_at,now()) WHERE id=ANY($1::uuid[])`, [result.rows.map(row => row.id)]);
+      if (result.rowCount) await client.query(`UPDATE runner_commands SET status='delivered',delivered_at=now() WHERE id=ANY($1::uuid[])`, [result.rows.map(row => row.id)]);
       return result.rows.map(row => runnerCommandFromRow({ ...row, status: "delivered" }));
     });
   }
@@ -1309,6 +1315,12 @@ function workflowRevisionFromRow(row: WorkflowRevisionRow): WorkflowRevision {
 
 export function detectSyncConflict(currentRevisionId: string | null, parentRevisionId: string | null): string | null {
   return currentRevisionId && currentRevisionId !== parentRevisionId ? currentRevisionId : null;
+}
+
+export function executablePayloadMatchesRevision(payloadValue: unknown, revisionId: string, workflowId: string, contentHash: string): boolean {
+  if (!payloadValue || typeof payloadValue !== "object" || Array.isArray(payloadValue)) return false;
+  const payload = payloadValue as { workflowRevisionId?: unknown; contentHash?: unknown; workflow?: { id?: unknown } };
+  return payload.workflowRevisionId === revisionId && payload.contentHash === contentHash && payload.workflow?.id === workflowId;
 }
 
 interface SubmissionRow {

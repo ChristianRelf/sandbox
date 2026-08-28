@@ -10,7 +10,7 @@ Severity definitions:
 
 | ID | Severity | Owner | Required release | Status | Blocker / acceptance evidence |
 | --- | --- | --- | --- | --- | --- |
-| GA-001 | Critical | Execution | v0.5.0 | Open | Self-hosted agent must poll, verify, claim and execute exact approved revisions, report state, persist idempotency and recover after restart. Current service sends heartbeats only. |
+| GA-001 | Critical | Execution | v0.5.0 | In progress | The self-hosted agent polls with bounded concurrency, verifies signed target/expiry and exact approved revision content hashes, atomically claims durable SQLite receipts, executes through the shared engine, reports accepted/completed/rejected state, safely replays completion and rejects restart-interrupted work. Exercise the full control-plane-to-agent lifecycle on supported Linux packages before closure. |
 | GA-002 | Critical | Billing | v0.5.0 | In progress | Immutable usage records, payload-bound idempotency, local-target exclusion, redaction and execution reconciliation are implemented. Wire trusted hosted/browser producers and reconcile invoice inputs before closure. |
 | GA-003 | Critical | Security | v0.5.0 | Open | Resolve all external penetration-test criticals and attach retest evidence. No external report is available. |
 | GA-004 | Critical | Security | v0.5.0 | Open | Complete adversarial tenant-isolation review across control plane, runners, artifacts, browser profiles, queues and every v0.5 table. |

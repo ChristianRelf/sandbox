@@ -19,7 +19,25 @@ Validate configuration before starting:
 sandbox-runner --config /etc/sandbox-runner/config.toml validate
 ```
 
-`run` reports health every 30 seconds and reports `draining` during a graceful shutdown. Configure the service manager with enough stop time for the runner's `drain_timeout_seconds`; forced termination can leave work for lease-expiry recovery.
+`run` reports health every 30 seconds, polls for work every two seconds while
+capacity is available, and reports `draining` during a graceful shutdown. Each
+command is verified against an Ed25519 public key in `command_signing_keys`, its
+runner/workspace target and expiry are checked, and the executable workflow is
+hashed locally before it can match the signed, approved revision identity and
+content hash. Unknown actions are rejected.
+
+Command receipts are claimed atomically in `runner.sqlite3` before execution.
+Accepted, completed and rejected states are reported to the control plane. A
+redelivered completed command is acknowledged without re-execution; a command
+interrupted by a restart is rejected with `runner_restarted_before_completion`
+after the engine marks its unfinished execution failed. Configure the service
+manager with enough stop time for `drain_timeout_seconds` so active commands can
+finish cleanly.
+
+Copy only the control plane's current and next command-signing public keys into
+the config during key rotation. Remove the old key only after commands signed by
+it have expired. The example key in `config.example.toml` is not a production
+trust root and must be replaced.
 
 The systemd unit uses a dedicated account, a read-only system view, private temporary storage, and a single writable data directory. Container deployments should additionally use a read-only root filesystem, dropped capabilities, PID/CPU/memory limits, and only the approved data and working-directory mounts.
 

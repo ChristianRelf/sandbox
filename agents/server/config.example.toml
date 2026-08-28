@@ -17,4 +17,8 @@ drain_timeout_seconds = 60
 enable_managed_chromium = false
 allow_simple_commands = false
 
+# Replace this example trust root with the control plane's Ed25519 command-signing public key.
+[command_signing_keys]
+release-2026 = "MCowBQYDK2VwAyEAmvioumjf5SNvG9DZASLr1oYC3fz5MV9NVC11o7DFrZQ="
+
 [certificate]

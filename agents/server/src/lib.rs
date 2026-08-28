@@ -2,6 +2,7 @@ pub mod client;
 pub mod config;
 pub mod identity;
 pub mod pairing;
+pub mod runner;
 
 pub const RUNNER_PROTOCOL_VERSION: u16 = 2;
 pub const ENGINE_VERSION: &str = "0.5.0";
