@@ -75,7 +75,7 @@ export function ExecutionInspector({
             <RotateCcw size={13} />Retry workflow
           </button>
           {onClear && (
-            <button className="icon-button" title="Clear old execution history" onClick={onClear}>
+            <button className="icon-button" title="Clear old execution history" aria-label="Clear old execution history" onClick={onClear}>
               <Trash2 size={15} />
             </button>
           )}
