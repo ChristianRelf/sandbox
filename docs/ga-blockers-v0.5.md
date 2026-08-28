@@ -24,7 +24,7 @@ Severity definitions:
 | GA-012 | High | Identity | v0.5.0 | In progress | Workspace and organisation service principals now include explicit multi-workspace assignments, bounded tokens, immediate revocation, human ownership, expiry notifications, workspace-bound replay-protected Ed25519 client assertions, and 90-day access reviews with immutable snapshots. Overdue reviews suspend the principal and revoke credentials; retain/revoke decisions require a fresh human authorized in every assigned workspace. Run the migration and overdue/decision integration case in PostgreSQL CI before closure. |
 | GA-013 | High | API | v0.5.0 | Closed | Compatibility/deprecation and rate-limit policies, structured transport errors, correlation IDs, encrypted 24-hour PostgreSQL idempotency replay, live OpenAPI with named per-operation request/response schemas, checked-in drift gate and typed SDK compatibility tests are implemented. |
 | GA-014 | High | Reliability | v0.5.0 | In progress | Separate liveness/readiness routes, bounded Prometheus request/readiness metrics, PostgreSQL and recurring-task probes, authenticated scraping and failure/recovery API tests are implemented. Configure and exercise production alert delivery, a scheduled end-to-end synthetic workflow, and incident/status communication before closure. |
-| GA-015 | High | Reliability | v0.5.0 | Open | Exercise queue recovery, runner-capacity failure, regional recovery and incident lifecycle with an immutable timeline and post-incident report. |
+| GA-015 | High | Reliability | v0.5.0 | In progress | Visibility-timeout queue reclaim, capacity exhaustion diagnostics, explicit secondary-region selection, an append-only incident timeline, forward-only lifecycle and mandatory structured post-incident reports are implemented and covered by unit/PostgreSQL gates. Execute the capacity and regional recovery scenario in target infrastructure and reconcile its status/alert evidence before closure. |
 | GA-016 | High | Support | v0.5.0 | Open | Implement customer-approved, scoped, expiring support access plus redacted diagnostics. No production support-access path exists. |
 | GA-017 | High | Privacy | v0.5.0 | Open | Implement enforceable retention/export/deletion controls and data-classification mapping; current JSON retention metadata is not an enforcement system. |
 | GA-018 | High | Accessibility | v0.5.0 | Open | Complete WCAG 2.2 AA review and provide a keyboard/screen-reader alternative to drag-only graph editing. |
@@ -37,7 +37,7 @@ Severity definitions:
 
 | ID | Closed | Evidence |
 | --- | --- | --- |
-| GA-C01 | 2026-08-28 | All 19 PostgreSQL migrations apply once and are checksum-idempotent. |
+| GA-C01 | 2026-08-28 | The audited PostgreSQL migration set applies once and is checksum-idempotent; later numbered migrations remain covered by the same protected CI gate. |
 | GA-C02 | 2026-08-27 | Control-plane and scheduler database integration suites pass against clean PostgreSQL 16. |
 | GA-C03 | 2026-08-27 | Fresh staging logical backup restores into an isolated database with matching schema inventory. Production-backup evidence remains GA-005. |
 | GA-C04 | 2026-08-27 | npm production advisory audit reports zero known vulnerabilities. |

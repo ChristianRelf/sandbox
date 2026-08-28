@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "migrate": "tsx src/migrate.ts",
+    "incident": "tsx scripts/incident.ts",
     "build": "npm run build --workspace @sandbox/contracts && npm run build --workspace @sandbox/api-client && tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test": "npm run build --workspace @sandbox/api-client && vitest run && npm run openapi:check",

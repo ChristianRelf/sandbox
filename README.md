@@ -74,6 +74,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Stable API, idempotency, rate-limit and deprecation policy: `docs/api-policy-v0.5.md`
 - Managed usage ingestion and invoice reconciliation: `docs/usage-metering-v0.5.md`
 - Control-plane readiness, metrics and remaining production exercises: `docs/reliability-v0.5.md`
+- Incident lifecycle, recovery exercise and post-incident evidence: `docs/incident-response-v0.5.md`
 - Machine-readable v1 route contract: `docs/api/openapi-v1.json`
 - Typed browser/Node control-plane client: `packages/api-client`
 - Stage-five baseline audit: `docs/stage-five-audit.md`
