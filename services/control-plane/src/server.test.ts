@@ -429,6 +429,23 @@ describe("control-plane API", () => {
     await server.close();
   });
 
+  it("publishes configured product plans and starts account-owned checkout", async () => {
+    const deps=dependencies([]);
+    const productCommerce={
+      listPublishedPlans:vi.fn(async()=>[{id:"pro",displayName:"Pro",audience:"individual" as const,description:"Hosted execution for individuals",price:{currency:"gbp",unitAmount:1900,interval:"month" as const},includedUsage:{hostedRunnerSeconds:3600},entitlements:{workflowSync:true},seatAllowance:1,offlineGraceDays:14,localExecutionUnmetered:true as const,overagePolicy:"spending_limit" as const}]),
+      accountSummary:vi.fn(),
+      createCheckout:vi.fn(async()=>({checkoutId:"cs_product_123",url:"https://checkout.stripe.com/c/pay/product",expiresAt:new Date(Date.now()+1800_000).toISOString()})),
+      applyBillingEvent:vi.fn(async()=>false),
+    };
+    const server=await createServer({...deps,productCommerce});
+    const plans=await server.inject({method:"GET",url:"/v1/product-plans"});
+    expect(plans.statusCode,plans.body).toBe(200);expect(plans.json().items[0]).toMatchObject({id:"pro",price:{unitAmount:1900},localExecutionUnmetered:true});
+    const checkout=await server.inject({method:"POST",url:"/v1/product-checkout",headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{ownerType:"personal",ownerId:session.accountId,planId:"pro"}});
+    expect(checkout.statusCode,checkout.body).toBe(200);expect(checkout.json().checkout.url).toContain("checkout.stripe.com");
+    expect(productCommerce.createCheckout).toHaveBeenCalledWith(session,"personal",session.accountId,"pro",deps.billing,"https://app.sandbox.test");
+    await server.close();
+  });
+
   it("accepts a signed webhook once and queues only encrypted redacted payload", async () => {
     const deps = dependencies([]);
     const publicId = "abcdefghijklmnopqrstuvwxABCDEFGH";

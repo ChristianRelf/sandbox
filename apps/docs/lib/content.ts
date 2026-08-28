@@ -1,5 +1,22 @@
-export type DocPage={slug:string;section:string;title:string;description:string;version:string;reviewed:string;prerequisites?:string[];steps:Array<{title:string;body:string;code?:string}>;result:string;errors:string[];related:string[]};
-export const docs:DocPage[]=[
+import { expandedDocs } from "./expanded-content";
+
+export type DocConcept = { title: string; body: string };
+export type DocPage = {
+  slug: string;
+  section: string;
+  title: string;
+  description: string;
+  version: string;
+  reviewed: string;
+  prerequisites?: string[];
+  concepts?: DocConcept[];
+  notes?: string[];
+  steps: Array<{ title: string; body: string; code?: string }>;
+  result: string;
+  errors: string[];
+  related: string[];
+};
+const coreDocs: DocPage[] = [
 {slug:"getting-started",section:"Getting Started",title:"Introduction",description:"Understand where Sandbox runs and choose the shortest path to a first local workflow.",version:"0.4.x",reviewed:"2026-08-28",steps:[{title:"Start with the desktop application",body:"The desktop app is the workflow editor and local runner. The account portal is for licences, releases and support."},{title:"Choose an execution boundary",body:"Use this computer for files, applications and private networks. Deploy later to a hosted or self-hosted runner when the workflow must stay online."},{title:"Inspect before enabling",body:"A workflow stays transparent: review nodes, credentials and permissions before automatic execution."}],result:"You know which Sandbox surface to use and where the first workflow will execute.",errors:["If a guide refers to a newer product version, use the version selector before following it."],related:["getting-started/install","getting-started/first-workflow","execution/local-runner"]},
 {slug:"getting-started/install",section:"Getting Started",title:"Install Sandbox",description:"Install a verified desktop build and confirm its local runtime is ready.",version:"0.4.x",reviewed:"2026-08-28",prerequisites:["Windows 10 or later for the currently configured desktop bundle","Permission to install an application and WebView2"],steps:[{title:"Choose the platform",body:"Open the downloads page and manually select your platform. Platform detection never hides other builds."},{title:"Verify the release",body:"Compare the published SHA-256 checksum and signature information before running an installer."},{title:"Start Sandbox",body:"Open the application. The local database and credential vault are created in the operating-system application-data location."}],result:"The desktop app opens and reports that the local runner is ready.",errors:["No signed desktop artifact is attached to the current repository release metadata. Do not install an unsigned substitute.","If WebView2 is unavailable on Windows, install the supported Microsoft runtime first."],related:["getting-started/first-workflow","reference/limits","troubleshooting/desktop"]},
 {slug:"getting-started/first-workflow",section:"Getting Started",title:"Build your first workflow",description:"Create a visible, local workflow that starts manually and posts a desktop notification.",version:"0.4.x",reviewed:"2026-08-28",prerequisites:["Sandbox desktop app installed"],steps:[{title:"Create a workflow",body:"Select New workflow and name it Local hello."},{title:"Add the trigger",body:"Drag Manual Trigger from the node catalogue onto the canvas."},{title:"Add an action",body:"Add Desktop Notification, enter a title and message, then connect the trigger output to it."},{title:"Test the workflow",body:"Select Run. Follow the active node in the canvas and open execution history when it completes."}],result:"A native notification appears and the execution inspector shows both node outputs.",errors:["A disconnected node is not executed.","If notifications are disabled at operating-system level, the node fails with a permission error."],related:["workflows/editor","getting-started/understand-executions","nodes/desktop-notification"]},
@@ -13,4 +30,78 @@ export const docs:DocPage[]=[
 {slug:"troubleshooting",section:"Troubleshooting",title:"Troubleshooting",description:"Start from the first failed node and collect only the diagnostics support needs.",version:"0.4.x",reviewed:"2026-08-28",steps:[{title:"Open the execution",body:"Find the first node in a failed state; later skipped nodes are usually consequences."},{title:"Read the error code",body:"Use the Errors reference and verify permissions, runner compatibility and connection health."},{title:"Generate a diagnostic bundle",body:"Preview the redaction report before attaching a bundle to an authenticated support case."}],result:"You have a reproducible error, relevant version information and a redacted diagnostic bundle.",errors:["Never paste credentials, browser contents or unreviewed workflow data into a public channel."],related:["getting-started/understand-executions","support/diagnostic-bundles","reference/errors"]},
 {slug:"developers/api",section:"Developers",title:"Public API",description:"Integrate with the stable Sandbox v1 HTTP contract and maintained TypeScript client.",version:"0.5.x–0.6.x",reviewed:"2026-08-28",prerequisites:["A verified account or service-account bearer token","The scopes required by the target workspace resource"],steps:[{title:"Choose the contract",body:"Use the generated API reference for endpoint, method, authentication, idempotency and response details. The reference reads directly from the validated OpenAPI file."},{title:"Use the typed client",body:"Install @sandbox/api-client and provide an HTTPS control-plane base URL plus a short-lived access token.",code:"const client = new SandboxApiClient({\n  baseUrl: process.env.SANDBOX_API_URL,\n  accessToken: process.env.SANDBOX_TOKEN\n});"},{title:"Preserve request identity",body:"Send a correlation ID for traceability and an idempotency key for supported writes. The official client handles both automatically."}],result:"Your integration uses the same versioned transport contract validated by the control plane.",errors:["HTTP 401 means the bearer token is missing, invalid or expired.","HTTP 403 means the caller lacks a required workspace scope.","HTTP 429 responses include rate-limit and retry information."],related:["developers/api/reference","developers/authentication","developers/cli"]},
 ];
-export const nav=Object.entries(Object.groupBy(docs,p=>p.section)).map(([section,pages])=>({section,pages:pages??[]}));
+
+const sectionOrder = [
+  "Getting Started",
+  "Workflows",
+  "Browser Automation",
+  "Files and Data",
+  "Execution",
+  "Plugins",
+  "Teams and Governance",
+  "Developers",
+  "Troubleshooting",
+  "Reference",
+];
+
+const articleEnhancements: Partial<
+  Record<string, Pick<DocPage, "concepts" | "notes">>
+> = {
+  "getting-started": {
+    concepts: [
+      { title: "Desktop app", body: "The visual editor and trusted local execution boundary." },
+      { title: "Account portal", body: "Workspace, release, licence and support administration." },
+      { title: "Runner", body: "The process that executes an immutable published revision." },
+    ],
+    notes: [
+      "Start locally with a manual trigger. Add unattended execution only after the workflow is observable and repeatable.",
+    ],
+  },
+  "getting-started/install": {
+    concepts: [
+      { title: "Signed release", body: "A desktop artifact whose publisher and integrity can be verified before installation." },
+      { title: "Local data", body: "Workflow drafts and protected values stored in operating-system application data." },
+    ],
+  },
+  "getting-started/first-workflow": {
+    concepts: [
+      { title: "Trigger", body: "The event and initial data that create one execution." },
+      { title: "Action", body: "A node that performs one bounded operation and returns structured output." },
+    ],
+  },
+  "getting-started/understand-executions": {
+    concepts: [
+      { title: "Attempt", body: "One invocation of a node, including its resolved input, duration and output." },
+      { title: "Skipped", body: "A node that was not reachable because of a branch or failed dependency." },
+    ],
+    notes: [
+      "Start with the first failed node. Later skipped nodes usually describe impact, not root cause.",
+    ],
+  },
+  "browser-automation/recorder": {
+    concepts: [
+      { title: "Recorded action", body: "An editable proposal derived from a browser interaction, not an opaque video recording." },
+      { title: "Semantic locator", body: "A target based on role, label or accessible name rather than fragile page structure." },
+    ],
+  },
+  "developers/api": {
+    concepts: [
+      { title: "OpenAPI contract", body: "The versioned source used to generate endpoint reference and client types." },
+      { title: "Correlation ID", body: "Caller-provided context that connects application work with API diagnostics." },
+    ],
+  },
+};
+
+const allDocs = [...coreDocs, ...expandedDocs].map((page) => ({
+  ...page,
+  ...articleEnhancements[page.slug],
+}));
+
+export const docs = allDocs.sort(
+  (left, right) =>
+    sectionOrder.indexOf(left.section) - sectionOrder.indexOf(right.section),
+);
+
+export const nav = Object.entries(Object.groupBy(docs, (page) => page.section)).map(
+  ([section, pages]) => ({ section, pages: pages ?? [] }),
+);

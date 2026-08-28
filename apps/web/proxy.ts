@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
+  const publicRoute=request.nextUrl.pathname==="/sign-in"||request.nextUrl.pathname.startsWith("/auth/");
+  if(!publicRoute&&!request.cookies.has("sandbox_session")){
+    const destination=request.nextUrl.clone();destination.pathname="/sign-in";destination.search=new URLSearchParams({returnTo:`${request.nextUrl.pathname}${request.nextUrl.search}`}).toString();return NextResponse.redirect(destination);
+  }
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const development = process.env.NODE_ENV === "development";
   const policy = [

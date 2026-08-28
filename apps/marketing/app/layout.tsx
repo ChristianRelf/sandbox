@@ -4,13 +4,22 @@ import { brand } from "@sandbox/brand";
 import { ArrowUpRight, Box, Menu } from "lucide-react";
 import "./globals.css";
 
+const shareTitle = "Give the busywork back to your computer.";
+const shareDescription = "Visual automation for browsers, files, apps and APIs - running on your machine or a runner you choose.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_MARKETING_URL ?? brand.domains.marketing),
-  title: { default: `${brand.name} — ${brand.tagline}`, template: `%s — ${brand.name}` },
-  description: brand.description,
+  title: { default: `${brand.name} - Visual automation under your control`, template: `%s - ${brand.name}` },
+  description: shareDescription,
   alternates: { canonical: "/" },
-  openGraph: { type: "website", siteName: brand.name, title: brand.tagline, description: brand.description },
-  twitter: { card: "summary_large_image", title: brand.tagline, description: brand.description },
+  openGraph: {
+    type: "website",
+    siteName: brand.name,
+    title: shareTitle,
+    description: shareDescription,
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: shareTitle }],
+  },
+  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og.png"] },
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +38,17 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       </div>
     </header>
     {children}
-    <footer className="site-footer"><div><Link className="wordmark" href="/"><span><Box size={15}/></span>Sandbox</Link><p>Visual automation with a machine boundary you control.</p></div><div><Link href="/security">Security</Link><Link href="/support">Support</Link><a href={`${brand.domains.docs}/getting-started`}>Documentation</a><Link href="/legal">Legal</Link></div><small>© 2026 Sandbox. Legal content requires professional review.</small></footer>
+    <footer className="site-footer">
+      <div className="footer-meta">
+        <Link className="wordmark" href="/"><span><Box size={15}/></span>Sandbox</Link>
+        <p>Visual automation with a machine boundary you control.</p>
+        <small>LOCAL-FIRST / BUILT FOR REAL WORK</small>
+      </div>
+      <Link className="footer-display" href="/" aria-label="Sandbox home">SANDBOX</Link>
+      <div className="footer-lower">
+        <small>© 2026 Sandbox. Legal content requires professional review.</small>
+        <nav aria-label="Footer navigation"><Link href="/security">Security</Link><Link href="/support">Support</Link><a href={`${brand.domains.docs}/getting-started`}>Documentation</a><Link href="/legal">Legal</Link></nav>
+      </div>
+    </footer>
   </body></html>;
 }

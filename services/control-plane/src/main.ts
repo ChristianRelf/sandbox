@@ -17,6 +17,7 @@ import { PostgresServiceAccountAccessReviews } from "./access_reviews.js";
 import { ReadinessService, RecurringTaskMonitor, ServiceMetrics } from "./reliability.js";
 import { PostgresSupportAccess } from "./support_access.js";
 import { PostgresPrivacyService } from "./privacy.js";
+import { PostgresProductCommerce } from "./product_commerce.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -62,6 +63,7 @@ const server = await createServer({
   accessReviews,
   supportAccess:new PostgresSupportAccess(pool),
   privacy,
+  productCommerce:new PostgresProductCommerce(pool),
   email,
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
