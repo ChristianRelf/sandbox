@@ -78,6 +78,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Customer-approved support access and redacted diagnostics: `docs/support-access-v0.5.md`
 - Privacy classification, export, deletion and enforceable retention: `docs/privacy-and-retention-v0.5.md`
 - WCAG 2.2 AA review and non-dragging graph editor: `docs/accessibility-v0.5.md`
+- Signed release artifacts, provenance and verification: `docs/release-integrity-v0.5.md`
 - Machine-readable v1 route contract: `docs/api/openapi-v1.json`
 - Typed browser/Node control-plane client: `packages/api-client`
 - Stage-five baseline audit: `docs/stage-five-audit.md`

@@ -48,6 +48,33 @@ describe("v0.5 release compatibility", () => {
     expect(matrix).toContain("PostgreSQL 16");
     expect(matrix).toContain('`minimumHostVersion: ">=0.5.0"`');
   });
+
+  it("fails release publication closed unless every artifact is signed and attested", () => {
+    const workflow = read(".github/workflows/release.yml");
+    expect(workflow).toContain('tags: ["v*.*.*"]');
+    expect(workflow).toContain("Release tags must use the exact vMAJOR.MINOR.PATCH form.");
+    expect(workflow).toContain("WINDOWS_CERTIFICATE_PASSWORD");
+    expect(workflow).toContain("Get-AuthenticodeSignature");
+    expect(workflow).toContain('if ($signature.Status -ne "Valid")');
+    expect(workflow.match(/actions\/attest@[a-f0-9]{40}/g)).toHaveLength(3);
+    expect(workflow).toContain("cosign verify-blob");
+    expect(workflow).toContain("cosign sign --yes");
+    expect(workflow).toContain("cosign verify\n");
+    expect(workflow).toContain("provenance: mode=max");
+    expect(workflow).toContain("sbom: true");
+    expect(workflow).toContain("agents/server/Dockerfile");
+    expect(workflow).toContain("services/hosted-runner/Dockerfile");
+    expect(workflow).toContain("services/browser-worker/Dockerfile");
+    expect(workflow).toContain("needs: [verify-release, desktop-windows, agent-linux, containers]");
+    expect(workflow).not.toMatch(/uses: [^\n]+@(v\d+|stable|main)\s*$/m);
+
+    const agentRelease = read("agents/server/packaging/build-release.sh");
+    expect(agentRelease).toContain('RELEASE_SIGNING_REQUIRED:-0');
+    expect(agentRelease).toContain("cosign is required for a production release.");
+    expect(agentRelease).toContain("test -s SHA256SUMS.sigstore.json");
+    expect(read("agents/server/Dockerfile")).toContain("COPY src-tauri/engine src-tauri/engine");
+    expect(read("agents/server/Dockerfile")).toContain("USER nonroot:nonroot");
+  });
 });
 
 function read(file: string): string {

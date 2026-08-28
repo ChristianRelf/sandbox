@@ -55,4 +55,4 @@ SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
   agents/server/packaging/build-release.sh 0.5.0
 ```
 
-Set `COSIGN_KEY` to an approved Sigstore key or KMS URI to produce a signed bundle for `SHA256SUMS`; unsigned output is for local testing only. Publish the two archives, checksum manifest, and Sigstore bundle as one immutable release. Build the container for both platforms with `docker buildx build --platform linux/amd64,linux/arm64`; production publication must also attach provenance and an image signature.
+For a local signed build, set `COSIGN_KEY` to an approved Sigstore key or KMS URI. The production release workflow instead sets `RELEASE_SIGNING_REQUIRED=1` and uses its short-lived GitHub OIDC identity; signing or immediate identity verification failure aborts publication. Unsigned output is for local testing only. Publish the two archives, checksum manifest, and Sigstore bundle as one immutable release. Build the container for both platforms with `docker buildx build --platform linux/amd64,linux/arm64`; production publication must also attach provenance, an SBOM and an image signature.
