@@ -12,6 +12,7 @@ import { CompositeSessionVerifier, PostgresCredentialService } from "./credentia
 import { PostgresApiIdempotencyStore } from "./api_contract.js";
 import { PostgresUsageLedger } from "./usage.js";
 import { HmacUsageProducerAuthenticator,parseUsageProducerSecrets } from "./usage_producer.js";
+import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -31,12 +32,16 @@ const oidcSessions=new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), au
 const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"));
 const webhookProtector=new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"),"base64"));
 const idempotencyProtector=new WebhookProtector(Buffer.from(required("API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64"),"base64"));
+const email=new HttpTransactionalEmail(required("EMAIL_API_URL"),required("EMAIL_API_KEY"),required("EMAIL_SENDER"));
+const credentialExpiryNotifier=new PostgresCredentialExpiryNotifier(pool,email);
+const credentialExpirySweepIntervalMs=Number(process.env.CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS??3_600_000);
+if(!Number.isSafeInteger(credentialExpirySweepIntervalMs)||credentialExpirySweepIntervalMs<60_000)throw new Error("CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS must be an integer of at least 60000");
 
 const server = await createServer({
   repository: new PostgresRepository(pool),
   sessions: new CompositeSessionVerifier(oidcSessions,credentialService),
   credentialService,
-  email: new HttpTransactionalEmail(required("EMAIL_API_URL"), required("EMAIL_API_KEY"), required("EMAIL_SENDER")),
+  email,
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
   runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
@@ -52,7 +57,10 @@ const server = await createServer({
   logger: true
 });
 
+let credentialNotificationTimer:NodeJS.Timeout|undefined;
+const runCredentialNotifications=async()=>{try{const result=await credentialExpiryNotifier.runOnce();if(result.enqueued||result.sent||result.failed)server.log.info(result,"credential expiry notification sweep completed");}catch(error){server.log.error(error,"credential expiry notification sweep failed");}};
 const shutdown = async () => {
+  if(credentialNotificationTimer)clearInterval(credentialNotificationTimer);
   await server.close();
   await pool.end();
 };
@@ -60,3 +68,6 @@ process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 
 await server.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 4100) });
+void runCredentialNotifications();
+credentialNotificationTimer=setInterval(()=>void runCredentialNotifications(),credentialExpirySweepIntervalMs);
+credentialNotificationTimer.unref();

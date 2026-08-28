@@ -50,7 +50,7 @@ function dependencies(permissions: string[]) {
     listProtectedVariables: vi.fn(), upsertProtectedVariable: vi.fn(), resolveProtectedVariables: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
-  const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
+  const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined),sendCredentialExpiry:vi.fn(async()=>undefined) };
   const packageStorage = { createUpload: vi.fn(), createDownload: vi.fn(), inspect: vi.fn() };
   const packageScanner = { scan: vi.fn() };
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };

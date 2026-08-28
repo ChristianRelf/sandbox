@@ -13,6 +13,7 @@
 - Service accounts have a non-interactive principal record and no OIDC subject usable for login, password or browser session.
 - At least one human owner is enforced by a deferred database constraint, including when owner rows are changed concurrently in a transaction.
 - Revocation is immediate. Active service-account state is checked again on every token authentication.
+- Active credential owners receive durable seven-day and one-day expiry reminders. Service-account reminders go to every current human owner; failed deliveries retry from a PostgreSQL outbox.
 - Authentication headers and token fields are redacted from control-plane logs.
 
 The database RLS policies expose credential metadata only to the personal token owner, a service-account owner, or a principal with the relevant credential-management permission. Cross-tenant RLS tests use a non-bypass database role.
@@ -28,6 +29,8 @@ $env:ACCESS_TOKEN_PEPPER_BASE64 = [Convert]::ToBase64String($bytes)
 ```
 
 Store the value in the production secret manager. Rotation requires an explicit credential migration or revocation plan; replacing it immediately invalidates existing tokens.
+
+The control plane sweeps expiry reminders hourly. `CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS` can increase or decrease that cadence, with a minimum of 60 seconds. Every replica may run the sweep because delivery claims use PostgreSQL row locks and stale claims are recovered after 15 minutes.
 
 ## API
 
@@ -70,4 +73,4 @@ Do not print creation responses in CI logs. Capture the `credential.token` field
 
 ## Current limitation
 
-Organisation-wide assignment is implemented. Periodic access-review decisions, expiry notifications, signed client assertions and workload identity remain later items in the ordered v0.5 plan.
+Organisation-wide assignment and expiry notifications are implemented. Periodic access-review decisions, signed client assertions and workload identity remain later items in the ordered v0.5 plan.

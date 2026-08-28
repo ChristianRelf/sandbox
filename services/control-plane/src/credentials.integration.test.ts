@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedSession } from "./types.js";
 import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
+import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
 
 const connectionString=process.env.TEST_DATABASE_URL;
 const integration=connectionString?describe:describe.skip;
@@ -68,6 +69,17 @@ integration("service accounts and access tokens",()=>{
     const issued=await credentials.issueServiceAccountToken(actor,service.id,{name:"Fleet credential",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId,secondWorkspaceId],environmentIds:[environmentId,secondEnvironmentId],expiresAt:new Date(Date.now()+7*86_400_000)},randomUUID());
     expect(await credentials.verify(issued.token)).toMatchObject({principalType:"service_account",workspaceRestrictions:expect.arrayContaining([workspaceId,secondWorkspaceId]),environmentRestrictions:expect.arrayContaining([environmentId,secondEnvironmentId])});
     expect(Number((await pool.query<{count:string}>(`SELECT count(*)::text count FROM service_account_role_assignments WHERE service_account_id=$1`,[service.id])).rows[0].count)).toBe(2);
+  });
+
+  it("durably sends one-day expiry reminders to service-account owners once",async()=>{
+    const issued=await credentials.issueServiceAccountToken(actor,serviceAccountId,{name:"Expiring deploy key",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresAt:new Date(Date.now()+12*3_600_000)},randomUUID());
+    const delivered:Array<{recipient:string;tokenPrefix:string;reminderDays:number}>=[];
+    const notifier=new PostgresCredentialExpiryNotifier(pool,{sendInvitation:async()=>undefined,sendCredentialExpiry:async message=>{delivered.push(message);}});
+    const first=await notifier.runOnce(new Date());
+    const second=await notifier.runOnce(new Date());
+    expect(first).toMatchObject({enqueued:1,sent:1,failed:0});
+    expect(second).toMatchObject({enqueued:0,sent:0,failed:0});
+    expect(delivered).toEqual([{recipient:actor.email,tokenPrefix:issued.prefix,reminderDays:1}]);
   });
 
   it("keeps credential metadata hidden from a different tenant at the RLS boundary",async()=>{

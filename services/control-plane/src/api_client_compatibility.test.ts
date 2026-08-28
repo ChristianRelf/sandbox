@@ -40,7 +40,7 @@ describe("published v1 client compatibility",()=>{
 function dependencies(credentialService:{issuePersonalToken:ReturnType<typeof vi.fn>}):ApiDependencies{
   const unavailable=vi.fn(async()=>undefined);
   const repository=new Proxy({permissions:vi.fn(async()=>new Set())},{get:(target,key)=>key in target?target[key as keyof typeof target]:unavailable}) as unknown as ControlPlaneRepository;
-  return {repository,sessions:{verify:vi.fn(async()=>session)},credentialService:{...credentialService,createServiceAccount:unavailable,listServiceAccounts:unavailable,issueServiceAccountToken:unavailable,listPersonalTokens:unavailable,revokeToken:unavailable},email:{sendInvitation:unavailable},packageStorage:{createUpload:unavailable,createDownload:unavailable,inspect:unavailable},packageScanner:{scan:unavailable},idempotencyStore:new MemoryApiIdempotencyStore(),webBaseUrl:"https://app.sandbox.test"} as unknown as ApiDependencies;
+  return {repository,sessions:{verify:vi.fn(async()=>session)},credentialService:{...credentialService,createServiceAccount:unavailable,listServiceAccounts:unavailable,issueServiceAccountToken:unavailable,listPersonalTokens:unavailable,revokeToken:unavailable},email:{sendInvitation:unavailable,sendCredentialExpiry:unavailable},packageStorage:{createUpload:unavailable,createDownload:unavailable,inspect:unavailable},packageScanner:{scan:unavailable},idempotencyStore:new MemoryApiIdempotencyStore(),webBaseUrl:"https://app.sandbox.test"} as unknown as ApiDependencies;
 }
 
 function injectFetch(server:Awaited<ReturnType<typeof createServer>>):typeof globalThis.fetch{
