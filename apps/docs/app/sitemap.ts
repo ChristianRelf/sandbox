@@ -1,0 +1,1 @@
+import type{MetadataRoute}from"next";import{docs}from"../lib/content";export default function sitemap():MetadataRoute.Sitemap{return docs.map(p=>({url:`https://docs.sandbox.com/${p.slug}`,lastModified:new Date(p.reviewed)}))}
