@@ -201,6 +201,7 @@ function requestSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionKeyInput" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys/{keyId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
   if (path === "/v1/service-account-assertions/token" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionExchangeInput" };
+  if (path === "/v1/service-account-access-reviews/{reviewId}/decision" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAccessReviewDecisionInput" };
   if (path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
   return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Input")}` };
 }
@@ -219,6 +220,8 @@ function responseSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
   if (path === "/v1/service-account-assertions/token" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionKeyEnvelope" };
+  if (path === "/v1/workspaces/{workspaceId}/service-account-access-reviews" && method === "get") return { $ref: "#/components/schemas/ServiceAccountAccessReviewList" };
+  if (path === "/v1/service-account-access-reviews/{reviewId}/decision" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAccessReviewEnvelope" };
   if ((path === "/v1/personal-access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys/{keyId}") && method === "delete") return { $ref: "#/components/schemas/RevocationResponse" };
   return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Response")}` };
 }
@@ -243,6 +246,7 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     CredentialRevocationInput: { type: "object", required: ["reason"], properties: { reason: { type: "string", minLength: 1, maxLength: 500 } }, additionalProperties: false },
     ServiceAccountAssertionKeyInput: { type: "object", required: ["keyId","publicKeyDerBase64"], properties: { keyId: { type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }, publicKeyDerBase64: { type:"string",contentEncoding:"base64",maxLength:2048 } }, additionalProperties:false },
     ServiceAccountAssertionExchangeInput: { type:"object",required:["clientAssertion"],properties:{clientAssertion:{type:"string",minLength:100,maxLength:8192}},additionalProperties:false },
+    ServiceAccountAccessReviewDecisionInput: {type:"object",required:["decision","rationale"],properties:{decision:{type:"string",enum:["retain","revoke"]},rationale:{type:"string",minLength:1,maxLength:2000}},additionalProperties:false},
     TokenSummary: { type: "object", required: [...Object.keys(credentialProperties), "kind", "lastUsedAt", "revokedAt"], properties: { ...credentialProperties, kind: { type: "string", enum: ["personal", "service_account"] }, lastUsedAt: { oneOf: [dateTime, { type: "null" }] }, revokedAt: { oneOf: [dateTime, { type: "null" }] } }, additionalProperties: false },
     IssuedCredential: { type: "object", required: [...Object.keys(credentialProperties), "token"], properties: { ...credentialProperties, token: { type: "string", description: "Secret returned only on issuance or exact encrypted idempotent replay." } }, additionalProperties: false },
     TokenSummaryList: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/TokenSummary" } } }, additionalProperties: false },
@@ -252,6 +256,9 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     ServiceAccountList: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/ServiceAccount" } } }, additionalProperties: false },
     ServiceAccountEnvelope: { type: "object", required: ["serviceAccount"], properties: { serviceAccount: { $ref: "#/components/schemas/ServiceAccount" } }, additionalProperties: false },
     ServiceAccountAssertionKeyEnvelope: { type:"object",required:["key"],properties:{key:{type:"object",required:["serviceAccountId","workspaceId","keyId","algorithm","createdAt","revokedAt"],properties:{serviceAccountId:uuid,workspaceId:uuid,keyId:{type:"string"},algorithm:{const:"EdDSA"},createdAt:dateTime,revokedAt:{oneOf:[dateTime,{type:"null"}]}},additionalProperties:false}},additionalProperties:false },
+    ServiceAccountAccessReview: {type:"object",required:["id","serviceAccountId","organisationId","serviceAccountName","workspaceIds","openedAt","dueAt","status","accessSnapshot","decidedBy","decidedAt","rationale"],properties:{id:uuid,serviceAccountId:uuid,organisationId:uuid,serviceAccountName:{type:"string"},workspaceIds:{type:"array",items:uuid},openedAt:dateTime,dueAt:dateTime,status:{type:"string",enum:["pending","overdue","retained","revoked"]},accessSnapshot:{type:"object",additionalProperties:true},decidedBy:{oneOf:[uuid,{type:"null"}]},decidedAt:{oneOf:[dateTime,{type:"null"}]},rationale:{oneOf:[{type:"string"},{type:"null"}]}},additionalProperties:false},
+    ServiceAccountAccessReviewList: {type:"object",required:["items"],properties:{items:{type:"array",items:{$ref:"#/components/schemas/ServiceAccountAccessReview"}}},additionalProperties:false},
+    ServiceAccountAccessReviewEnvelope: {type:"object",required:["review"],properties:{review:{$ref:"#/components/schemas/ServiceAccountAccessReview"}},additionalProperties:false},
     RevocationResponse: { type: "object", required: ["revoked"], properties: { revoked: { const: true } }, additionalProperties: false },
     MarketplacePage: { type: "object", required: ["items", "nextCursor"], properties: { items: { type: "array", items: { type: "object", required: ["pluginId", "name", "version", "packageIntegrity"], properties: { pluginId: { type: "string" }, name: { type: "string" }, version: { type: "string" }, packageIntegrity: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } }, additionalProperties: true } }, nextCursor: { oneOf: [{ type: "string" }, { type: "null" }] } }, additionalProperties: false }
   };

@@ -12,6 +12,7 @@ import type { CredentialAdministration } from "./credentials.js";
 import { MemoryApiIdempotencyStore } from "./api_contract.js";
 import { HmacUsageProducerAuthenticator } from "./usage_producer.js";
 import type { UsageEventInput } from "./usage.js";
+import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -57,7 +58,8 @@ function dependencies(permissions: string[]) {
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
   const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),createOrganisationServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn(),registerServiceAccountAssertionKey:vi.fn(),revokeServiceAccountAssertionKey:vi.fn(),exchangeServiceAccountAssertion:vi.fn()};
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
+  const accessReviews:ServiceAccountAccessReviewAdministration={list:vi.fn(),workspaceIds:vi.fn(),decide:vi.fn()};
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, accessReviews, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
@@ -141,6 +143,13 @@ describe("control-plane API", () => {
     vi.mocked(deps.credentialService.exchangeServiceAccountAssertion).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"assertion:ci",prefix:"sbx_sa_abcdefghijkl",token:"sbx_sa_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+900_000).toISOString()});
     const server=await createServer(deps);const response=await server.inject({method:"POST",url:"/v1/service-account-assertions/token",payload:{clientAssertion:assertion}});
     expect(response.statusCode,response.body).toBe(200);expect(deps.sessions.verify).not.toHaveBeenCalled();expect(deps.credentialService.exchangeServiceAccountAssertion).toHaveBeenCalledWith(assertion);await server.close();
+  });
+
+  it("authorizes an access-review decision in every assigned workspace",async()=>{
+    const deps=dependencies(["service_accounts.manage"]),reviewId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",now=new Date().toISOString();
+    vi.mocked(deps.accessReviews.workspaceIds).mockResolvedValue([workspaceId,secondWorkspaceId]);vi.mocked(deps.accessReviews.decide).mockResolvedValue({id:reviewId,serviceAccountId:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",organisationId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",serviceAccountName:"Deploy bot",workspaceIds:[workspaceId,secondWorkspaceId],openedAt:now,dueAt:now,status:"retained",accessSnapshot:{},decidedBy:session.accountId,decidedAt:now,rationale:"Still required"});
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/service-account-access-reviews/${reviewId}/decision`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{decision:"retain",rationale:"Still required"}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,secondWorkspaceId);expect(deps.accessReviews.decide).toHaveBeenCalledWith(session,reviewId,"retain","Still required",expect.any(String));await server.close();
   });
 
   it("requires server-side workspace permission for invitations", async () => {

@@ -13,6 +13,7 @@ import { PostgresApiIdempotencyStore } from "./api_contract.js";
 import { PostgresUsageLedger } from "./usage.js";
 import { HmacUsageProducerAuthenticator,parseUsageProducerSecrets } from "./usage_producer.js";
 import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
+import { PostgresServiceAccountAccessReviews } from "./access_reviews.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -35,6 +36,7 @@ const webhookProtector=new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYP
 const idempotencyProtector=new WebhookProtector(Buffer.from(required("API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64"),"base64"));
 const email=new HttpTransactionalEmail(required("EMAIL_API_URL"),required("EMAIL_API_KEY"),required("EMAIL_SENDER"));
 const credentialExpiryNotifier=new PostgresCredentialExpiryNotifier(pool,email);
+const accessReviews=new PostgresServiceAccountAccessReviews(pool);
 const credentialExpirySweepIntervalMs=Number(process.env.CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS??3_600_000);
 if(!Number.isSafeInteger(credentialExpirySweepIntervalMs)||credentialExpirySweepIntervalMs<60_000)throw new Error("CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS must be an integer of at least 60000");
 
@@ -42,6 +44,7 @@ const server = await createServer({
   repository: new PostgresRepository(pool),
   sessions: new CompositeSessionVerifier(oidcSessions,credentialService),
   credentialService,
+  accessReviews,
   email,
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
@@ -58,10 +61,12 @@ const server = await createServer({
   logger: true
 });
 
-let credentialNotificationTimer:NodeJS.Timeout|undefined;
+let credentialNotificationTimer:NodeJS.Timeout|undefined,accessReviewTimer:NodeJS.Timeout|undefined;
 const runCredentialNotifications=async()=>{try{const result=await credentialExpiryNotifier.runOnce();if(result.enqueued||result.sent||result.failed)server.log.info(result,"credential expiry notification sweep completed");}catch(error){server.log.error(error,"credential expiry notification sweep failed");}};
+const runAccessReviews=async()=>{try{const result=await accessReviews.runOnce();if(result.opened||result.overdue||result.revokedCredentials)server.log.info(result,"service-account access-review sweep completed");}catch(error){server.log.error(error,"service-account access-review sweep failed");}};
 const shutdown = async () => {
   if(credentialNotificationTimer)clearInterval(credentialNotificationTimer);
+  if(accessReviewTimer)clearInterval(accessReviewTimer);
   await server.close();
   await pool.end();
 };
@@ -70,5 +75,8 @@ process.once("SIGTERM", () => void shutdown());
 
 await server.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 4100) });
 void runCredentialNotifications();
+void runAccessReviews();
 credentialNotificationTimer=setInterval(()=>void runCredentialNotifications(),credentialExpirySweepIntervalMs);
 credentialNotificationTimer.unref();
+accessReviewTimer=setInterval(()=>void runAccessReviews(),credentialExpirySweepIntervalMs);
+accessReviewTimer.unref();

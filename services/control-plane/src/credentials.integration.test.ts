@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedSession } from "./types.js";
 import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
 import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
+import { PostgresServiceAccountAccessReviews } from "./access_reviews.js";
 
 const connectionString=process.env.TEST_DATABASE_URL;
 const integration=connectionString?describe:describe.skip;
@@ -74,6 +75,19 @@ integration("service accounts and access tokens",()=>{
     expect(await credentials.revokeServiceAccountAssertionKey(actor,serviceAccountId,workspaceId,keyId,"rotation",randomUUID())).toBe(true);
     await expect(credentials.verify(issued.token)).rejects.toMatchObject({code:"invalid_session"});
     await expect(credentials.exchangeServiceAccountAssertion(await assertion())).rejects.toMatchObject({code:"client_assertion_invalid"});
+  });
+
+  it("opens periodic reviews and fails closed when a human decision is overdue",async()=>{
+    const reviews=new PostgresServiceAccountAccessReviews(pool),now=new Date(),issued=await credentials.issueServiceAccountToken(actor,serviceAccountId,{name:"Review-bound key",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresAt:new Date(Date.now()+20*86_400_000)},randomUUID());
+    await pool.query(`UPDATE service_accounts SET next_access_review_at=$2 WHERE id=$1`,[serviceAccountId,new Date(now.getTime()-1000)]);
+    expect(await reviews.runOnce(now)).toMatchObject({opened:1,overdue:0});
+    const review=(await reviews.list(actor,workspaceId,"pending"))[0];expect(review).toMatchObject({serviceAccountId,workspaceIds:[workspaceId],status:"pending",accessSnapshot:expect.objectContaining({ownerAccountIds:[accountId]})});
+    expect(await reviews.runOnce(new Date(now.getTime()+15*86_400_000))).toMatchObject({overdue:1,revokedCredentials:expect.any(Number)});
+    expect((await pool.query<{status:string;suspension_reason:string}>(`SELECT status,suspension_reason FROM service_accounts WHERE id=$1`,[serviceAccountId])).rows[0]).toEqual({status:"suspended",suspension_reason:"access_review_overdue"});
+    await expect(credentials.verify(issued.token)).rejects.toMatchObject({code:"invalid_session"});
+    expect(await reviews.workspaceIds(actor,review.id)).toEqual([workspaceId]);
+    expect(await reviews.decide(actor,review.id,"retain","Automation remains required",randomUUID())).toMatchObject({status:"retained",decidedBy:accountId,rationale:"Automation remains required"});
+    expect((await pool.query<{status:string}>(`SELECT status FROM service_accounts WHERE id=$1`,[serviceAccountId])).rows[0].status).toBe("active");
   });
 
   it("creates one organisation principal with separately bounded workspace assignments",async()=>{

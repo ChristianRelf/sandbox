@@ -53,6 +53,8 @@ DELETE /v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertio
 DELETE /v1/workspaces/{workspaceId}/access-tokens/{tokenId}
 POST   /v1/organisations/{organisationId}/service-accounts
 POST   /v1/service-account-assertions/token
+GET    /v1/workspaces/{workspaceId}/service-account-access-reviews
+POST   /v1/service-account-access-reviews/{reviewId}/decision
 ```
 
 Creation and revocation require `X-Sandbox-Request-Time` freshness. Service-account creation requires an interactive human and `service_accounts.manage` in every assigned workspace; credential issue/revocation requires `api_credentials.manage` in every workspace included by the token. The returned token is used as a normal bearer credential. Personal token management itself requires an interactive human session and cannot be performed using another access token.
@@ -72,6 +74,12 @@ To obtain a 15-minute bearer credential, sign a compact JWT with `alg=EdDSA` and
 
 Submit only `{ "clientAssertion": "<signed-jwt>" }` to the exchange endpoint. The signed scopes and environments must remain within the service account's current workspace assignment; environment-restricted assignments require at least one signed environment. Assertion IDs are consumed atomically, so replay fails even across replicas. The exchange deliberately does not support the general API idempotency cache; retry with a newly signed assertion instead. Revoking a key immediately revokes every bearer credential derived from it and expires outstanding runner commands issued by those credentials.
 
+## Periodic access reviews
+
+Every active service account enters a review cycle every 90 days. The control plane records a point-in-time snapshot of workspace roles, environment restrictions, human owners, and active credential metadata, then gives administrators 14 days to decide. Review metadata is visible only when the caller has `service_accounts.manage` in every workspace assigned to the principal. A `retain` or `revoke` decision additionally requires a fresh interactive human session, and the rationale is retained as review and workspace audit evidence.
+
+An overdue review fails closed: the principal is suspended, its active credentials are revoked, and outstanding runner commands issued by those credentials expire. A later retain decision reactivates only a principal suspended by the access-review system; revoked credentials remain revoked and must be replaced. A revoke decision permanently revokes the service account.
+
 Example personal token request:
 
 ```json
@@ -89,4 +97,4 @@ Do not print creation responses in CI logs. Capture the `credential.token` field
 
 ## Current limitation
 
-Organisation-wide assignment, expiry notifications and signed client assertions are implemented. Periodic access-review decisions and managed workload identity remain later items in the ordered v0.5 plan.
+Organisation-wide assignment, expiry notifications, signed client assertions, and periodic access reviews are implemented. Managed workload identity remains part of the managed-orchestrator GA work.

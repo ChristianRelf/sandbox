@@ -16,6 +16,7 @@ import type { CredentialAdministration } from "./credentials.js";
 import { apiActorScope, apiRequestHash, buildOpenApiDocument, type ApiIdempotencyStore, type ApiRouteDescription } from "./api_contract.js";
 import type { PostgresUsageLedger } from "./usage.js";
 import type { UsageProducerAuthenticator } from "./usage_producer.js";
+import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -89,6 +90,7 @@ const organisationServiceAccountInput=z.object({name:z.string().trim().min(1).ma
 const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
 const serviceAssertionKeyInput=z.object({keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),publicKeyDerBase64:z.string().base64().max(2048)}).strict();
 const serviceAssertionExchangeInput=z.object({clientAssertion:z.string().min(100).max(8192)}).strict();
+const accessReviewDecisionInput=z.object({decision:z.enum(["retain","revoke"]),rationale:z.string().trim().min(1).max(2000)}).strict();
 const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
   meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
@@ -107,6 +109,7 @@ export interface ApiDependencies {
   webhookProtector?: WebhookProtector;
   protectedValueProtector?: WebhookProtector;
   credentialService?: CredentialAdministration;
+  accessReviews?: ServiceAccountAccessReviewAdministration;
   idempotencyStore?: ApiIdempotencyStore;
   usageLedger?: Pick<PostgresUsageLedger,"record">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
@@ -439,6 +442,20 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
     const input=serviceAssertionExchangeInput.parse(request.body);
     return{credential:await dependencies.credentialService.exchangeServiceAccountAssertion(input.clientAssertion)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/service-account-access-reviews",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);const{status}=z.object({status:z.enum(["pending","overdue","retained","revoked"]).optional()}).parse(request.query);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account_access_review"});
+    if(!dependencies.accessReviews)throw new DomainError("access_reviews_unavailable","Service-account access reviews are not configured.",503);
+    return{items:await dependencies.accessReviews.list(session,workspaceId,status)};
+  });
+
+  app.post("/v1/service-account-access-reviews/:reviewId/decision",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{reviewId}=z.object({reviewId:z.string().uuid()}).parse(request.params);const input=accessReviewDecisionInput.parse(request.body);
+    if(!dependencies.accessReviews)throw new DomainError("access_reviews_unavailable","Service-account access reviews are not configured.",503);
+    const workspaceIds=await dependencies.accessReviews.workspaceIds(session,reviewId);for(const workspaceId of workspaceIds)await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account_access_review",resourceId:reviewId});
+    return{review:await dependencies.accessReviews.decide(session,reviewId,input.decision,input.rationale,request.id)};
   });
 
   app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{

@@ -3186,6 +3186,91 @@
         }
       }
     },
+    "/v1/service-account-access-reviews/{reviewId}/decision": {
+      "post": {
+        "operationId": "post_v1_service_account_access_reviews_reviewId_decision",
+        "tags": [
+          "service-account-access-reviews"
+        ],
+        "parameters": [
+          {
+            "name": "reviewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountAccessReviewEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceAccountAccessReviewDecisionInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/service-account-assertions/token": {
       "post": {
         "operationId": "post_v1_service_account_assertions_token",
@@ -5019,6 +5104,78 @@
         }
       }
     },
+    "/v1/workspaces/{workspaceId}/service-account-access-reviews": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_service_account_access_reviews",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountAccessReviewList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/workspaces/{workspaceId}/service-accounts": {
       "get": {
         "operationId": "get_v1_workspaces_workspaceId_service_accounts",
@@ -6740,6 +6897,28 @@
         },
         "additionalProperties": false
       },
+      "ServiceAccountAccessReviewDecisionInput": {
+        "type": "object",
+        "required": [
+          "decision",
+          "rationale"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "retain",
+              "revoke"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "additionalProperties": false
+      },
       "TokenSummary": {
         "type": "object",
         "required": [
@@ -7124,6 +7303,128 @@
               }
             },
             "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountAccessReview": {
+        "type": "object",
+        "required": [
+          "id",
+          "serviceAccountId",
+          "organisationId",
+          "serviceAccountName",
+          "workspaceIds",
+          "openedAt",
+          "dueAt",
+          "status",
+          "accessSnapshot",
+          "decidedBy",
+          "decidedAt",
+          "rationale"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organisationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "serviceAccountName": {
+            "type": "string"
+          },
+          "workspaceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "openedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "overdue",
+              "retained",
+              "revoked"
+            ]
+          },
+          "accessSnapshot": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "decidedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decidedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rationale": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountAccessReviewList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccountAccessReview"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountAccessReviewEnvelope": {
+        "type": "object",
+        "required": [
+          "review"
+        ],
+        "properties": {
+          "review": {
+            "$ref": "#/components/schemas/ServiceAccountAccessReview"
           }
         },
         "additionalProperties": false
