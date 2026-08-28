@@ -33,12 +33,15 @@ integration("immutable hosted usage and reconciliation",()=>{
     const input:UsageEventInput={eventId:randomUUID(),workspaceId,environmentId,executionId,deploymentId,meter:"hosted_runner_seconds",quantity:10,unit:"seconds",sourceEventId:`workload-stop-${executionId}`,idempotencyKey:`usage-${executionId}`,periodStartedAt:startedAt.toISOString(),periodEndedAt:endedAt.toISOString(),region:"eu-west-2",metadata:{runnerClass:"standard",accessToken:"must-not-persist"}};
     expect(await ledger.record(input)).toEqual({eventId:input.eventId,created:true});
     expect(await ledger.record(input)).toEqual({eventId:input.eventId,created:false});
+    expect(await ledger.record({...input,eventId:randomUUID()})).toEqual({eventId:input.eventId,created:false});
     await expect(ledger.record({...input,quantity:11})).rejects.toMatchObject({code:"usage_idempotency_conflict"});
+    await expect(ledger.record({...input,eventId:randomUUID(),executionId:randomUUID(),idempotencyKey:`invalid-scope-${executionId}`,sourceEventId:`invalid-scope-${executionId}`})).rejects.toMatchObject({code:"usage_deployment_scope_invalid"});
     const stored=await pool.query<{ metadata:Record<string,unknown> }>(`SELECT metadata FROM usage_events WHERE id=$1`,[input.eventId]);
     expect(stored.rows[0].metadata).toEqual({runnerClass:"standard",accessToken:"[REDACTED]"});
     expect(await ledger.reconcile(executionId,{hosted_runner_seconds:10},randomUUID())).toMatchObject({status:"matched",actual:{hosted_runner_seconds:10},discrepancies:{}});
+    expect(await ledger.invoiceInputs(new Date(startedAt.getTime()-1000).toISOString(),new Date(endedAt.getTime()+1000).toISOString())).toEqual([expect.objectContaining({workspaceId,meter:"hosted_runner_seconds",unit:"seconds",quantity:10,executionCount:1,evidenceDigest:expect.stringMatching(/^sha256:[a-f0-9]{64}$/)})]);
     expect(await ledger.reconcile(executionId,{hosted_runner_seconds:9},randomUUID())).toMatchObject({version:2,status:"discrepancy",discrepancies:{hosted_runner_seconds:1}});
+    expect(await ledger.invoiceInputs(new Date(startedAt.getTime()-1000).toISOString(),new Date(endedAt.getTime()+1000).toISOString())).toEqual([]);
     await expect(pool.query(`UPDATE usage_events SET quantity=0 WHERE id=$1`,[input.eventId])).rejects.toThrow(/append-only/i);
   });
 });
-

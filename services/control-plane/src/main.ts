@@ -10,6 +10,8 @@ import { Ed25519EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector } from "./webhook_crypto.js";
 import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
 import { PostgresApiIdempotencyStore } from "./api_contract.js";
+import { PostgresUsageLedger } from "./usage.js";
+import { HmacUsageProducerAuthenticator,parseUsageProducerSecrets } from "./usage_producer.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -42,6 +44,8 @@ const server = await createServer({
   entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   webhookProtector,
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
+  usageLedger: new PostgresUsageLedger(pool),
+  usageProducerAuthenticator: new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(required("USAGE_PRODUCER_SECRETS_JSON"))),
   protectedValueProtector: new WebhookProtector(Buffer.from(required("PROTECTED_VALUE_ENCRYPTION_KEY_BASE64"), "base64")),
   webhookBaseUrl: required("CONTROL_PLANE_PUBLIC_URL"),
   webBaseUrl: required("WEB_BASE_URL"),

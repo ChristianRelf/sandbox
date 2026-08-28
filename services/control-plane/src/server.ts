@@ -14,6 +14,8 @@ import { DomainError } from "./types.js";
 import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
 import type { CredentialAdministration } from "./credentials.js";
 import { apiActorScope, apiRequestHash, buildOpenApiDocument, type ApiIdempotencyStore, type ApiRouteDescription } from "./api_contract.js";
+import type { PostgresUsageLedger } from "./usage.js";
+import type { UsageProducerAuthenticator } from "./usage_producer.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -83,6 +85,11 @@ const protectedVariableResolutionInput = z.object({ environmentId: z.string().uu
 const credentialInput=z.object({name:z.string().trim().min(1).max(120),scopes:z.array(z.enum(permissions)).min(1).max(permissions.length),organisationId:z.string().uuid(),workspaceIds:z.array(z.string().uuid()).min(1).max(100),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiresInDays:z.number().int().min(1).max(90).default(30)}).strict();
 const serviceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
 const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
+const usageEventInput=z.object({
+  eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
+  meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
+  sourceEventId:z.string().min(1).max(200),idempotencyKey:z.string().min(16).max(200),periodStartedAt:z.string().datetime({offset:true}),periodEndedAt:z.string().datetime({offset:true}),region:z.string().min(1).max(80),metadata:z.record(z.string(),z.unknown()).default({})
+}).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -97,6 +104,8 @@ export interface ApiDependencies {
   protectedValueProtector?: WebhookProtector;
   credentialService?: CredentialAdministration;
   idempotencyStore?: ApiIdempotencyStore;
+  usageLedger?: Pick<PostgresUsageLedger,"record">;
+  usageProducerAuthenticator?: UsageProducerAuthenticator;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
@@ -212,6 +221,17 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.get("/health", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async () => ({ status: "ok", service: "sandbox-control-plane", execution: "local-only" }));
   app.get("/v1/openapi.json", async () => getOpenApiDocument(app));
+
+  app.post("/v1/internal/usage-events", async request => {
+    if (!dependencies.usageLedger || !dependencies.usageProducerAuthenticator) throw new DomainError("usage_ingestion_unavailable","Usage ingestion is not configured.",503);
+    const producerId=singleHeader(request,"x-sandbox-usage-producer");
+    const timestamp=singleHeader(request,"x-sandbox-usage-timestamp");
+    const signature=singleHeader(request,"x-sandbox-usage-signature");
+    dependencies.usageProducerAuthenticator.verify({producerId,timestamp,signature,body:request.body});
+    const input=usageEventInput.parse(request.body);
+    const result=await dependencies.usageLedger.record(input);
+    return {usageEventId:result.eventId,created:result.created};
+  });
 
   app.get("/v1/marketplace/plugins", async request => {
     const query = marketplaceQuery.parse(request.query);

@@ -40,35 +40,46 @@ export interface UsageReconciliation {
   discrepancies: Partial<Record<UsageMeter,number>>;
 }
 
+export interface InvoiceUsageInput {
+  workspaceId: string;
+  meter: UsageMeter;
+  unit: UsageUnit;
+  quantity: number;
+  executionCount: number;
+  evidenceDigest: string;
+}
+
 export class PostgresUsageLedger {
   constructor(private readonly pool: Pool) {}
 
   async record(input: UsageEventInput): Promise<{ eventId:string; created:boolean }> {
     validateUsage(input);
     return this.transaction(async client => {
-      const deployment = await client.query<{ target_type:string; workspace_id:string; environment_id:string }>(
-        `SELECT target_type,workspace_id,environment_id FROM workflow_deployments WHERE id=$1 FOR SHARE`,
-        [input.deploymentId]
+      const deployment = await client.query<{ target_type:string; workspace_id:string; environment_id:string; execution_deployment_id:string; execution_environment_id:string }>(
+        `SELECT d.target_type,d.workspace_id,d.environment_id,e.deployment_id AS execution_deployment_id,e.environment_id AS execution_environment_id
+           FROM workflow_deployments d
+           JOIN executions e ON e.id=$2 AND e.workspace_id=d.workspace_id
+          WHERE d.id=$1 FOR SHARE OF d,e`,
+        [input.deploymentId,input.executionId]
       );
-      if (!deployment.rowCount || deployment.rows[0].workspace_id !== input.workspaceId || deployment.rows[0].environment_id !== input.environmentId) {
-        throw new DomainError("usage_deployment_scope_invalid", "Usage must reference a deployment in the same workspace and environment.", 403);
+      if (!deployment.rowCount || deployment.rows[0].workspace_id !== input.workspaceId || deployment.rows[0].environment_id !== input.environmentId || deployment.rows[0].execution_deployment_id !== input.deploymentId || deployment.rows[0].execution_environment_id !== input.environmentId) {
+        throw new DomainError("usage_deployment_scope_invalid", "Usage must reference the execution's deployment, workspace, and environment.", 403);
       }
       enforceBillableTarget(deployment.rows[0].target_type,input.meter);
       const requestHash = usageHash(input);
-      const existing = await client.query<{ id:string; request_hash:string }>(
-        `SELECT id,request_hash FROM usage_events WHERE workspace_id=$1 AND idempotency_key=$2`,
-        [input.workspaceId,input.idempotencyKey]
-      );
-      if (existing.rowCount) {
-        if (existing.rows[0].request_hash !== requestHash) throw new DomainError("usage_idempotency_conflict", "The usage idempotency key was already used with a different payload.", 409);
-        return { eventId:existing.rows[0].id,created:false };
-      }
-      await client.query(
+      const inserted=await client.query<{id:string}>(
         `INSERT INTO usage_events(id,workspace_id,environment_id,execution_id,deployment_id,meter,quantity,unit,source_event_id,idempotency_key,request_hash,period_started_at,period_ended_at,region,metadata)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         ON CONFLICT DO NOTHING RETURNING id`,
         [input.eventId,input.workspaceId,input.environmentId,input.executionId,input.deploymentId,input.meter,input.quantity,input.unit,input.sourceEventId,input.idempotencyKey,requestHash,input.periodStartedAt,input.periodEndedAt,input.region,redactMetadata(input.metadata ?? {})]
       );
-      return { eventId:input.eventId,created:true };
+      if (inserted.rowCount) return { eventId:inserted.rows[0].id,created:true };
+      const existing = await client.query<{ id:string; request_hash:string; idempotency_key:string; source_event_id:string; meter:UsageMeter }>(
+        `SELECT id,request_hash,idempotency_key,source_event_id,meter FROM usage_events WHERE workspace_id=$1 AND (idempotency_key=$2 OR (source_event_id=$3 AND meter=$4)) FOR SHARE`,
+        [input.workspaceId,input.idempotencyKey,input.sourceEventId,input.meter]
+      );
+      if (!existing.rowCount || existing.rows[0].request_hash !== requestHash || existing.rows[0].idempotency_key !== input.idempotencyKey) throw new DomainError("usage_idempotency_conflict", "The usage idempotency key or source event was already used with a different payload.", 409);
+      return { eventId:existing.rows[0].id,created:false };
     });
   }
 
@@ -82,7 +93,7 @@ export class PostgresUsageLedger {
       if (!['succeeded','failed','timed_out','skipped','cancelled','expired'].includes(execution.rows[0].status)) throw new DomainError("usage_reconciliation_too_early", "Usage can be reconciled only after execution reaches a terminal state.", 409);
       const totals = await client.query<{ meter:UsageMeter; quantity:string }>(`SELECT meter,sum(quantity)::text AS quantity FROM usage_events WHERE execution_id=$1 GROUP BY meter`,[executionId]);
       const actual:Partial<Record<UsageMeter,number>> = {};
-      for (const row of totals.rows) actual[row.meter]=Number(row.quantity);
+      for (const row of totals.rows) actual[row.meter]=parseSafeQuantity(row.quantity);
       const discrepancies:Partial<Record<UsageMeter,number>> = {};
       for (const meter of new Set([...Object.keys(expected),...Object.keys(actual)]) as Set<UsageMeter>) {
         const difference=(actual[meter] ?? 0)-(expected[meter] ?? 0);
@@ -98,6 +109,32 @@ export class PostgresUsageLedger {
       );
       return { reconciliationId,executionId,version,status,expected,actual,discrepancies };
     });
+  }
+
+  async invoiceInputs(periodStartedAt:string,periodEndedAt:string):Promise<InvoiceUsageInput[]> {
+    const started=new Date(periodStartedAt),ended=new Date(periodEndedAt);
+    if (!Number.isFinite(started.getTime()) || !Number.isFinite(ended.getTime()) || ended <= started) throw new DomainError("invoice_period_invalid", "The invoice period is invalid.");
+    const result=await this.pool.query<{ workspace_id:string; meter:UsageMeter; unit:UsageUnit; quantity:string; execution_count:string; event_ids:string[]; reconciliation_ids:string[] }>(
+      `WITH latest_reconciliation AS (
+         SELECT DISTINCT ON (execution_id) id,execution_id,status
+           FROM usage_reconciliations
+          ORDER BY execution_id,reconciliation_version DESC
+       )
+       SELECT u.workspace_id,u.meter,u.unit,sum(u.quantity)::text AS quantity,
+              count(DISTINCT u.execution_id)::text AS execution_count,
+              array_agg(u.id::text ORDER BY u.id::text) AS event_ids,
+              array_agg(DISTINCT r.id::text ORDER BY r.id::text) AS reconciliation_ids
+         FROM usage_events u
+         JOIN latest_reconciliation r ON r.execution_id=u.execution_id AND r.status='matched'
+        WHERE u.period_ended_at > $1 AND u.period_ended_at <= $2
+        GROUP BY u.workspace_id,u.meter,u.unit
+        ORDER BY u.workspace_id,u.meter,u.unit`,
+      [periodStartedAt,periodEndedAt]
+    );
+    return result.rows.map(row=>({
+      workspaceId:row.workspace_id,meter:row.meter,unit:row.unit,quantity:parseSafeQuantity(row.quantity),executionCount:parseSafeQuantity(row.execution_count),
+      evidenceDigest:`sha256:${createHash("sha256").update(JSON.stringify({eventIds:row.event_ids,reconciliationIds:row.reconciliation_ids})).digest("hex")}`
+    }));
   }
 
   private async transaction<T>(operation:(client:PoolClient)=>Promise<T>):Promise<T> {
@@ -123,7 +160,8 @@ function enforceBillableTarget(target:string,meter:UsageMeter):void {
 }
 
 function usageHash(input:UsageEventInput):string {
-  const canonical=JSON.stringify(Object.fromEntries(Object.entries({...input,metadata:redactMetadata(input.metadata ?? {})}).sort(([left],[right])=>left.localeCompare(right))));
+  const {eventId:_eventId,...payload}=input;
+  const canonical=JSON.stringify(Object.fromEntries(Object.entries({...payload,metadata:redactMetadata(input.metadata ?? {})}).sort(([left],[right])=>left.localeCompare(right))));
   return `sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }
 
@@ -132,3 +170,8 @@ function redactMetadata(metadata:Record<string,unknown>):Record<string,unknown> 
   return Object.fromEntries(Object.entries(metadata).map(([key,value])=>[key,secret.test(key)?"[REDACTED]":value]));
 }
 
+function parseSafeQuantity(value:string):number {
+  const quantity=Number(value);
+  if (!Number.isSafeInteger(quantity) || quantity<0) throw new DomainError("usage_quantity_overflow","Aggregated usage exceeds the supported safe integer range.",500);
+  return quantity;
+}

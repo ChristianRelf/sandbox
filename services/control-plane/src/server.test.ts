@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionalEmail } from "./email.js";
 import { createServer } from "./server.js";
@@ -8,6 +9,8 @@ import type { EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector, webhookSignature } from "./webhook_crypto.js";
 import type { CredentialAdministration } from "./credentials.js";
 import { MemoryApiIdempotencyStore } from "./api_contract.js";
+import { HmacUsageProducerAuthenticator } from "./usage_producer.js";
+import type { UsageEventInput } from "./usage.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -57,6 +60,14 @@ function dependencies(permissions: string[]) {
 }
 
 describe("control-plane API", () => {
+  it("accepts only signed events from a trusted usage producer",async()=>{
+    const secret=Buffer.alloc(32,8),record=vi.fn(async(input:UsageEventInput)=>({eventId:input.eventId,created:true}));
+    const deps={...dependencies([]),usageLedger:{record},usageProducerAuthenticator:new HmacUsageProducerAuthenticator(new Map([["hosted-runner",secret]]))};
+    const server=await createServer(deps);const payload={eventId:"10000000-0000-4000-8000-000000000001",workspaceId:"20000000-0000-4000-8000-000000000002",environmentId:"30000000-0000-4000-8000-000000000003",executionId:"40000000-0000-4000-8000-000000000004",deploymentId:"50000000-0000-4000-8000-000000000005",meter:"hosted_runner_seconds" as const,quantity:3,unit:"seconds" as const,sourceEventId:"hosted-runner-stop:execution",idempotencyKey:"hosted-runner-usage:execution",periodStartedAt:"2026-08-28T10:00:00.000Z",periodEndedAt:"2026-08-28T10:00:03.000Z",region:"eu-west-2",metadata:{producer:"hosted-runner"}};
+    const timestamp=Math.floor(Date.now()/1000).toString(),signature=createHmac("sha256",secret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex"),headers={"x-sandbox-usage-producer":"hosted-runner","x-sandbox-usage-timestamp":timestamp,"x-sandbox-usage-signature":signature};
+    const accepted=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers,payload});expect(accepted.statusCode,accepted.body).toBe(200);expect(record).toHaveBeenCalledWith(payload);
+    const rejected=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers:{...headers,"x-sandbox-usage-signature":"0".repeat(64)},payload});expect(rejected.statusCode).toBe(401);expect(record).toHaveBeenCalledTimes(1);await server.close();
+  });
   it("returns stable structured transport errors and correlation headers",async()=>{
     const deps=dependencies([]);const server=await createServer(deps);
     const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","content-type":"application/json","x-correlation-id":"client-correlation-0001"},payload:'{"broken":'});

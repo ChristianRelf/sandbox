@@ -62,9 +62,10 @@ Local personal workflows bypass organisation identity because they do not use or
 4. Credential scope and restrictions narrow RBAC and never expand it.
 5. Service-account tokens cannot create personal tokens or obtain interactive sessions.
 6. Runner commands and events require device authentication. Environment and permission enforcement at the execution boundary remains a GA blocker until every runner class applies the consolidated policy.
-7. Meter input accepts only managed billable deployment types. Local execution cannot enter hosted-runner or managed-browser billing meters.
+7. Meter input accepts only managed billable deployment types. Local execution cannot enter hosted-runner or managed-browser billing meters. Managed workers sign payload-bound usage events with independently configured HMAC producer keys; the control plane enforces a five-minute freshness window and verifies the execution, deployment, workspace and environment relationship before inserting them.
+8. Invoice inputs include only usage whose latest immutable reconciliation is `matched`. A discrepancy removes the execution from invoice aggregation until a later reconciliation resolves it, and every aggregate carries a digest of its event and reconciliation evidence.
 8. Plugin Wasm remains outside browser, process, filesystem, socket and environment authority except through the existing capability broker.
 
 ## Unfinished joins
 
-The self-hosted agent currently heartbeats but does not execute command payloads. Trusted orchestrator producers are not yet wired to the usage ledger. The v1 API now has transport-level compatibility, idempotency and OpenAPI route contracts, but complete resource schemas remain unfinished. SSO/SCIM and event export follow later in the ordered v0.5 plan. These are blockers or planned foundations, not placeholder product claims.
+The self-hosted agent polls and executes signed command payloads, but the packaged Linux lifecycle still needs an end-to-end control-plane exercise. Hosted and managed-browser processes now report signed usage into the ledger, while invoice export remains gated on matched reconciliation; production producer-key rollout and invoice-system reconciliation still need operational evidence. SSO/SCIM and event export follow later in the ordered v0.5 plan. These are blockers or planned foundations, not placeholder product claims.
