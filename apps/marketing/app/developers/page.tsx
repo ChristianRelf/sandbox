@@ -1,0 +1,1 @@
+import { productPages } from "@sandbox/content";import { ProductPageView } from "../../components/ProductPageView";export default function Page(){return <ProductPageView page={productPages.find(p=>p.slug==="developers")!}/>}
