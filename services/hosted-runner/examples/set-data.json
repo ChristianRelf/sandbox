@@ -21,6 +21,8 @@
   "trigger": { "source": "container-smoke-test" },
   "policy": {
     "workspaceId": "example-workspace",
+    "environmentId": "example-environment",
+    "deploymentId": "example-deployment",
     "workflowRevisionId": "example-revision",
     "executionId": "example-execution",
     "region": "eu-west-2",
@@ -38,4 +40,3 @@
   "plugins": [],
   "connectionIds": []
 }
-

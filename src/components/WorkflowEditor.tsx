@@ -1,25 +1,28 @@
 import { listen } from "@tauri-apps/api/event";
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, type Connection, type Edge, type Node, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Command, History, LayoutGrid, Play, Save, ShieldCheck, TestTube2 } from "lucide-react";
+import "@xyflow/react/dist/style.css";
+import { Accessibility, AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Command, History, LayoutGrid, Play, Save, ShieldCheck, TestTube2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { createNode, createPluginNode, enabledPluginNodes, isTrigger, type PluginNodeChoice } from "../catalogue";
 import { useAppStore } from "../store";
 import type { BrowserProfile, ExecutionRecord, InstalledPlugin, NodeStatus, NodeType, PermissionSummary, RecordedStep, ValidationIssue, Workflow } from "../types";
 import { BrowserRecorder } from "./BrowserRecorder";
+import { AccessibleWorkflowEditor } from "./AccessibleWorkflowEditor";
 import { CommandPalette } from "./CommandPalette";
 import { ExecutionInspector } from "./ExecutionInspector";
 import { NodeInspector } from "./NodeInspector";
 import { WorkflowNodeCard, type WorkflowNodeData } from "./WorkflowNodeCard";
 
 const nodeTypes={workflow:WorkflowNodeCard};
-export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=useAppStore();const [workflow,setWorkflow]=useState(()=>structuredClone(activeWorkflow!));const [baseline,setBaseline]=useState(()=>JSON.stringify(activeWorkflow));const [selectedNodeId,setSelectedNodeId]=useState<string>();const [picker,setPicker]=useState<{open:boolean;sourceId?:string;position:{x:number;y:number}}>({open:false,position:{x:360,y:220}});const [instance,setInstance]=useState<ReactFlowInstance<Node<WorkflowNodeData>,Edge>>();const [issues,setIssues]=useState<ValidationIssue[]>([]);const [runningNode,setRunningNode]=useState<string>();const [run,setRun]=useState<ExecutionRecord>();const [bottomOpen,setBottomOpen]=useState(false);const [saving,setSaving]=useState(false);const [running,setRunning]=useState(false);const [permissionOpen,setPermissionOpen]=useState(false);const [browserProfiles,setBrowserProfiles]=useState<BrowserProfile[]>([]);const [installedPlugins,setInstalledPlugins]=useState<InstalledPlugin[]>([]);const past=useRef<Workflow[]>([]);const future=useRef<Workflow[]>([]);const dirty=JSON.stringify(workflow)!==baseline;const selectedNode=workflow.nodes.find(n=>n.id===selectedNodeId);
+export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=useAppStore();const [workflow,setWorkflow]=useState(()=>structuredClone(activeWorkflow!));const [baseline,setBaseline]=useState(()=>JSON.stringify(activeWorkflow));const [selectedNodeId,setSelectedNodeId]=useState<string>();const [picker,setPicker]=useState<{open:boolean;sourceId?:string;position:{x:number;y:number}}>({open:false,position:{x:360,y:220}});const [instance,setInstance]=useState<ReactFlowInstance<Node<WorkflowNodeData>,Edge>>();const [issues,setIssues]=useState<ValidationIssue[]>([]);const [runningNode,setRunningNode]=useState<string>();const [run,setRun]=useState<ExecutionRecord>();const [bottomOpen,setBottomOpen]=useState(false);const [saving,setSaving]=useState(false);const [running,setRunning]=useState(false);const [permissionOpen,setPermissionOpen]=useState(false);const [accessibleEditorOpen,setAccessibleEditorOpen]=useState(false);const [announcement,setAnnouncement]=useState("");const [browserProfiles,setBrowserProfiles]=useState<BrowserProfile[]>([]);const [installedPlugins,setInstalledPlugins]=useState<InstalledPlugin[]>([]);const past=useRef<Workflow[]>([]);const future=useRef<Workflow[]>([]);const dirty=JSON.stringify(workflow)!==baseline;const selectedNode=workflow.nodes.find(n=>n.id===selectedNodeId);
   const commit=useCallback((next:Workflow)=>{past.current.push(structuredClone(workflow));if(past.current.length>50)past.current.shift();future.current=[];setWorkflow(next)},[workflow]);
   const patchWorkflow=useCallback((patch:Partial<Workflow>)=>commit({...workflow,...patch}),[workflow,commit]);
   const goBack=()=>{if(!dirty||confirm("Leave without saving your workflow changes?"))setView("workflows")};
   useEffect(()=>{const before=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue=""}};window.addEventListener("beforeunload",before);return()=>window.removeEventListener("beforeunload",before)},[dirty]);
   useEffect(()=>{(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved=dirty;return()=>{(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved=false}},[dirty]);
   useEffect(()=>{const openPicker=()=>setPicker({open:true,position:{x:360,y:220}});window.addEventListener("sandbox:open-node-picker",openPicker);return()=>window.removeEventListener("sandbox:open-node-picker",openPicker)},[]);
+  useEffect(()=>{if(accessibleEditorOpen)requestAnimationFrame(()=>document.getElementById("accessible-workflow-editor")?.focus())},[accessibleEditorOpen]);
   useEffect(()=>{void api.listBrowserProfiles().then(setBrowserProfiles)},[]);
   useEffect(()=>{const owner=workflow.owner??{ownerType:"personal" as const,ownerId:"local"};void api.listInstalledPlugins(owner.ownerType,owner.ownerId).then(setInstalledPlugins)},[workflow.owner?.ownerType,workflow.owner?.ownerId]);
   useEffect(()=>{if(!api.isDesktop)return;let stop:undefined|(()=>void);listen<{type:string;node_id?:string;record?:ExecutionRecord}>("runner-event",event=>{if(event.payload.type==="node_started")setRunningNode(event.payload.node_id);if(event.payload.type==="execution_updated"&&event.payload.record?.workflowId===workflow.id){setRun(event.payload.record);setBottomOpen(true);if(event.payload.record.status!=="running")setRunningNode(undefined)}}).then(fn=>stop=fn);return()=>stop?.()},[workflow.id]);
@@ -42,6 +45,7 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
     type:"workflow",
     position:node.position,
     selected:node.id===selectedNodeId,
+    ariaLabel:`${node.name}, ${node.type.replaceAll("_"," ")}, position x ${Math.round(node.position.x)}, y ${Math.round(node.position.y)}`,
     data:{
       node,
       status:(runningNode===node.id?"running":run?.nodeExecutions.find(e=>e.nodeId===node.id)?.status??"idle") as NodeStatus,
@@ -59,25 +63,27 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
   const onConnect=(connection:Connection)=>{if(!connection.source||!connection.target||connection.source===connection.target)return;const target=workflow.nodes.find(n=>n.id===connection.target);if(target&&isTrigger(target.type))return;const exists=workflow.edges.some(e=>e.sourceNodeId===connection.source&&e.targetNodeId===connection.target&&e.sourceHandle===(connection.sourceHandle??"output"));if(exists)return;commit({...workflow,edges:[...workflow.edges,{id:`edge_${crypto.randomUUID().slice(0,8)}`,sourceNodeId:connection.source,sourceHandle:connection.sourceHandle??"output",targetNodeId:connection.target,targetHandle:connection.targetHandle??"input"}]})};
   return <main className="editor">
     <header className="editor-topbar">
-      <button className="icon-button" onClick={goBack} title="Back to workflows"><ArrowLeft size={16}/></button>
-      <input className="workflow-title-input" value={workflow.name} onChange={e=>setWorkflow({...workflow,name:e.target.value})}/>
+      <button className="icon-button" onClick={goBack} title="Back to workflows" aria-label="Back to workflows"><ArrowLeft size={16}/></button>
+      <input className="workflow-title-input" aria-label="Workflow name" value={workflow.name} onChange={e=>setWorkflow({...workflow,name:e.target.value})}/>
       {dirty&&<span className="unsaved-dot" title="Unsaved changes"/>}
       <label className="enabled-toggle"><input type="checkbox" checked={workflow.enabled} onChange={e=>setWorkflow({...workflow,enabled:e.target.checked})}/><span/>{workflow.enabled?"Enabled":"Disabled"}</label>
       <div className="topbar-spacer"/>
       <BrowserRecorder profiles={browserProfiles} onProfileCreated={profile=>setBrowserProfiles(current=>[...current,profile])} onApply={applyRecording}/>
+      <button className="button" aria-expanded={accessibleEditorOpen} aria-controls="accessible-workflow-editor" onClick={()=>setAccessibleEditorOpen(value=>!value)}><Accessibility size={14}/>Accessible editor</button>
       <button className="button" onClick={tidy}><LayoutGrid size={14}/>Tidy</button>
       <button className="button" onClick={()=>setPermissionOpen(true)}><ShieldCheck size={14}/>Permissions</button>
       <button className="button" onClick={test}><TestTube2 size={14}/>Test</button>
       <button className="button" disabled={!dirty||saving} onClick={doSave}><Save size={14}/>{saving?"Saving…":"Save"}</button>
       <button className="button primary" disabled={running} onClick={doRun}><Play size={14} fill="currentColor"/>{running?"Running…":"Run"}</button>
     </header>
-    <div className={`editor-body ${selectedNode?"with-inspector":""}`}>
+    <div className={`editor-body ${selectedNode?"with-inspector":""} ${accessibleEditorOpen?"with-accessible-editor":""}`}>
       <div className="canvas-wrap" onDoubleClick={event=>{if(!(event.target as HTMLElement).classList.contains("react-flow__pane"))return;const position=instance?.screenToFlowPosition({x:event.clientX,y:event.clientY})??{x:360,y:220};setPicker({open:true,position});}}>
         <ReactFlow<Node<WorkflowNodeData>,Edge> nodes={displayNodes} edges={flowEdges} nodeTypes={nodeTypes} onInit={setInstance} onNodesChange={onNodesChange} onNodeClick={(_,node)=>setSelectedNodeId(node.id)} onPaneClick={()=>setSelectedNodeId(undefined)} onConnect={onConnect} isValidConnection={connection=>{const target=workflow.nodes.find(n=>n.id===connection.target);return connection.source!==connection.target&&!Boolean(target&&isTrigger(target.type));}} snapToGrid snapGrid={[20,20]} minZoom={0.45} maxZoom={1.8} defaultViewport={{x:80,y:80,zoom:.9}} deleteKeyCode={null} multiSelectionKeyCode="Shift" fitView>
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#292a2e"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor="#24252a" maskColor="rgba(8,8,9,.72)"/>
         </ReactFlow>
         <div className="canvas-hint"><Command size={13}/>Double-click canvas or press A to add a node</div>
       </div>
+      {accessibleEditorOpen&&<AccessibleWorkflowEditor workflow={workflow} selectedNodeId={selectedNodeId} onSelect={setSelectedNodeId} onAddNode={()=>setPicker({open:true,position:{x:360,y:220}})} onChange={(next,message)=>{if(next!==workflow)commit(next);setAnnouncement(message)}}/>}
       {selectedNode&&<NodeInspector workflow={workflow} node={selectedNode} onChange={(node,workflowPatch)=>{const next={...workflow,...workflowPatch,nodes:workflow.nodes.map(n=>n.id===node.id?node:n)};commit(next);}} onDelete={()=>removeNode(selectedNode.id)}/>} 
     </div>
     <section className={`execution-drawer ${bottomOpen?"open":""}`}>
@@ -86,6 +92,7 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
     </section>
     <CommandPalette open={picker.open} onClose={()=>setPicker(p=>({...p,open:false}))} onCreate={()=>{}} onAdd={addNode} onAddPlugin={addPluginNode} pluginNodes={enabledPluginNodes(installedPlugins)}/>
     {permissionOpen&&<PermissionReview workflow={workflow} onClose={()=>setPermissionOpen(false)} onApply={permissions=>{setWorkflow({...workflow,settings:{...workflow.settings,permissions}});setPermissionOpen(false);}}/>}
+    <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
   </main>;
 }
 

@@ -1,0 +1,276 @@
+export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type QueryValue = string | number | boolean | null | undefined;
+
+export interface ApiErrorEnvelope {
+  error: { code: string; message: string; details?: unknown };
+  correlationId: string;
+}
+
+export interface ApiRateLimit {
+  limit: number | null;
+  remaining: number | null;
+  resetSeconds: number | null;
+}
+
+export interface ApiResult<T> {
+  data: T;
+  statusCode: number;
+  correlationId: string;
+  idempotencyReplayed: boolean;
+  rateLimit: ApiRateLimit;
+}
+
+export interface ApiRequest<T> {
+  method?: ApiMethod;
+  path: string;
+  query?: Record<string, QueryValue>;
+  body?: unknown;
+  idempotencyKey?: string | false;
+  parse?: (value: unknown) => T;
+  signal?: AbortSignal;
+}
+
+export interface SandboxApiClientOptions {
+  baseUrl: string;
+  accessToken?: string | (() => string | null | Promise<string | null>);
+  fetch?: typeof globalThis.fetch;
+  maximumRetries?: number;
+  correlationId?: () => string;
+  idempotencyKey?: () => string;
+  sleep?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+}
+
+export class SandboxApiError extends Error {
+  constructor(
+    public readonly statusCode: number,
+    public readonly code: string,
+    message: string,
+    public readonly correlationId: string,
+    public readonly details: unknown,
+    public readonly retryAfterSeconds: number | null
+  ) { super(message); this.name = "SandboxApiError"; }
+}
+
+export class SandboxApiCompatibilityError extends Error {
+  constructor(public readonly correlationId: string, options?: ErrorOptions) {
+    super("The Sandbox API response did not match the client contract.", options);
+    this.name = "SandboxApiCompatibilityError";
+  }
+}
+
+export interface MarketplaceListQuery {
+  search?: string;
+  category?: string;
+  pricing?: "all" | "free" | "paid";
+  verifiedOnly?: boolean;
+  visibility?: "public" | "workspace" | "all";
+  workspaceId?: string;
+  teamApprovedOnly?: boolean;
+  sort?: "recent" | "installs" | "rating";
+  cursor?: string;
+  limit?: number;
+  hostVersion?: string;
+}
+
+export interface PersonalAccessTokenInput {
+  name: string;
+  scopes: string[];
+  organisationId: string;
+  workspaceIds: string[];
+  environmentIds?: string[];
+  expiresInDays?: number;
+}
+
+export interface ServiceAccountInput {
+  name: string;
+  description?: string;
+  roleId: string;
+  environmentIds?: string[];
+  expiryPolicyDays?: number;
+}
+
+export interface TokenSummary {
+  id: string; name: string; prefix: string; kind: "personal" | "service_account"; scopes: string[];
+  organisationId: string; workspaceIds: string[]; environmentIds: string[]; createdAt: string; expiresAt: string;
+  lastUsedAt: string | null; revokedAt: string | null;
+}
+
+export interface IssuedCredential extends Omit<TokenSummary,"kind"|"lastUsedAt"|"revokedAt"> { token: string }
+export interface ServiceAccount {
+  id: string; organisationId: string; workspaceId: string | null; name: string; description: string;
+  ownerAccountIds: string[]; roleId: string; environmentIds: string[]; expiryPolicyDays: number;
+  status: "active" | "suspended" | "revoked"; createdAt: string; lastUsedAt: string | null;
+}
+
+export class SandboxApiClient {
+  private readonly baseUrl: URL;
+  private readonly fetchImplementation: typeof globalThis.fetch;
+  private readonly maximumRetries: number;
+  private readonly newCorrelationId: () => string;
+  private readonly newIdempotencyKey: () => string;
+  private readonly sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
+
+  constructor(private readonly options: SandboxApiClientOptions) {
+    this.baseUrl = new URL(options.baseUrl);
+    if (this.baseUrl.username || this.baseUrl.password) throw new Error("Sandbox API baseUrl must not contain credentials.");
+    if (this.baseUrl.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(this.baseUrl.hostname)) throw new Error("Sandbox API baseUrl must use HTTPS except on localhost.");
+    this.fetchImplementation = options.fetch ?? globalThis.fetch;
+    if (!this.fetchImplementation) throw new Error("A Fetch API implementation is required.");
+    this.maximumRetries = options.maximumRetries ?? 2;
+    if (!Number.isInteger(this.maximumRetries) || this.maximumRetries < 0 || this.maximumRetries > 5) throw new Error("maximumRetries must be between 0 and 5.");
+    this.newCorrelationId = options.correlationId ?? randomIdentifier;
+    this.newIdempotencyKey = options.idempotencyKey ?? (() => `sdk-${randomIdentifier()}`);
+    this.sleep = options.sleep ?? abortableSleep;
+  }
+
+  health(signal?: AbortSignal): Promise<ApiResult<{ status: string; service: string; execution: string }>> {
+    return this.request({ path: "/health", signal });
+  }
+
+  listMarketplace<T = unknown>(query: MarketplaceListQuery = {}, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ path: "/v1/marketplace/plugins", query: query as Record<string, QueryValue>, parse });
+  }
+
+  listPersonalAccessTokens<T = {items:TokenSummary[]}>(parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ path: "/v1/personal-access-tokens", parse });
+  }
+
+  createPersonalAccessToken<T = {credential:IssuedCredential}>(input: PersonalAccessTokenInput, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ method: "POST", path: "/v1/personal-access-tokens", body: input, parse });
+  }
+
+  revokePersonalAccessToken<T = {revoked:true}>(tokenId: string, reason: string, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ method: "DELETE", path: `/v1/personal-access-tokens/${encodeURIComponent(tokenId)}`, body: { reason }, parse });
+  }
+
+  listServiceAccounts<T = {items:ServiceAccount[]}>(workspaceId: string, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/service-accounts`, parse });
+  }
+
+  createServiceAccount<T = {serviceAccount:ServiceAccount}>(workspaceId: string, input: ServiceAccountInput, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ method: "POST", path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/service-accounts`, body: input, parse });
+  }
+
+  issueServiceAccountToken<T = {credential:IssuedCredential}>(workspaceId: string, serviceAccountId: string, input: PersonalAccessTokenInput, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ method: "POST", path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/service-accounts/${encodeURIComponent(serviceAccountId)}/tokens`, body: input, parse });
+  }
+
+  revokeWorkspaceAccessToken<T = {revoked:true}>(workspaceId: string, tokenId: string, reason: string, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
+    return this.request({ method: "DELETE", path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/access-tokens/${encodeURIComponent(tokenId)}`, body: { reason }, parse });
+  }
+
+  async request<T = unknown>(input: ApiRequest<T>): Promise<ApiResult<T>> {
+    const method = input.method ?? "GET";
+    const safe = method === "GET";
+    validatePath(input.path);
+    const url = new URL(input.path, this.baseUrl);
+    for (const [key, value] of Object.entries(input.query ?? {})) if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+    const correlationId = this.newCorrelationId();
+    const idempotencyKey = safe || input.idempotencyKey === false ? null : input.idempotencyKey ?? this.newIdempotencyKey();
+    if (idempotencyKey !== null && !/^[A-Za-z0-9._:-]{16,200}$/.test(idempotencyKey)) throw new Error("idempotencyKey must contain 16 to 200 safe ASCII characters.");
+    const body = input.body === undefined ? undefined : JSON.stringify(input.body);
+
+    for (let attempt = 0; ; attempt += 1) {
+      const token = await resolveToken(this.options.accessToken);
+      const headers = new Headers({ accept: "application/json", "x-correlation-id": correlationId });
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      if (body !== undefined) headers.set("content-type", "application/json");
+      if (idempotencyKey) headers.set("idempotency-key", idempotencyKey);
+      if (!safe) headers.set("x-sandbox-request-time", new Date().toISOString());
+      let response: Response;
+      try {
+        response = await this.fetchImplementation(url, { method, headers, body, signal: input.signal, credentials: "omit", redirect: "error" });
+      } catch (error) {
+        if (attempt >= this.maximumRetries || (!safe && !idempotencyKey) || input.signal?.aborted) throw error;
+        await this.sleep(backoffMilliseconds(attempt), input.signal);
+        continue;
+      }
+      if (isRetryable(response.status) && attempt < this.maximumRetries && (safe || idempotencyKey)) {
+        await this.sleep(retryDelayMilliseconds(response.headers.get("retry-after"), attempt), input.signal);
+        continue;
+      }
+      const responseCorrelationId = response.headers.get("x-correlation-id") ?? correlationId;
+      const payload = await readPayload(response);
+      if (!response.ok) throw apiError(response, payload, responseCorrelationId);
+      let data: T;
+      try { data = input.parse ? input.parse(payload) : payload as T; }
+      catch (cause) { throw new SandboxApiCompatibilityError(responseCorrelationId, { cause }); }
+      return {
+        data,
+        statusCode: response.status,
+        correlationId: responseCorrelationId,
+        idempotencyReplayed: response.headers.get("idempotency-replayed") === "true",
+        rateLimit: {
+          limit: integerHeader(response.headers, "x-ratelimit-limit"),
+          remaining: integerHeader(response.headers, "x-ratelimit-remaining"),
+          resetSeconds: integerHeader(response.headers, "x-ratelimit-reset")
+        }
+      };
+    }
+  }
+}
+
+function validatePath(path: string): void {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || !(path === "/health" || path.startsWith("/v1/"))) throw new Error("API path must be a local /v1 or /health path.");
+}
+
+async function resolveToken(token: SandboxApiClientOptions["accessToken"]): Promise<string | null> {
+  const value = typeof token === "function" ? await token() : token;
+  return value?.trim() || null;
+}
+
+async function readPayload(response: Response): Promise<unknown> {
+  if (response.status === 204) return null;
+  const text = await response.text();
+  if (!text) return null;
+  if (response.headers.get("content-type")?.includes("json")) {
+    try { return JSON.parse(text) as unknown; }
+    catch { throw new SandboxApiCompatibilityError(response.headers.get("x-correlation-id") ?? "unknown"); }
+  }
+  return text;
+}
+
+function apiError(response: Response, payload: unknown, correlationId: string): SandboxApiError {
+  const envelope = payload && typeof payload === "object" ? payload as Partial<ApiErrorEnvelope> : null;
+  const error = envelope?.error;
+  return new SandboxApiError(
+    response.status,
+    error && typeof error.code === "string" ? error.code : `http_${response.status}`,
+    error && typeof error.message === "string" ? error.message : "The Sandbox API request failed.",
+    typeof envelope?.correlationId === "string" ? envelope.correlationId : correlationId,
+    error?.details,
+    retryAfterSeconds(response.headers.get("retry-after"))
+  );
+}
+
+function integerHeader(headers: Headers, name: string): number | null {
+  const value = headers.get(name); if (value === null) return null;
+  const parsed = Number.parseInt(value, 10); return Number.isFinite(parsed) ? parsed : null;
+}
+
+function retryAfterSeconds(value: string | null): number | null {
+  if (value === null) return null;
+  const seconds = Number(value); if (Number.isFinite(seconds)) return Math.max(0, Math.ceil(seconds));
+  const date = Date.parse(value); return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1_000)) : null;
+}
+
+function retryDelayMilliseconds(retryAfter: string | null, attempt: number): number {
+  return Math.min(30_000, (retryAfterSeconds(retryAfter) ?? backoffMilliseconds(attempt) / 1_000) * 1_000);
+}
+
+function backoffMilliseconds(attempt: number): number { return Math.min(5_000, 250 * 2 ** attempt); }
+function isRetryable(status: number): boolean { return status === 429 || status === 502 || status === 503 || status === 504; }
+
+function randomIdentifier(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  throw new Error("crypto.randomUUID is required.");
+}
+
+function abortableSleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const onAbort = () => { clearTimeout(timeout); reject(signal?.reason); };
+    const timeout = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(); }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}

@@ -11,7 +11,7 @@ export async function scaffold(directory: string, options: ScaffoldOptions): Pro
   await mkdir(path.join(directory, "docs"), { recursive: true });
   const manifest: PluginManifest = {
     manifestVersion: 1, pluginId: options.pluginId, name: options.name, description: `${options.name} integration`, version: "0.1.0", publisherId: options.publisherId,
-    minimumHostVersion: ">=0.3.0", homepage: "https://example.com", documentation: "https://example.com/docs", supportUrl: "https://example.com/support", licence: "MIT",
+    minimumHostVersion: ">=0.5.0", homepage: "https://example.com", documentation: "https://example.com/docs", supportUrl: "https://example.com/support", licence: "MIT",
     categories: ["developer-tools"], keywords: [], icon: "assets/icon.svg",
     nodes: [{ nodeType: "example.echo", nodeVersion: 1, displayName: "Echo", description: "Returns typed input.", category: "Data", riskLevel: "low", inputSchema: { type: "object" }, outputSchema: { type: "object" }, configurationSchema: { type: "object", properties: {}, additionalProperties: false }, credentialRequirements: [], capabilities: ["workflow_input", "structured_logging"], timeoutMs: 10_000, retryBehavior: "safe", idempotencySupport: "read_only", documentation: "docs/echo.md", migrationHandlers: [], executionEntrypoint: "main" }],
     credentials: [], capabilities: [{ type: "workflow_input" }, { type: "structured_logging" }], networkDomains: [], storageRequirements: { temporaryBytes: 0, persistentBytes: 0, isolateByMajorVersion: false }, migrations: [],

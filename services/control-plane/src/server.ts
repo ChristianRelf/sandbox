@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { runSummarySchema, workflowRevisionSchema } from "@sandbox/contracts";
+import { permissions, runSummarySchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -12,6 +12,14 @@ import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_se
 import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
 import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
+import type { CredentialAdministration } from "./credentials.js";
+import { apiActorScope, apiRequestHash, buildOpenApiDocument, type ApiIdempotencyStore, type ApiRouteDescription } from "./api_contract.js";
+import type { PostgresUsageLedger } from "./usage.js";
+import type { UsageProducerAuthenticator } from "./usage_producer.js";
+import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
+import { validMetricsBearer, type ReadinessService, type ServiceMetrics } from "./reliability.js";
+import type { SupportAccessAdministration } from "./support_access.js";
+import type { PrivacyAdministration } from "./privacy.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -35,7 +43,7 @@ const reviewDecisionInput = z.object({ decision: z.enum(["approved", "changes_re
 const revocationInput = z.object({ reason: z.string().trim().min(10).max(2_000), securityNoticeUrl: z.string().url().startsWith("https://") });
 const publisherInput = z.object({ publicId: z.string().regex(/^[a-z0-9]+([.-][a-z0-9]+)+$/).max(200), ownerType: z.enum(["personal", "organisation"]), ownerId: z.string().uuid(), publicName: z.string().trim().min(2).max(120), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63), description: z.string().max(2_000).default(""), website: z.string().url().startsWith("https://").nullable(), supportContact: z.string().email(), securityContact: z.string().email() });
 const publisherKeyInput = z.object({ keyId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(120), algorithm: z.literal("ed25519"), publicKeyDerBase64: z.string().base64().max(256) });
-const marketplaceQuery = z.object({ search: z.string().trim().max(200).nullable().default(null), category: z.string().trim().max(80).nullable().default(null), pricing: z.enum(["all", "free", "paid"]).default("all"), verifiedOnly: z.stringbool().default(false), visibility: z.enum(["public", "workspace", "all"]).default("public"), workspaceId: z.string().uuid().nullable().default(null), teamApprovedOnly: z.stringbool().default(false), sort: z.enum(["recent", "installs", "rating"]).default("recent"), cursor: z.string().max(200).nullable().default(null), limit: z.coerce.number().int().min(1).max(50).default(24), hostVersion: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).default("0.3.0") });
+const marketplaceQuery = z.object({ search: z.string().trim().max(200).nullable().default(null), category: z.string().trim().max(80).nullable().default(null), pricing: z.enum(["all", "free", "paid"]).default("all"), verifiedOnly: z.stringbool().default(false), visibility: z.enum(["public", "workspace", "all"]).default("public"), workspaceId: z.string().uuid().nullable().default(null), teamApprovedOnly: z.stringbool().default(false), sort: z.enum(["recent", "installs", "rating"]).default("recent"), cursor: z.string().max(200).nullable().default(null), limit: z.coerce.number().int().min(1).max(50).default(24), hostVersion: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).default("0.5.0") });
 const installedPluginVersion = z.object({ pluginId: z.string().min(3).max(200), version: z.string().min(1).max(50), packageIntegrity: z.string().regex(/^sha256:[a-f0-9]{64}$/) });
 const runnerPairingInput = z.object({
   devicePublicKeyDerBase64: z.string().base64().max(256), operatingSystem: z.string().trim().min(1).max(80), architecture: z.string().trim().min(1).max(80),
@@ -46,7 +54,7 @@ const runnerPairingInput = z.object({
 const runnerPairingConfirmation = z.object({ challengeId: z.string().uuid(), challenge: z.string().min(32).max(256), signatureBase64: z.string().base64().max(256), workspaceId: z.string().uuid().nullable(), displayName: z.string().trim().min(1).max(100) });
 const runnerCommandInput = z.object({
   targetRunnerId: z.string().uuid(), action: z.enum(["run_workflow", "cancel_execution", "pause_workflow", "resume_workflow", "request_diagnostics", "sync_revision"]),
-  workflowRevisionId: z.string().uuid().nullable().default(null), payload: z.record(z.string(), z.unknown()).default({}), idempotencyKey: z.string().min(16).max(200), expiresInSeconds: z.number().int().min(15).max(86_400).default(300)
+  environmentId:z.string().uuid(),workflowRevisionId: z.string().uuid().nullable().default(null), payload: z.record(z.string(), z.unknown()).default({}), idempotencyKey: z.string().min(16).max(200), expiresInSeconds: z.number().int().min(15).max(86_400).default(300)
 });
 const approvalDecisionInput = z.object({ decision: z.enum(["approved", "rejected"]), reason: z.string().trim().min(1).max(2_000).nullable().default(null) });
 const publishWorkflowInput = z.object({ changeSummary: z.string().trim().min(1).max(2_000) });
@@ -78,6 +86,23 @@ const runnerMoveInput = z.object({ targetWorkspaceId: z.string().uuid() }).stric
 const runnerKeyRotationInput = z.object({ keyId: z.string().regex(/^[A-Za-z0-9._-]+$/).max(120), publicKeyDerBase64: z.string().base64().max(256) }).strict();
 const protectedVariableInput = z.object({ valueType: z.string().regex(/^[a-z][a-z0-9._-]*$/).max(80), isSecret: z.boolean(), value: z.unknown(), description: z.string().trim().max(500).default(""), allowedWorkflowIds: z.array(z.string().uuid()).min(1).max(500) }).strict();
 const protectedVariableResolutionInput = z.object({ environmentId: z.string().uuid(), workflowId: z.string().uuid(), names: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(100)).min(1).max(100) }).strict();
+const credentialInput=z.object({name:z.string().trim().min(1).max(120),scopes:z.array(z.enum(permissions)).min(1).max(permissions.length),organisationId:z.string().uuid(),workspaceIds:z.array(z.string().uuid()).min(1).max(100),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiresInDays:z.number().int().min(1).max(90).default(30)}).strict();
+const serviceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
+const serviceAccountAssignmentInput=z.object({workspaceId:z.string().uuid(),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([])}).strict();
+const organisationServiceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),assignments:z.array(serviceAccountAssignmentInput).min(1).max(100),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
+const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
+const serviceAssertionKeyInput=z.object({keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),publicKeyDerBase64:z.string().base64().max(2048)}).strict();
+const serviceAssertionExchangeInput=z.object({clientAssertion:z.string().min(100).max(8192)}).strict();
+const accessReviewDecisionInput=z.object({decision:z.enum(["retain","revoke"]),rationale:z.string().trim().min(1).max(2000)}).strict();
+const supportAccessRequestInput=z.object({workspaceId:z.string().uuid(),reason:z.string().trim().min(10).max(2000),scopes:z.array(z.literal("diagnostics.read")).min(1).max(1),durationMinutes:z.number().int().min(15).max(480)}).strict();
+const supportAccessDecisionInput=z.object({decision:z.enum(["approve","reject"]),rationale:z.string().trim().min(1).max(2000)}).strict();
+const supportAccessRevocationInput=z.object({rationale:z.string().trim().min(1).max(2000)}).strict();
+const retentionPolicyInput=z.object({executionDetailDays:z.number().int().min(1).max(3650),queueEventDays:z.number().int().min(1).max(365),webhookDeliveryDays:z.number().int().min(1).max(30),runnerCommandDays:z.number().int().min(1).max(365),auditEventDays:z.number().int().min(365).max(3650)}).strict();
+const usageEventInput=z.object({
+  eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
+  meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
+  sourceEventId:z.string().min(1).max(200),idempotencyKey:z.string().min(16).max(200),periodStartedAt:z.string().datetime({offset:true}),periodEndedAt:z.string().datetime({offset:true}),region:z.string().min(1).max(80),metadata:z.record(z.string(),z.unknown()).default({})
+}).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -90,15 +115,50 @@ export interface ApiDependencies {
   entitlementSigner?: EntitlementClaimSigner;
   webhookProtector?: WebhookProtector;
   protectedValueProtector?: WebhookProtector;
+  credentialService?: CredentialAdministration;
+  accessReviews?: ServiceAccountAccessReviewAdministration;
+  supportAccess?: SupportAccessAdministration;
+  privacy?: PrivacyAdministration;
+  readiness?: ReadinessService;
+  metrics?: ServiceMetrics;
+  metricsBearerToken?: string;
+  idempotencyStore?: ApiIdempotencyStore;
+  usageLedger?: Pick<PostgresUsageLedger,"record">;
+  usageProducerAuthenticator?: UsageProducerAuthenticator;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
 }
 
+const documentedRoutes = new WeakMap<FastifyInstance, ApiRouteDescription[]>();
+
+export function getOpenApiDocument(app: FastifyInstance): Record<string, unknown> {
+  return buildOpenApiDocument(documentedRoutes.get(app) ?? []);
+}
+
 export async function createServer(dependencies: ApiDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: dependencies.logger ?? false, trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
-  await app.register(rateLimit, { max: 240, timeWindow: "1 minute", keyGenerator: request => request.ip });
+  const app = Fastify({
+    logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","req.body.clientAssertion","res.headers.set-cookie","body.token","body.clientAssertion"] } : false,
+    trustProxy: true,
+    bodyLimit: 2 * 1024 * 1024,
+    genReqId: request => {
+      const supplied = request.headers["x-correlation-id"];
+      return typeof supplied === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(supplied) ? supplied : randomUUID();
+    }
+  });
+  const routes: ApiRouteDescription[] = [];
+  documentedRoutes.set(app, routes);
+  app.addHook("onRoute", options => {
+    for (const method of Array.isArray(options.method) ? options.method : [options.method]) routes.push({ method: method.toUpperCase(), url: options.url });
+  });
+  await app.register(rateLimit, {
+    max: 240,
+    timeWindow: "1 minute",
+    keyGenerator: request => request.ip,
+    errorResponseBuilder: (_request, context) => ({ statusCode: context.statusCode, code: "FST_RATE_LIMIT" })
+  });
   const authorizer = new Authorizer(dependencies.repository);
+  const idempotencyContexts = new WeakMap<FastifyRequest, { scope: string; key: string; ownerToken: string }>();
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof DomainError) {
@@ -106,7 +166,14 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       return;
     }
     if (error instanceof z.ZodError) {
-      void reply.status(400).send({ error: { code: "invalid_request", message: z.prettifyError(error) }, correlationId: request.id });
+      void reply.status(400).send({ error: { code: "invalid_request", message: "The request did not match the API contract.", details: error.issues.map(issue => ({ path: issue.path.join("."), code: issue.code, message: issue.message })) }, correlationId: request.id });
+      return;
+    }
+    const transportError = error as { statusCode?: number; code?: string };
+    if (transportError.statusCode && transportError.statusCode >= 400 && transportError.statusCode < 500) {
+      const code = transportError.statusCode === 429 ? "rate_limit_exceeded" : transportError.code === "FST_ERR_CTP_INVALID_JSON_BODY" ? "invalid_json" : "request_rejected";
+      const message = code === "invalid_json" ? "The request body must be valid JSON." : transportError.statusCode === 429 ? "The request rate limit was exceeded." : "The request could not be accepted.";
+      void reply.status(transportError.statusCode).send({ error: { code, message }, correlationId: request.id });
       return;
     }
     request.log.error(error);
@@ -114,14 +181,95 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   });
 
   app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("x-correlation-id", _request.id);
     reply.header("cache-control", "no-store");
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "no-referrer");
     reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
     return payload;
   });
+  app.addHook("onResponse", async (request, reply) => {
+    dependencies.metrics?.recordRequest(request.method, request.routeOptions.url ?? "unmatched", reply.statusCode, reply.elapsedTime);
+  });
+
+  app.addHook("preHandler", async (request, reply) => {
+    const store = dependencies.idempotencyStore;
+    if (!store || request.url==="/v1/service-account-assertions/token" || !request.url.startsWith("/v1/") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
+    const key = request.headers["idempotency-key"];
+    if (key === undefined) return;
+    if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) throw new DomainError("idempotency_key_invalid", "Idempotency-Key must contain 16 to 200 safe ASCII characters.", 400);
+    const authorization = typeof request.headers.authorization === "string" ? request.headers.authorization : undefined;
+    const runnerId = typeof request.headers["x-sandbox-runner-id"] === "string" ? request.headers["x-sandbox-runner-id"] : undefined;
+    const scope = apiActorScope(authorization, runnerId, request.ip);
+    const requestHash = apiRequestHash(request.method, request.url, typeof request.headers["content-type"] === "string" ? request.headers["content-type"] : undefined, request.body);
+    const claim = await store.claim(scope, key, requestHash);
+    if (claim.outcome === "conflict") throw new DomainError("idempotency_key_reused", "This idempotency key was already used for a different request.", 409);
+    if (claim.outcome === "in_progress") {
+      reply.header("retry-after", "1");
+      throw new DomainError("idempotency_request_in_progress", "An identical request with this idempotency key is still in progress.", 409);
+    }
+    if (claim.outcome === "replay") {
+      reply.header("idempotency-replayed", "true");
+      if (claim.response.contentType) reply.header("content-type", claim.response.contentType);
+      if (claim.response.location) reply.header("location", claim.response.location);
+      return reply.status(claim.response.statusCode).send(claim.response.body);
+    }
+    idempotencyContexts.set(request, { scope, key, ownerToken: claim.ownerToken });
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const context = idempotencyContexts.get(request);
+    if (!context || !dependencies.idempotencyStore) return payload;
+    idempotencyContexts.delete(request);
+    if (reply.statusCode >= 500) {
+      await dependencies.idempotencyStore.abandon(context.scope, context.key, context.ownerToken);
+      return payload;
+    }
+    try {
+      const serialized = Buffer.isBuffer(payload) ? payload.toString("utf8") : typeof payload === "string" ? payload : String(payload);
+      const body = serialized.length ? JSON.parse(serialized) as unknown : null;
+      await dependencies.idempotencyStore.complete(context.scope, context.key, context.ownerToken, {
+        statusCode: reply.statusCode,
+        body,
+        contentType: typeof reply.getHeader("content-type") === "string" ? String(reply.getHeader("content-type")) : null,
+        location: typeof reply.getHeader("location") === "string" ? String(reply.getHeader("location")) : null
+      });
+    } catch (error) {
+      await dependencies.idempotencyStore.abandon(context.scope, context.key, context.ownerToken);
+      throw error;
+    }
+    return payload;
+  });
 
   app.get("/health", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async () => ({ status: "ok", service: "sandbox-control-plane", execution: "local-only" }));
+  app.get("/ready", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (_request, reply) => {
+    if (!dependencies.readiness) {
+      reply.status(503);
+      return { status: "not_ready", checkedAt: new Date().toISOString(), checks: [] };
+    }
+    const result = await dependencies.readiness.check();
+    dependencies.metrics?.recordReadiness(result.status === "ready");
+    if (result.status !== "ready") reply.status(503);
+    return result;
+  });
+  app.get("/metrics", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request, reply) => {
+    if (!dependencies.metrics || !dependencies.metricsBearerToken) throw new DomainError("metrics_unavailable", "Metrics are not configured.", 503);
+    if (!validMetricsBearer(request.headers.authorization, dependencies.metricsBearerToken)) throw new DomainError("authentication_required", "A valid metrics bearer token is required.", 401);
+    reply.type("text/plain; version=0.0.4; charset=utf-8");
+    return dependencies.metrics.prometheus();
+  });
+  app.get("/v1/openapi.json", async () => getOpenApiDocument(app));
+
+  app.post("/v1/internal/usage-events", async request => {
+    if (!dependencies.usageLedger || !dependencies.usageProducerAuthenticator) throw new DomainError("usage_ingestion_unavailable","Usage ingestion is not configured.",503);
+    const producerId=singleHeader(request,"x-sandbox-usage-producer");
+    const timestamp=singleHeader(request,"x-sandbox-usage-timestamp");
+    const signature=singleHeader(request,"x-sandbox-usage-signature");
+    dependencies.usageProducerAuthenticator.verify({producerId,timestamp,signature,body:request.body});
+    const input=usageEventInput.parse(request.body);
+    const result=await dependencies.usageLedger.record(input);
+    return {usageEventId:result.eventId,created:result.created};
+  });
 
   app.get("/v1/marketplace/plugins", async request => {
     const query = marketplaceQuery.parse(request.query);
@@ -223,7 +371,8 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.get("/v1/account/export", async request => {
     const session = await authenticate(request, dependencies.sessions);
-    return dependencies.repository.exportAccountData(session);
+    requireHumanPrincipal(session);
+    return dependencies.privacy?dependencies.privacy.exportAccount(session):dependencies.repository.exportAccountData(session);
   });
 
   app.get("/v1/account/profile", async request => {
@@ -238,21 +387,22 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.delete("/v1/account", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
-    if (!session.authenticationMethods.some(method => method === "mfa" || method === "webauthn" || method === "passkey")) {
-      throw new DomainError("step_up_required", "Account deletion requires a recent passkey or multi-factor authentication step.", 403);
-    }
-    await dependencies.repository.requestAccountDeletion(session, request.id);
-    return { deleted: true };
+    requireRecentStepUp(session);
+    if(dependencies.privacy)return{deleted:true,...await dependencies.privacy.deleteAccount(session,request.id)};
+    await dependencies.repository.requestAccountDeletion(session, request.id);return { deleted: true };
   });
 
   app.get("/v1/account/sessions", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     return { items: await dependencies.repository.listSessions(session) };
   });
 
   app.post("/v1/account/sessions/:sessionId/revoke", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const { sessionId } = z.object({ sessionId: z.string().uuid() }).parse(request.params);
     const revoked = await dependencies.repository.revokeSession(session, sessionId, request.id);
@@ -260,8 +410,148 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { revoked: true };
   });
 
+  app.get("/v1/personal-access-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    return{items:await dependencies.credentialService.listPersonalTokens(session)};
+  });
+
+  app.post("/v1/personal-access-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const input=credentialInput.parse(request.body);
+    return{credential:await dependencies.credentialService.issuePersonalToken(session,{...input,expiresAt:new Date(Date.now()+input.expiresInDays*86_400_000)},request.id)};
+  });
+
+  app.delete("/v1/personal-access-tokens/:tokenId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const{tokenId}=z.object({tokenId:z.string().uuid()}).parse(request.params);const{reason}=credentialRevocationInput.parse(request.body);
+    if(!await dependencies.credentialService.revokeToken(session,tokenId,reason,request.id))throw new DomainError("credential_not_found","Credential was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{items:await dependencies.credentialService.listServiceAccounts(session,workspaceId)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{serviceAccount:await dependencies.credentialService.createServiceAccount(session,{workspaceId,...serviceAccountInput.parse(request.body)},request.id)};
+  });
+
+  app.post("/v1/organisations/:organisationId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);const input=organisationServiceAccountInput.parse(request.body);
+    for(const assignment of input.assignments)await authorizer.require(session,{workspaceId:assignment.workspaceId,organisationId,permission:"service_accounts.manage",resourceType:"service_account_assignment"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{serviceAccount:await dependencies.credentialService.createOrganisationServiceAccount(session,{organisationId,...input},request.id)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/assertion-keys",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId,serviceAccountId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid()}).parse(request.params);const input=serviceAssertionKeyInput.parse(request.body);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    return{key:await dependencies.credentialService.registerServiceAccountAssertionKey(session,serviceAccountId,workspaceId,input.keyId,input.publicKeyDerBase64,request.id)};
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/assertion-keys/:keyId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId,serviceAccountId,keyId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid(),keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)}).parse(request.params);const{reason}=credentialRevocationInput.parse(request.body);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    if(!await dependencies.credentialService.revokeServiceAccountAssertionKey(session,serviceAccountId,workspaceId,keyId,reason,request.id))throw new DomainError("assertion_key_not_found","Assertion key was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
+  app.post("/v1/service-account-assertions/token",{config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async request=>{
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    const input=serviceAssertionExchangeInput.parse(request.body);
+    return{credential:await dependencies.credentialService.exchangeServiceAccountAssertion(input.clientAssertion)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/service-account-access-reviews",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);const{status}=z.object({status:z.enum(["pending","overdue","retained","revoked"]).optional()}).parse(request.query);
+    await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account_access_review"});
+    if(!dependencies.accessReviews)throw new DomainError("access_reviews_unavailable","Service-account access reviews are not configured.",503);
+    return{items:await dependencies.accessReviews.list(session,workspaceId,status)};
+  });
+
+  app.post("/v1/service-account-access-reviews/:reviewId/decision",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{reviewId}=z.object({reviewId:z.string().uuid()}).parse(request.params);const input=accessReviewDecisionInput.parse(request.body);
+    if(!dependencies.accessReviews)throw new DomainError("access_reviews_unavailable","Service-account access reviews are not configured.",503);
+    const workspaceIds=await dependencies.accessReviews.workspaceIds(session,reviewId);for(const workspaceId of workspaceIds)await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account_access_review",resourceId:reviewId});
+    return{review:await dependencies.accessReviews.decide(session,reviewId,input.decision,input.rationale,request.id)};
+  });
+
+  app.post("/v1/platform/support-access-requests",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requirePlatform(session,"support_access.manage");
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const input=supportAccessRequestInput.parse(request.body);
+    return{request:await dependencies.supportAccess.request(session,input.workspaceId,input.reason,input.scopes,input.durationMinutes,request.id)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/support-access-requests",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request"});
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    return{items:await dependencies.supportAccess.list(workspaceId)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/privacy-retention",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);await authorizer.require(session,{workspaceId,permission:"policies.manage",resourceType:"privacy_retention"});
+    if(!dependencies.privacy)throw new DomainError("privacy_service_unavailable","Privacy controls are not configured.",503);return{policy:await dependencies.privacy.getRetention(workspaceId)};
+  });
+
+  app.put("/v1/workspaces/:workspaceId/privacy-retention",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);await authorizer.require(session,{workspaceId,permission:"policies.manage",resourceType:"privacy_retention"});
+    if(!dependencies.privacy)throw new DomainError("privacy_service_unavailable","Privacy controls are not configured.",503);return{policy:await dependencies.privacy.setRetention(session,workspaceId,retentionPolicyInput.parse(request.body))};
+  });
+
+  app.post("/v1/support-access-requests/:requestId/decision",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);const input=supportAccessDecisionInput.parse(request.body);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const workspaceId=await dependencies.supportAccess.workspaceId(requestId);await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request",resourceId:requestId});
+    return{request:await dependencies.supportAccess.decide(session,requestId,input.decision,input.rationale,request.id)};
+  });
+
+  app.post("/v1/support-access-requests/:requestId/revoke",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);const input=supportAccessRevocationInput.parse(request.body);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const workspaceId=await dependencies.supportAccess.workspaceId(requestId);await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request",resourceId:requestId});
+    return{request:await dependencies.supportAccess.revoke(session,requestId,input.rationale,request.id)};
+  });
+
+  app.get("/v1/platform/support-access-requests/:requestId/diagnostics",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requirePlatform(session,"support_access.manage");const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    return{diagnostics:await dependencies.supportAccess.diagnostics(session,requestId,request.id)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId,serviceAccountId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    const input=credentialInput.parse(request.body);
+    if(!input.workspaceIds.includes(workspaceId))throw new DomainError("credential_workspace_restricted","Service-account credentials must include the route workspace.",400);
+    for(const assignedWorkspaceId of input.workspaceIds)if(assignedWorkspaceId!==workspaceId)await authorizer.require(session,{workspaceId:assignedWorkspaceId,organisationId:input.organisationId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    return{credential:await dependencies.credentialService.issueServiceAccountToken(session,serviceAccountId,{...input,expiresAt:new Date(Date.now()+input.expiresInDays*86_400_000)},request.id)};
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/access-tokens/:tokenId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId,tokenId}=z.object({workspaceId:z.string().uuid(),tokenId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"access_token",resourceId:tokenId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","API credentials are not configured.",503);
+    const{reason}=credentialRevocationInput.parse(request.body);if(!await dependencies.credentialService.revokeToken(session,tokenId,reason,request.id,workspaceId))throw new DomainError("credential_not_found","Credential was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
   app.post("/v1/organisations", async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     return dependencies.repository.createOrganisation(session, organisationInput.parse(request.body), request.id);
   });
@@ -293,6 +583,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/invitations/accept", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = acceptInvitationInput.parse(request.body);
     return dependencies.repository.acceptInvitation(session, input.token, request.id);
@@ -386,6 +677,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingInput.parse(request.body);
     validateEd25519PublicKey(input.devicePublicKeyDerBase64);
@@ -396,6 +688,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/confirm", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
+    requireHumanPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingConfirmation.parse(request.body);
     if (input.workspaceId) await authorizer.require(session, input.workspaceId, "runners.manage");
@@ -414,7 +707,10 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     requireFreshRequest(request);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     const input = runnerCommandInput.parse(request.body);
-    await authorizer.require(session, workspaceId, input.action === "request_diagnostics" ? "runners.manage" : "workflows.run");
+    const requiredPermission=runnerActionPermission(input.action);
+    await authorizer.require(session,{workspaceId,environmentId:input.environmentId,permission:requiredPermission,resourceType:"runner_command",resourceId:input.targetRunnerId});
+    const environment=(await dependencies.repository.listWorkspaceEnvironments(session,workspaceId)).find(item=>item.environmentId===input.environmentId);
+    if(!environment)throw new DomainError("environment_not_found","The command environment was not found in this workspace.",404);
     const policies = await dependencies.repository.getGovernancePolicies(session, workspaceId);
     authorizer.enforcePolicy(policies.remote_execution !== false, { policy: "remote_execution", resource: `runner command ${input.action}`, administratorAction: "A workspace administrator can enable remote execution in Governance.", userAction: "Run the workflow directly on an eligible local runner instead." });
     if (!dependencies.runnerCommandSigner) throw new DomainError("runner_signing_unavailable", "Remote commands are unavailable because the control-plane signing key is not configured.", 503);
@@ -422,7 +718,8 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const expiresAt = new Date(createdAt.getTime() + input.expiresInSeconds * 1_000);
     const command = buildSignedRunnerCommand(dependencies.runnerCommandSigner, {
       commandId: randomUUID(), issuerAccountId: session.accountId, workspaceId, targetRunnerId: input.targetRunnerId, action: input.action,
-      workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload
+      workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload,
+      authorizationContext:{principalType:session.principalType??"user",principalId:session.principalId??session.accountId,credentialId:(session.principalType??"user")==="user"?null:session.sessionId,requiredPermission,environmentId:input.environmentId,environment:environment.environment,credentialScopes:session.credentialScopes??null,workspaceRestrictions:session.workspaceRestrictions??null,environmentRestrictions:session.environmentRestrictions??null,principalPermissions:session.principalPermissions??null}
     });
     return { command: await dependencies.repository.createRunnerCommand(session, command, request.id) };
   });
@@ -815,6 +1112,20 @@ function requireFreshRequest(request: FastifyRequest): void {
 
 function requirePlatform(session: AuthenticatedSession, permission: string): void {
   if (!session.platformPermissions.includes(permission)) throw new DomainError("platform_permission_denied", `Platform permission '${permission}' is required.`, 403);
+}
+
+function requireHumanPrincipal(session:AuthenticatedSession):void {
+  if((session.principalType??"user")!=="user")throw new DomainError("human_principal_required","This account-security operation requires an interactive human session.",403);
+}
+
+function requireRecentStepUp(session:AuthenticatedSession):void {
+  if(!session.authenticationMethods.some(method=>method==="mfa"||method==="webauthn"||method==="passkey")||Math.abs(Date.now()-session.issuedAt.getTime())>15*60_000)throw new DomainError("step_up_required","Support access approval requires authentication within the last 15 minutes using a passkey or multi-factor method.",403);
+}
+
+function runnerActionPermission(action:RunnerCommand["action"]):Permission {
+  if(action==="request_diagnostics")return "runners.manage";
+  if(["cancel_execution","pause_workflow","resume_workflow"].includes(action))return "workflows.pause";
+  return "workflows.run";
 }
 
 function publicKeyPem(derBase64: string): string {

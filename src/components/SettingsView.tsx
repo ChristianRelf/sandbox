@@ -59,8 +59,8 @@ export function SettingsView() {
         <div><b>{profile.name}</b><small>{profile.persistent ? "Persists between runs" : "Clears after each run"} · {profile.settings?.viewportWidth ?? 1280}×{profile.settings?.viewportHeight ?? 800}{profile.lastUsedAt ? ` · Last used ${new Date(profile.lastUsedAt).toLocaleDateString()}` : " · Never used"}</small></div>
         <span className="profile-path">Managed data · {profile.id.slice(0, 8)}</span>
         <button className="button" disabled={!api.isDesktop} onClick={() => act(() => api.openBrowserProfile(profile.id))}><ExternalLink size={13} />Open</button>
-        <button className="icon-button" title="Duplicate without browser data" onClick={() => act(() => api.duplicateBrowserProfile(profile.id))}><Copy size={14} /></button>
-        <button className="icon-button" title="Edit profile" onClick={() => setEditing(profile)}><MoreHorizontal size={15} /></button>
+        <button className="icon-button" title="Duplicate without browser data" aria-label={`Duplicate ${profile.name} without browser data`} onClick={() => act(() => api.duplicateBrowserProfile(profile.id))}><Copy size={14} /></button>
+        <button className="icon-button" title="Edit profile" aria-label={`Edit ${profile.name}`} onClick={() => setEditing(profile)}><MoreHorizontal size={15} /></button>
       </div>)}</div> : <div className="settings-empty"><ShieldCheck size={22} /><h3>No managed profiles</h3><p>Create an isolated Chromium identity for browser workflows and recording.</p><button className="button" onClick={() => setEditing("new")}>Create browser profile</button></div>}
     </section>
     <ConnectionsSettings />

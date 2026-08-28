@@ -1,8 +1,11 @@
-# Sandbox v0.3.0
+# Sandbox v0.5.0 GA candidate
 
-Sandbox is a local-first visual desktop automation platform. v0.3 adds a capability-controlled WebAssembly plugin ecosystem, signed packages and exact workflow pins, optional encrypted sync, marketplace and publisher services, team workspaces, governed workflow publication, shared-connection deployment, and signed coordination of multiple local runners. Workflow execution remains local and existing personal workflows continue without an account or network connection.
+Sandbox is a local-first visual desktop automation platform. The v0.5 branch builds GA governance and operability on the existing desktop, browser automation, plugin ecosystem, team control plane and always-on runner architecture. Existing personal workflows continue without an account or network connection. This branch is not GA until the blockers in `docs/ga-blockers-v0.5.md` are closed.
 
 ## Architecture
+
+The current cross-component architecture and security boundaries are documented in
+`docs/architecture-v0.5.md`.
 
 ```text
 React + xyflow
@@ -64,13 +67,31 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Credential references are defined in the schema, but there is no credential vault or OAuth provider yet.
 - Workflows are DAGs only; loops and arbitrary expression execution are intentionally unsupported.
 
-## Stage-three documentation
+## GA candidate documentation
+
+- Current architecture and security boundaries: `docs/architecture-v0.5.md`
+- Authoritative release blocker register: `docs/ga-blockers-v0.5.md`
+- Stable API, idempotency, rate-limit and deprecation policy: `docs/api-policy-v0.5.md`
+- Managed usage ingestion and invoice reconciliation: `docs/usage-metering-v0.5.md`
+- Control-plane readiness, metrics and remaining production exercises: `docs/reliability-v0.5.md`
+- Incident lifecycle, recovery exercise and post-incident evidence: `docs/incident-response-v0.5.md`
+- Customer-approved support access and redacted diagnostics: `docs/support-access-v0.5.md`
+- Privacy classification, export, deletion and enforceable retention: `docs/privacy-and-retention-v0.5.md`
+- WCAG 2.2 AA review and non-dragging graph editor: `docs/accessibility-v0.5.md`
+- Signed release artifacts, provenance and verification: `docs/release-integrity-v0.5.md`
+- Desktop startup bundle measurements and regression budgets: `docs/frontend-performance-v0.5.md`
+- Machine-readable v1 route contract: `docs/api/openapi-v1.json`
+- Typed browser/Node control-plane client: `packages/api-client`
+- Stage-five baseline audit: `docs/stage-five-audit.md`
+
+## Historical stage-three documentation
 
 - Architecture and service boundaries: `docs/architecture-v0.3.md`
 - Plugin sandbox and threat model: `docs/plugin-sandbox.md`, `docs/plugin-threat-model.md`
 - Public SDK and CLI: `docs/plugin-sdk.md`
 - Marketplace review: `docs/marketplace-review.md`
 - Baseline compatibility audit: `docs/stage-three-audit.md`
+- v0.5 compatibility and support matrix: `docs/support-matrix-v0.5.md`
 - Team permissions and publication: `docs/team-permissions.md`
 - Runner pairing and command protocol: `docs/runner-protocol.md`
 - Sync and conflict handling: `docs/sync-and-conflicts.md`

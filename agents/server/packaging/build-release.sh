@@ -34,7 +34,18 @@ build_archive aarch64-unknown-linux-gnu aarch64
 (
   cd "$output"
   sha256sum ./*.tar.gz > SHA256SUMS
-  if [[ -n "${COSIGN_KEY:-}" ]]; then
+  if [[ "${RELEASE_SIGNING_REQUIRED:-0}" == "1" ]]; then
+    if ! command -v cosign >/dev/null 2>&1; then
+      echo "cosign is required for a production release." >&2
+      exit 1
+    fi
+    if [[ -n "${COSIGN_KEY:-}" ]]; then
+      cosign sign-blob --yes --key "$COSIGN_KEY" --bundle SHA256SUMS.sigstore.json SHA256SUMS
+    else
+      cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+    fi
+    test -s SHA256SUMS.sigstore.json
+  elif [[ -n "${COSIGN_KEY:-}" ]]; then
     cosign sign-blob --yes --key "$COSIGN_KEY" --bundle SHA256SUMS.sigstore.json SHA256SUMS
   else
     echo "COSIGN_KEY is unset; created checksums without a Sigstore bundle." >&2

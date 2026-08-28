@@ -5,8 +5,17 @@ use sandbox_server_runner::{
     config::RunnerConfig,
     identity::StoredIdentity,
     pairing::pair,
+    runner::{open_engine, process_command, CommandVerifier},
 };
-use std::{path::PathBuf, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tokio::{sync::Semaphore, task::JoinSet};
 
 #[derive(Parser)]
 #[command(name = "sandbox-runner", version)]
@@ -40,6 +49,7 @@ async fn run() -> Result<(), String> {
     match cli.command {
         Command::Validate => {
             build_http_client(&config)?;
+            CommandVerifier::from_config(&config)?;
             println!("configuration valid");
         }
         Command::Pair { token } => {
@@ -63,27 +73,67 @@ async fn run() -> Result<(), String> {
 async fn run_service(config: &RunnerConfig) -> Result<(), String> {
     let identity = StoredIdentity::load(&config.data_directory.join("identity.json"))
         .map_err(|error| format!("Runner is not paired or its identity is invalid: {error}"))?;
-    let device = DeviceClient::new(
-        &config.control_plane_url,
-        build_http_client(config)?,
-        identity,
-    )
-    .map_err(|error| error.to_string())?;
+    let runner_id = identity.runner_id.clone();
+    let device = Arc::new(
+        DeviceClient::new(
+            &config.control_plane_url,
+            build_http_client(config)?,
+            identity,
+        )
+        .map_err(|error| error.to_string())?,
+    );
+    let engine = Arc::new(open_engine(config)?);
+    let verifier = Arc::new(CommandVerifier::from_config(config)?);
+    let active = Arc::new(AtomicU16::new(0));
+    let permits = Arc::new(Semaphore::new(config.concurrency as usize));
+    let mut tasks = JoinSet::new();
     println!(
         "runner starting in {} with concurrency {}",
         config.environment, config.concurrency
     );
     let mut heartbeat = tokio::time::interval(Duration::from_secs(30));
     heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut poll = tokio::time::interval(Duration::from_secs(2));
+    poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         tokio::select! {
             signal = shutdown_signal() => {
                 signal?;
-                if let Err(error) = device.heartbeat(0, RunnerStatus::Draining).await { eprintln!("failed to report draining state: {error}"); }
+                if let Err(error) = device.heartbeat(active.load(Ordering::Relaxed), RunnerStatus::Draining).await { eprintln!("failed to report draining state: {error}"); }
                 break;
-            }
-            _ = heartbeat.tick() => if let Err(error) = device.heartbeat(0, RunnerStatus::Online).await { eprintln!("heartbeat failed: {error}"); }
+            },
+            _ = heartbeat.tick() => if let Err(error) = device.heartbeat(active.load(Ordering::Relaxed), RunnerStatus::Online).await { eprintln!("heartbeat failed: {error}"); },
+            _ = poll.tick() => {
+                let available = config.concurrency.saturating_sub(active.load(Ordering::Relaxed));
+                if available == 0 { continue; }
+                match device.commands(available.min(50)).await {
+                    Ok(commands) => for command in commands {
+                        let Ok(permit) = permits.clone().try_acquire_owned() else { break };
+                        let device = device.clone(); let engine = engine.clone(); let verifier = verifier.clone();
+                        let runner_id = runner_id.clone(); let workspace_id = config.workspace_id.clone();let environment_id=config.environment_id.clone();let environment=config.environment.clone(); let active = active.clone();
+                        active.fetch_add(1, Ordering::Relaxed);
+                        tasks.spawn(async move {
+                            let _permit = permit;
+                            process_command(&device, &engine, &verifier, &runner_id, &workspace_id,&environment_id,&environment, command).await;
+                            active.fetch_sub(1, Ordering::Relaxed);
+                        });
+                    },
+                    Err(error) => eprintln!("command poll failed: {error}"),
+                }
+            },
+            Some(result) = tasks.join_next(), if !tasks.is_empty() => if let Err(error) = result { eprintln!("command task failed: {error}"); },
         }
+    }
+    let drain = async { while tasks.join_next().await.is_some() {} };
+    if tokio::time::timeout(
+        Duration::from_secs(config.drain_timeout_seconds.into()),
+        drain,
+    )
+    .await
+    .is_err()
+    {
+        tasks.abort_all();
+        return Err("drain timeout expired before active commands completed".into());
     }
     Ok(())
 }

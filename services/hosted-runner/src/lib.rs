@@ -10,6 +10,8 @@ use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 
+pub mod usage;
+
 #[derive(Debug, thiserror::Error)]
 pub enum HostedRunnerError {
     #[error("hosted workload policy is invalid: {0}")]
@@ -26,6 +28,8 @@ pub enum HostedRunnerError {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IsolationPolicy {
     pub workspace_id: String,
+    pub environment_id: String,
+    pub deployment_id: String,
     pub workflow_revision_id: String,
     pub execution_id: String,
     pub region: String,
@@ -44,6 +48,8 @@ pub struct IsolationPolicy {
 impl IsolationPolicy {
     pub fn validate(&self) -> Result<(), HostedRunnerError> {
         if self.workspace_id.is_empty()
+            || self.environment_id.is_empty()
+            || self.deployment_id.is_empty()
             || self.workflow_revision_id.is_empty()
             || self.execution_id.is_empty()
         {
@@ -415,6 +421,8 @@ mod tests {
             trigger: serde_json::json!({"source":"test"}),
             policy: IsolationPolicy {
                 workspace_id: "workspace".into(),
+                environment_id: "environment".into(),
+                deployment_id: "deployment".into(),
                 workflow_revision_id: "revision".into(),
                 execution_id: "execution".into(),
                 region: "eu-west-2".into(),

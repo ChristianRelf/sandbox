@@ -84,7 +84,9 @@ impl Database {
         }
         if version < 7 {
             connection
-                .execute_batch(include_str!("../migrations/007_runner_command_receipts.sql"))
+                .execute_batch(include_str!(
+                    "../migrations/007_runner_command_receipts.sql"
+                ))
                 .map_err(storage)?;
         }
         migrate_saved_workflows(&connection)?;
@@ -169,9 +171,15 @@ impl Database {
         Ok(changed == 1)
     }
 
-    pub fn complete_remote_command(&self, command_id: &str, status: &str) -> Result<(), EngineError> {
+    pub fn complete_remote_command(
+        &self,
+        command_id: &str,
+        status: &str,
+    ) -> Result<(), EngineError> {
         if !matches!(status, "accepted" | "rejected" | "completed" | "expired") {
-            return Err(EngineError::Validation("Remote command receipt status is invalid.".into()));
+            return Err(EngineError::Validation(
+                "Remote command receipt status is invalid.".into(),
+            ));
         }
         let changed = self
             .connection
@@ -183,9 +191,24 @@ impl Database {
             )
             .map_err(storage)?;
         if changed != 1 {
-            return Err(EngineError::Storage("Remote command receipt was not found.".into()));
+            return Err(EngineError::Storage(
+                "Remote command receipt was not found.".into(),
+            ));
         }
         Ok(())
+    }
+
+    pub fn remote_command_status(&self, command_id: &str) -> Result<Option<String>, EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT status FROM runner_command_receipts WHERE command_id=?",
+                [command_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)
     }
 
     pub fn save_installed_plugin(&self, plugin: &InstalledPlugin) -> Result<(), EngineError> {
@@ -1447,9 +1470,31 @@ mod tests {
     fn remote_command_claim_is_atomic_and_idempotent() {
         let db = Database::in_memory().unwrap();
         let expiry = Utc::now() + chrono::Duration::minutes(5);
-        assert!(db.claim_remote_command("command-1", "runner-1", "workspace-1", "idempotency-key-0001", expiry).unwrap());
-        assert!(!db.claim_remote_command("command-2", "runner-1", "workspace-1", "idempotency-key-0001", expiry).unwrap());
-        db.complete_remote_command("command-1", "completed").unwrap();
+        assert!(db
+            .claim_remote_command(
+                "command-1",
+                "runner-1",
+                "workspace-1",
+                "idempotency-key-0001",
+                expiry
+            )
+            .unwrap());
+        assert!(!db
+            .claim_remote_command(
+                "command-2",
+                "runner-1",
+                "workspace-1",
+                "idempotency-key-0001",
+                expiry
+            )
+            .unwrap());
+        db.complete_remote_command("command-1", "completed")
+            .unwrap();
+        assert_eq!(
+            db.remote_command_status("command-1").unwrap().as_deref(),
+            Some("completed")
+        );
+        assert_eq!(db.remote_command_status("missing").unwrap(), None);
     }
     #[test]
     fn recovers_running_records() {
