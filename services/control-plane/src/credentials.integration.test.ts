@@ -10,7 +10,7 @@ const integration=connectionString?describe:describe.skip;
 integration("service accounts and access tokens",()=>{
   const pool=new Pool({connectionString,max:4});
   const credentials=new PostgresCredentialService(pool,randomBytes(32));
-  const accountId=randomUUID(),organisationId=randomUUID(),workspaceId=randomUUID(),environmentId=randomUUID(),ownerRoleId=randomUUID(),serviceRoleId=randomUUID();
+  const accountId=randomUUID(),organisationId=randomUUID(),workspaceId=randomUUID(),secondWorkspaceId=randomUUID(),environmentId=randomUUID(),secondEnvironmentId=randomUUID(),ownerRoleId=randomUUID(),serviceRoleId=randomUUID();
   const actor:AuthenticatedSession={accountId,sessionId:randomUUID(),subject:`user:${accountId}`,email:`${accountId}@example.invalid`,issuedAt:new Date(),expiresAt:new Date(Date.now()+3600_000),authenticationMethods:["passkey"],platformPermissions:[]};
   let serviceAccountId:string;
   let servicePrincipalId:string;
@@ -22,8 +22,11 @@ integration("service accounts and access tokens",()=>{
     await pool.query(`INSERT INTO role_permissions(role_id,permission) VALUES($1,'service_accounts.manage'),($1,'api_credentials.manage'),($1,'workflows.run'),($2,'workflows.run'),($2,'workflows.view')`,[ownerRoleId,serviceRoleId]);
     await pool.query(`INSERT INTO memberships(organisation_id,account_id,role_id) VALUES($1,$2,$3)`,[organisationId,accountId,ownerRoleId]);
     await pool.query(`INSERT INTO workspaces(id,organisation_id,name,slug,created_by) VALUES($1,$2,'Credential workspace','credentials',$3)`,[workspaceId,organisationId,accountId]);
+    await pool.query(`INSERT INTO workspaces(id,organisation_id,name,slug,created_by) VALUES($1,$2,'Second credential workspace','credentials-two',$3)`,[secondWorkspaceId,organisationId,accountId]);
     await pool.query(`INSERT INTO workspace_memberships(workspace_id,account_id,role_id) VALUES($1,$2,$3)`,[workspaceId,accountId,ownerRoleId]);
+    await pool.query(`INSERT INTO workspace_memberships(workspace_id,account_id,role_id) VALUES($1,$2,$3)`,[secondWorkspaceId,accountId,ownerRoleId]);
     await pool.query(`INSERT INTO environments(id,workspace_id,environment_key) VALUES($1,$2,'production')`,[environmentId,workspaceId]);
+    await pool.query(`INSERT INTO environments(id,workspace_id,environment_key) VALUES($1,$2,'staging')`,[secondEnvironmentId,secondWorkspaceId]);
   });
   afterAll(async()=>{await pool.query(`DELETE FROM organisations WHERE id=$1`,[organisationId]).catch(()=>undefined);await pool.query(`DELETE FROM accounts WHERE identity_subject LIKE 'service-account:%' OR id=$1`,[accountId]).catch(()=>undefined);await pool.end();});
 
@@ -55,6 +58,16 @@ integration("service accounts and access tokens",()=>{
     await expect(interactive.verify("oidc-token")).rejects.toMatchObject({code:"interactive_login_forbidden"});
     const client=await pool.connect();
     try{await client.query('BEGIN');await client.query(`DELETE FROM service_account_owners WHERE service_account_id=$1`,[service.id]);await expect(client.query('COMMIT')).rejects.toThrow(/human_owner_required/);}finally{await client.query('ROLLBACK').catch(()=>undefined);client.release();}
+  });
+
+  it("creates one organisation principal with separately bounded workspace assignments",async()=>{
+    const assignments=[{workspaceId,roleId:serviceRoleId,environmentIds:[environmentId]},{workspaceId:secondWorkspaceId,roleId:serviceRoleId,environmentIds:[secondEnvironmentId]}];
+    const service=await credentials.createOrganisationServiceAccount(actor,{organisationId,name:"Fleet deployer",description:"Cross-workspace deployment",assignments,expiryPolicyDays:14},randomUUID());
+    expect(service).toMatchObject({organisationId,assignments,ownerAccountIds:[accountId],status:"active"});
+    expect((await credentials.listServiceAccounts(actor,secondWorkspaceId)).some(item=>item.id===service.id&&item.workspaceId===null&&item.environmentIds.includes(secondEnvironmentId))).toBe(true);
+    const issued=await credentials.issueServiceAccountToken(actor,service.id,{name:"Fleet credential",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId,secondWorkspaceId],environmentIds:[environmentId,secondEnvironmentId],expiresAt:new Date(Date.now()+7*86_400_000)},randomUUID());
+    expect(await credentials.verify(issued.token)).toMatchObject({principalType:"service_account",workspaceRestrictions:expect.arrayContaining([workspaceId,secondWorkspaceId]),environmentRestrictions:expect.arrayContaining([environmentId,secondEnvironmentId])});
+    expect(Number((await pool.query<{count:string}>(`SELECT count(*)::text count FROM service_account_role_assignments WHERE service_account_id=$1`,[service.id])).rows[0].count)).toBe(2);
   });
 
   it("keeps credential metadata hidden from a different tenant at the RLS boundary",async()=>{

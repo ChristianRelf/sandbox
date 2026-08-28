@@ -84,6 +84,8 @@ const protectedVariableInput = z.object({ valueType: z.string().regex(/^[a-z][a-
 const protectedVariableResolutionInput = z.object({ environmentId: z.string().uuid(), workflowId: z.string().uuid(), names: z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(100)).min(1).max(100) }).strict();
 const credentialInput=z.object({name:z.string().trim().min(1).max(120),scopes:z.array(z.enum(permissions)).min(1).max(permissions.length),organisationId:z.string().uuid(),workspaceIds:z.array(z.string().uuid()).min(1).max(100),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiresInDays:z.number().int().min(1).max(90).default(30)}).strict();
 const serviceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([]),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
+const serviceAccountAssignmentInput=z.object({workspaceId:z.string().uuid(),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([])}).strict();
+const organisationServiceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),assignments:z.array(serviceAccountAssignmentInput).min(1).max(100),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
 const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
 const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
@@ -403,10 +405,17 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   });
 
   app.post("/v1/workspaces/:workspaceId/service-accounts",async request=>{
-    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
     await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account"});
     if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
     return{serviceAccount:await dependencies.credentialService.createServiceAccount(session,{workspaceId,...serviceAccountInput.parse(request.body)},request.id)};
+  });
+
+  app.post("/v1/organisations/:organisationId/service-accounts",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);const input=organisationServiceAccountInput.parse(request.body);
+    for(const assignment of input.assignments)await authorizer.require(session,{workspaceId:assignment.workspaceId,organisationId,permission:"service_accounts.manage",resourceType:"service_account_assignment"});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
+    return{serviceAccount:await dependencies.credentialService.createOrganisationServiceAccount(session,{organisationId,...input},request.id)};
   });
 
   app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{
@@ -414,7 +423,8 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
     if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
     const input=credentialInput.parse(request.body);
-    if(input.workspaceIds.length!==1||input.workspaceIds[0]!==workspaceId)throw new DomainError("credential_workspace_restricted","Service-account credentials must be restricted to the route workspace.",400);
+    if(!input.workspaceIds.includes(workspaceId))throw new DomainError("credential_workspace_restricted","Service-account credentials must include the route workspace.",400);
+    for(const assignedWorkspaceId of input.workspaceIds)if(assignedWorkspaceId!==workspaceId)await authorizer.require(session,{workspaceId:assignedWorkspaceId,organisationId:input.organisationId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
     return{credential:await dependencies.credentialService.issueServiceAccountToken(session,serviceAccountId,{...input,expiresAt:new Date(Date.now()+input.expiresInDays*86_400_000)},request.id)};
   });
 

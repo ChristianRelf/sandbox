@@ -1490,6 +1490,91 @@
         }
       }
     },
+    "/v1/organisations/{organisationId}/service-accounts": {
+      "post": {
+        "operationId": "post_v1_organisations_organisationId_service_accounts",
+        "tags": [
+          "organisations"
+        ],
+        "parameters": [
+          {
+            "name": "organisationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1OrganisationsOrganisationIdServiceAccountsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1OrganisationsOrganisationIdServiceAccountsInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/personal-access-tokens": {
       "get": {
         "operationId": "get_v1_personal_access_tokens",
@@ -6921,6 +7006,22 @@
           }
         ],
         "description": "Successful response for POST /v1/account/sessions/{sessionId}/revoke."
+      },
+      "PostV1OrganisationsOrganisationIdServiceAccountsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/organisations/{organisationId}/service-accounts."
+      },
+      "PostV1OrganisationsOrganisationIdServiceAccountsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/organisations/{organisationId}/service-accounts."
       },
       "PostV1OrganisationsInput": {
         "allOf": [

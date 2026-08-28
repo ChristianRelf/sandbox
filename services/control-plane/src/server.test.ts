@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import type { Permission } from "@sandbox/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionalEmail } from "./email.js";
 import { createServer } from "./server.js";
@@ -55,7 +56,7 @@ function dependencies(permissions: string[]) {
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn()};
+  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),createOrganisationServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn()};
   return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
@@ -113,6 +114,19 @@ describe("control-plane API", () => {
   it("requires server-side service-account management permission",async()=>{
     const deps=dependencies([]);const server=await createServer(deps);const response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Deploy bot",roleId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}});
     expect(response.statusCode).toBe(403);expect(deps.credentialService.createServiceAccount).not.toHaveBeenCalled();await server.close();
+  });
+
+  it("creates an organisation service account only after authorizing every workspace assignment",async()=>{
+    const deps=dependencies(["service_accounts.manage"]),organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",firstRoleId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",secondRoleId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",serviceAccountId="ffffffff-ffff-4fff-8fff-ffffffffffff";
+    vi.mocked(deps.credentialService.createOrganisationServiceAccount).mockResolvedValue({id:serviceAccountId,organisationId,name:"Deploy fleet",description:"",ownerAccountIds:[session.accountId],assignments:[{workspaceId,roleId:firstRoleId,environmentIds:[]},{workspaceId:secondWorkspaceId,roleId:secondRoleId,environmentIds:[]}],expiryPolicyDays:30,status:"active",createdAt:new Date().toISOString(),lastUsedAt:null});
+    const server=await createServer(deps),payload={name:"Deploy fleet",assignments:[{workspaceId,roleId:firstRoleId},{workspaceId:secondWorkspaceId,roleId:secondRoleId}],expiryPolicyDays:30},response=await server.inject({method:"POST",url:`/v1/organisations/${organisationId}/service-accounts`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,secondWorkspaceId);expect(deps.credentialService.createOrganisationServiceAccount).toHaveBeenCalledWith(session,expect.objectContaining({organisationId,assignments:expect.arrayContaining([expect.objectContaining({workspaceId:secondWorkspaceId})])}),expect.any(String));await server.close();
+  });
+
+  it("cannot issue a multi-workspace service token through a single authorized route",async()=>{
+    const deps=dependencies(["api_credentials.manage"]),secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";vi.mocked(deps.repository.permissions).mockImplementation(async(_accountId,requestedWorkspaceId)=>new Set<Permission>(requestedWorkspaceId===workspaceId?["api_credentials.manage"]:[]));
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts/dddddddd-dddd-4ddd-8ddd-dddddddddddd/tokens`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Fleet token",scopes:["workflows.run"],organisationId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",workspaceIds:[workspaceId,secondWorkspaceId],expiresInDays:1}});
+    expect(response.statusCode).toBe(403);expect(deps.credentialService.issueServiceAccountToken).not.toHaveBeenCalled();await server.close();
   });
 
   it("requires server-side workspace permission for invitations", async () => {

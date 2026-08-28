@@ -46,9 +46,12 @@ GET    /v1/workspaces/{workspaceId}/service-accounts
 POST   /v1/workspaces/{workspaceId}/service-accounts
 POST   /v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens
 DELETE /v1/workspaces/{workspaceId}/access-tokens/{tokenId}
+POST   /v1/organisations/{organisationId}/service-accounts
 ```
 
-Creation and revocation require `X-Sandbox-Request-Time` freshness. Service-account management requires `service_accounts.manage`; credential issue/revocation requires `api_credentials.manage`. The returned token is used as a normal bearer credential. Personal token management itself requires an interactive human session and cannot be performed using another access token.
+Creation and revocation require `X-Sandbox-Request-Time` freshness. Service-account creation requires an interactive human and `service_accounts.manage` in every assigned workspace; credential issue/revocation requires `api_credentials.manage` in every workspace included by the token. The returned token is used as a normal bearer credential. Personal token management itself requires an interactive human session and cannot be performed using another access token.
+
+Organisation service accounts take one to 100 unique workspace assignments. Each assignment selects an organisation role and optional environment restrictions. The control plane validates every workspace, role and environment in one transaction, creates the non-interactive principal membership in each workspace, and writes a workspace-local audit event. Workspace listings include both workspace-scoped accounts and organisation accounts assigned there.
 
 Example personal token request:
 
@@ -67,5 +70,4 @@ Do not print creation responses in CI logs. Capture the `credential.token` field
 
 ## Current limitation
 
-This first implementation creates workspace-scoped service accounts. The schema preserves an organisation scope, but organisation-wide accounts need an explicit multi-workspace assignment API and access-review workflow before they are exposed. Signed client assertions and workload identity remain later items in the ordered v0.5 plan.
-
+Organisation-wide assignment is implemented. Periodic access-review decisions, expiry notifications, signed client assertions and workload identity remain later items in the ordered v0.5 plan.

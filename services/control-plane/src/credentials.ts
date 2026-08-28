@@ -13,10 +13,14 @@ export interface IssueTokenInput extends CredentialRestrictions { name:string; s
 export interface IssuedToken { id:string; name:string; prefix:string; token:string; scopes:Permission[]; organisationId:string; workspaceIds:string[]; environmentIds:string[]; createdAt:string; expiresAt:string }
 export interface TokenSummary extends Omit<IssuedToken,"token"> { kind:"personal"|"service_account"; lastUsedAt:string|null; revokedAt:string|null }
 export interface ServiceAccountRecord { id:string; organisationId:string; workspaceId:string|null; name:string; description:string; ownerAccountIds:string[]; roleId:string; environmentIds:string[]; expiryPolicyDays:number; status:"active"|"suspended"|"revoked"; createdAt:string; lastUsedAt:string|null }
+export interface ServiceAccountAssignment { workspaceId:string; roleId:string; environmentIds:string[] }
+export interface OrganisationServiceAccountRecord { id:string;organisationId:string;name:string;description:string;ownerAccountIds:string[];assignments:ServiceAccountAssignment[];expiryPolicyDays:number;status:"active"|"suspended"|"revoked";createdAt:string;lastUsedAt:string|null }
 export interface CreateServiceAccountInput { workspaceId:string; name:string; description:string; roleId:string; environmentIds:string[]; expiryPolicyDays:number }
+export interface CreateOrganisationServiceAccountInput { organisationId:string;name:string;description:string;assignments:ServiceAccountAssignment[];expiryPolicyDays:number }
 export interface CredentialAdministration {
   createServiceAccount(actor:AuthenticatedSession,input:CreateServiceAccountInput,correlationId:string):Promise<ServiceAccountRecord>;
   listServiceAccounts(actor:AuthenticatedSession,workspaceId:string):Promise<ServiceAccountRecord[]>;
+  createOrganisationServiceAccount(actor:AuthenticatedSession,input:CreateOrganisationServiceAccountInput,correlationId:string):Promise<OrganisationServiceAccountRecord>;
   issuePersonalToken(actor:AuthenticatedSession,input:IssueTokenInput,correlationId:string):Promise<IssuedToken>;
   issueServiceAccountToken(actor:AuthenticatedSession,serviceAccountId:string,input:IssueTokenInput,correlationId:string):Promise<IssuedToken>;
   listPersonalTokens(actor:AuthenticatedSession):Promise<TokenSummary[]>;
@@ -52,8 +56,32 @@ export class PostgresCredentialService implements SessionVerifier,CredentialAdmi
 
   async listServiceAccounts(actor:AuthenticatedSession,workspaceId:string):Promise<ServiceAccountRecord[]> {
     return this.actorTransaction(actor,async client=>{
-      const result=await client.query<ServiceAccountRow>(`SELECT service.id,service.organisation_id,service.workspace_id,service.name,service.description,service.expiry_policy_days,service.status,service.created_at,service.last_used_at,assignment.role_id,assignment.environment_ids,array_agg(owner.account_id ORDER BY owner.account_id) AS owner_account_ids FROM service_accounts service JOIN service_account_role_assignments assignment ON assignment.service_account_id=service.id AND assignment.workspace_id=$1 JOIN service_account_owners owner ON owner.service_account_id=service.id WHERE service.workspace_id=$1 GROUP BY service.id,assignment.role_id,assignment.environment_ids ORDER BY service.name,service.id`,[workspaceId]);
+      const result=await client.query<ServiceAccountRow>(`SELECT service.id,service.organisation_id,service.workspace_id,service.name,service.description,service.expiry_policy_days,service.status,service.created_at,service.last_used_at,assignment.role_id,assignment.environment_ids,array_agg(owner.account_id ORDER BY owner.account_id) AS owner_account_ids FROM service_accounts service JOIN service_account_role_assignments assignment ON assignment.service_account_id=service.id AND assignment.workspace_id=$1 JOIN service_account_owners owner ON owner.service_account_id=service.id GROUP BY service.id,assignment.role_id,assignment.environment_ids ORDER BY service.name,service.id`,[workspaceId]);
       return result.rows.map(serviceAccountFromRow);
+    });
+  }
+
+  async createOrganisationServiceAccount(actor:AuthenticatedSession,input:CreateOrganisationServiceAccountInput,correlationId:string):Promise<OrganisationServiceAccountRecord>{
+    if(!input.assignments.length||new Set(input.assignments.map(item=>item.workspaceId)).size!==input.assignments.length)throw new DomainError("service_account_assignments_invalid","Organisation service accounts require unique workspace assignments.",400);
+    return this.actorTransaction(actor,async client=>{
+      const workspaceIds=input.assignments.map(item=>item.workspaceId);
+      const workspaces=await client.query<{id:string}>(`SELECT id FROM workspaces WHERE organisation_id=$1 AND id=ANY($2::uuid[])`,[input.organisationId,workspaceIds]);
+      if(workspaces.rowCount!==workspaceIds.length)throw new DomainError("service_account_workspace_invalid","Every assignment must belong to the selected organisation.",400);
+      for(const assignment of input.assignments){
+        const role=await client.query(`SELECT 1 FROM roles WHERE id=$1 AND organisation_id=$2`,[assignment.roleId,input.organisationId]);
+        if(!role.rowCount)throw new DomainError("service_account_role_invalid","Every assigned role must belong to the selected organisation.",400);
+        if(assignment.environmentIds.length){const environments=await client.query(`SELECT id FROM environments WHERE workspace_id=$1 AND id=ANY($2::uuid[])`,[assignment.workspaceId,assignment.environmentIds]);if(environments.rowCount!==new Set(assignment.environmentIds).size)throw new DomainError("service_account_environment_invalid","Every environment restriction must belong to its assigned workspace.",400);}
+      }
+      const id=randomUUID(),principalAccountId=randomUUID(),createdAt=new Date();
+      await client.query(`INSERT INTO accounts(id,identity_subject,primary_email,email_verified,display_name,account_kind) VALUES($1,$2,$3,true,$4,'service_account')`,[principalAccountId,`service-account:${id}`,`${id}@service.invalid`,input.name]);
+      await client.query(`INSERT INTO service_accounts(id,principal_account_id,organisation_id,workspace_id,name,description,expiry_policy_days,created_by,created_at) VALUES($1,$2,$3,NULL,$4,$5,$6,$7,$8)`,[id,principalAccountId,input.organisationId,input.name,input.description,input.expiryPolicyDays,actor.accountId,createdAt]);
+      for(const assignment of input.assignments){
+        await client.query(`INSERT INTO service_account_role_assignments(service_account_id,workspace_id,role_id,environment_ids,assigned_by) VALUES($1,$2,$3,$4,$5)`,[id,assignment.workspaceId,assignment.roleId,assignment.environmentIds,actor.accountId]);
+        await client.query(`INSERT INTO workspace_memberships(workspace_id,account_id,role_id) VALUES($1,$2,$3)`,[assignment.workspaceId,principalAccountId,assignment.roleId]);
+        await audit(client,actor,assignment.workspaceId,"service_account.assigned","service_account",id,{organisationId:input.organisationId,roleId:assignment.roleId,environmentIds:assignment.environmentIds},correlationId);
+      }
+      await client.query(`INSERT INTO service_account_owners(service_account_id,account_id,assigned_by) VALUES($1,$2,$2)`,[id,actor.accountId]);
+      return{id,organisationId:input.organisationId,name:input.name,description:input.description,ownerAccountIds:[actor.accountId],assignments:input.assignments,expiryPolicyDays:input.expiryPolicyDays,status:"active",createdAt:createdAt.toISOString(),lastUsedAt:null};
     });
   }
 
