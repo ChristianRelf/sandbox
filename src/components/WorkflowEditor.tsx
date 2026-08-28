@@ -5,6 +5,7 @@ import { Accessibility, AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Comman
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { createNode, createPluginNode, enabledPluginNodes, isTrigger, type PluginNodeChoice } from "../catalogue";
+import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
 import type { BrowserProfile, ExecutionRecord, InstalledPlugin, NodeStatus, NodeType, PermissionSummary, RecordedStep, ValidationIssue, Workflow } from "../types";
 import { BrowserRecorder } from "./BrowserRecorder";
@@ -16,9 +17,11 @@ import { WorkflowNodeCard, type WorkflowNodeData } from "./WorkflowNodeCard";
 
 const nodeTypes={workflow:WorkflowNodeCard};
 export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=useAppStore();const [workflow,setWorkflow]=useState(()=>structuredClone(activeWorkflow!));const [baseline,setBaseline]=useState(()=>JSON.stringify(activeWorkflow));const [selectedNodeId,setSelectedNodeId]=useState<string>();const [picker,setPicker]=useState<{open:boolean;sourceId?:string;position:{x:number;y:number}}>({open:false,position:{x:360,y:220}});const [instance,setInstance]=useState<ReactFlowInstance<Node<WorkflowNodeData>,Edge>>();const [issues,setIssues]=useState<ValidationIssue[]>([]);const [runningNode,setRunningNode]=useState<string>();const [run,setRun]=useState<ExecutionRecord>();const [bottomOpen,setBottomOpen]=useState(false);const [saving,setSaving]=useState(false);const [running,setRunning]=useState(false);const [permissionOpen,setPermissionOpen]=useState(false);const [accessibleEditorOpen,setAccessibleEditorOpen]=useState(false);const [announcement,setAnnouncement]=useState("");const [browserProfiles,setBrowserProfiles]=useState<BrowserProfile[]>([]);const [installedPlugins,setInstalledPlugins]=useState<InstalledPlugin[]>([]);const past=useRef<Workflow[]>([]);const future=useRef<Workflow[]>([]);const dirty=JSON.stringify(workflow)!==baseline;const selectedNode=workflow.nodes.find(n=>n.id===selectedNodeId);
+  const {accessibleEditorDefault,showMinimap,confirmBeforeLeaving}=usePreferences();
   const commit=useCallback((next:Workflow)=>{past.current.push(structuredClone(workflow));if(past.current.length>50)past.current.shift();future.current=[];setWorkflow(next)},[workflow]);
   const patchWorkflow=useCallback((patch:Partial<Workflow>)=>commit({...workflow,...patch}),[workflow,commit]);
-  const goBack=()=>{if(!dirty||confirm("Leave without saving your workflow changes?"))setView("workflows")};
+  const goBack=()=>{if(!dirty||!confirmBeforeLeaving||confirm("Leave without saving your workflow changes?"))setView("workflows")};
+  useEffect(()=>{if(accessibleEditorDefault)setAccessibleEditorOpen(true)},[accessibleEditorDefault]);
   useEffect(()=>{const before=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue=""}};window.addEventListener("beforeunload",before);return()=>window.removeEventListener("beforeunload",before)},[dirty]);
   useEffect(()=>{(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved=dirty;return()=>{(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved=false}},[dirty]);
   useEffect(()=>{const openPicker=()=>setPicker({open:true,position:{x:360,y:220}});window.addEventListener("sandbox:open-node-picker",openPicker);return()=>window.removeEventListener("sandbox:open-node-picker",openPicker)},[]);
@@ -79,7 +82,7 @@ export function WorkflowEditor(){const {activeWorkflow,setView,saveWorkflow}=use
     <div className={`editor-body ${selectedNode?"with-inspector":""} ${accessibleEditorOpen?"with-accessible-editor":""}`}>
       <div className="canvas-wrap" onDoubleClick={event=>{if(!(event.target as HTMLElement).classList.contains("react-flow__pane"))return;const position=instance?.screenToFlowPosition({x:event.clientX,y:event.clientY})??{x:360,y:220};setPicker({open:true,position});}}>
         <ReactFlow<Node<WorkflowNodeData>,Edge> nodes={displayNodes} edges={flowEdges} nodeTypes={nodeTypes} onInit={setInstance} onNodesChange={onNodesChange} onNodeClick={(_,node)=>setSelectedNodeId(node.id)} onPaneClick={()=>setSelectedNodeId(undefined)} onConnect={onConnect} isValidConnection={connection=>{const target=workflow.nodes.find(n=>n.id===connection.target);return connection.source!==connection.target&&!Boolean(target&&isTrigger(target.type));}} snapToGrid snapGrid={[20,20]} minZoom={0.45} maxZoom={1.8} defaultViewport={{x:80,y:80,zoom:.9}} deleteKeyCode={null} multiSelectionKeyCode="Shift" fitView>
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#292a2e"/><Controls showInteractive={false}/><MiniMap pannable zoomable nodeColor="#24252a" maskColor="rgba(8,8,9,.72)"/>
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#292a2e"/><Controls showInteractive={false}/>{showMinimap&&<MiniMap pannable zoomable nodeColor="#24252a" maskColor="rgba(8,8,9,.72)"/>}
         </ReactFlow>
         <div className="canvas-hint"><Command size={13}/>Double-click canvas or press A to add a node</div>
       </div>

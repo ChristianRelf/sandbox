@@ -1,16 +1,17 @@
 import { Blocks, Clock3, Command, GitFork, History, PanelLeftClose, PanelLeftOpen, Search, ShieldQuestion, Settings2 } from "lucide-react";
-import { useState } from "react";
+import type { ReactNode } from "react";
+import { usePreferences } from "../preferences";
 import { useAppStore, type View } from "../store";
-export function Sidebar({onCommand}:{onCommand:()=>void}){const [collapsed,setCollapsed]=useState(false);const {view,setView}=useAppStore();const navigate=(next:View)=>{const dirty=(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved;if(!dirty||confirm("Leave without saving your workflow changes?"))setView(next)};return <aside className={`sidebar ${collapsed?"sidebar-collapsed":""}`}>
-  <div className="brand"><span className="brand-mark"><GitFork size={16}/></span>{!collapsed&&<span>Sandbox <small>local</small></span>}</div>
-  <nav>
-    <button className={view==="workflows"?"active":""} onClick={()=>navigate("workflows")}><GitFork size={16}/>{!collapsed&&"Workflows"}</button>
-    <button className={view==="history"?"active":""} onClick={()=>navigate("history")}><History size={16}/>{!collapsed&&"Run history"}</button>
-    <button className={view==="marketplace"?"active":""} onClick={()=>navigate("marketplace")}><Search size={16}/>{!collapsed&&"Marketplace"}</button>
-    <button className={view==="plugins"?"active":""} onClick={()=>navigate("plugins")}><Blocks size={16}/>{!collapsed&&"Installed Plugins"}</button>
-    <button className={view==="settings"?"active":""} onClick={()=>navigate("settings")}><Settings2 size={16}/>{!collapsed&&"Settings"}</button>
-    <button className={view==="approvals"?"active":""} onClick={()=>navigate("approvals")}><ShieldQuestion size={16}/>{!collapsed&&"Pending approvals"}</button>
+export function Sidebar({onCommand}:{onCommand:()=>void}){const {sidebarCollapsed:collapsed,confirmBeforeLeaving,update}=usePreferences();const {view,setView}=useAppStore();const navigate=(next:View)=>{const dirty=(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved;if(!dirty||!confirmBeforeLeaving||confirm("Leave without saving your workflow changes?"))setView(next)};const item=(next:View,label:string,icon:ReactNode)=><button title={collapsed?label:undefined} aria-current={view===next?"page":undefined} className={view===next?"active":""} onClick={()=>navigate(next)}>{icon}{!collapsed&&label}</button>;return <aside className={`sidebar ${collapsed?"sidebar-collapsed":""}`}>
+  <div className="brand"><span className="brand-mark"><GitFork size={16}/></span>{!collapsed&&<span>Sandbox <small>0.7 beta</small></span>}</div>
+  <nav aria-label="Primary navigation">
+    {item("workflows","Workflows",<GitFork size={16}/>) }
+    {item("history","Run history",<History size={16}/>) }
+    {item("marketplace","Marketplace",<Search size={16}/>) }
+    {item("plugins","Installed plugins",<Blocks size={16}/>) }
+    {item("settings","Settings",<Settings2 size={16}/>) }
+    {item("approvals","Pending approvals",<ShieldQuestion size={16}/>) }
   </nav>
   {!collapsed&&<div className="sidebar-section"><span>Runner</span><div className="runner-line"><i/>Active locally</div><div className="runner-note"><Clock3 size={13}/>Schedules stop when you quit.</div></div>}
-  <div className="sidebar-bottom"><button onClick={onCommand}><Command size={16}/>{!collapsed&&<>Commands <kbd>⌘K</kbd></>}</button><button aria-label="Toggle sidebar" onClick={()=>setCollapsed(v=>!v)}>{collapsed?<PanelLeftOpen size={16}/>:<PanelLeftClose size={16}/>} {!collapsed&&"Collapse"}</button></div>
+  <div className="sidebar-bottom"><button title={collapsed?"Commands":undefined} onClick={onCommand}><Command size={16}/>{!collapsed&&<>Commands <kbd>Ctrl K</kbd></>}</button><button aria-label={collapsed?"Expand sidebar":"Collapse sidebar"} onClick={()=>update({sidebarCollapsed:!collapsed})}>{collapsed?<PanelLeftOpen size={16}/>:<PanelLeftClose size={16}/>} {!collapsed&&"Collapse"}</button></div>
 </aside>}

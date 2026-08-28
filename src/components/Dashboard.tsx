@@ -37,7 +37,7 @@ export function Dashboard() {
   return <main className="content">
     <PageHeader onCreate={() => createWorkflow()} onImport={importWorkflow} />
     <div className="toolbar"><div className="search"><Search size={15} /><input aria-label="Search workflows" placeholder="Search workflows…" value={search} onChange={event => setSearch(event.target.value)} /><kbd>/</kbd></div><span className="count">{filtered.length} workflow{filtered.length === 1 ? "" : "s"}</span></div>
-    <section className="workflow-table" aria-label="Workflows">
+    <div className="dashboard-grid"><section className="workflow-table" aria-label="Workflows">
       <div className="table-head"><span>Name</span><span>Trigger</span><span>Last run</span><span>Next run</span><span /></div>
       {filtered.map(({ workflow, lastExecution, nextRunAt }) => {
         const trigger = workflow.nodes.find(node => node.id === workflow.triggerNodeId);
@@ -51,7 +51,8 @@ export function Dashboard() {
         </div>;
       })}
     </section>
-    {workflows.length > 0 && <section className="compact-templates"><h3>Start from a template</h3><div className="template-grid">{templates.map(template => <button key={template.key} onClick={() => createWorkflow(template.key)}><b>{template.name}</b><small>{template.flow}</small></button>)}</div></section>}
+    {workflows.length > 0 && <section className="compact-templates"><div className="compact-templates-heading"><span>Quick start</span><h3>Start from a template</h3><p>Imports stay disabled until you review permissions and connections.</p></div><div className="template-grid">{templates.map(template => <button key={template.key} onClick={() => createWorkflow(template.key)}><b>{template.name}</b><small>{template.flow}</small></button>)}</div></section>}
+    </div>
   </main>;
 }
 

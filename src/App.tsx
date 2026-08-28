@@ -6,6 +6,7 @@ import { Sidebar } from "./components/Sidebar";
 import { api } from "./api";
 import type { PendingApproval } from "./types";
 import { useAppStore } from "./store";
+import { useApplyPreferences } from "./preferences";
 import "./plugins.css";
 
 const HistoryView = lazy(() => import("./components/HistoryView").then(module => ({ default: module.HistoryView })));
@@ -17,6 +18,7 @@ const MarketplaceView = lazy(() => import("./components/MarketplaceView").then(m
 const ApprovalRequest = lazy(() => import("./components/ApprovalRequest").then(module => ({ default: module.ApprovalRequest })));
 
 export default function App() {
+  useApplyPreferences();
   const { view, activeWorkflow, createWorkflow, setView } = useAppStore();
   const [commandOpen, setCommandOpen] = useState(false);
   const [approvalPrompt, setApprovalPrompt] = useState<PendingApproval>();
