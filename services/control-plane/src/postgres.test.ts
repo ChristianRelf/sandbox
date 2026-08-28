@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { detectSyncConflict, hostCompatible } from "./postgres.js";
+import { detectSyncConflict, executablePayloadMatchesRevision, hostCompatible } from "./postgres.js";
+
+describe("approved executable payloads", () => {
+  it("binds workflow identity and content to the exact revision", () => {
+    const payload = { workflowRevisionId: "revision", contentHash: "sha256:approved", workflow: { id: "workflow" } };
+    expect(executablePayloadMatchesRevision(payload, "revision", "workflow", "sha256:approved")).toBe(true);
+    expect(executablePayloadMatchesRevision({ ...payload, contentHash: "sha256:changed" }, "revision", "workflow", "sha256:approved")).toBe(false);
+    expect(executablePayloadMatchesRevision({ ...payload, workflow: { id: "other" } }, "revision", "workflow", "sha256:approved")).toBe(false);
+  });
+});
 
 describe("sync conflict preservation", () => {
   it("accepts a child of the current draft", () => {

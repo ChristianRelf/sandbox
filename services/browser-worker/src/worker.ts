@@ -4,17 +4,19 @@ import path from "node:path";
 import { chromium,type Browser,type BrowserContext,type Page } from "playwright";
 import { BrowserNetworkPolicy } from "./network-policy.js";
 import { cloudProfileSchema,type CloudProfile } from "./profiles.js";
+import type { UsageReporter } from "./usage.js";
 
 export type BrowserStep={type:"navigate";url:string}|{type:"click";selector:string}|{type:"fill";selector:string;value:string;sensitive?:boolean}|{type:"select";selector:string;value:string}|{type:"press_key";selector?:string;key:string}|{type:"wait";milliseconds:number}|{type:"extract";selector:string}|{type:"screenshot";name:string}|{type:"upload";selector:string;artifactPath:string}|{type:"download";selector:string}|{type:"close"};
-export interface BrowserExecution {executionId:string;workspaceId:string;profile:CloudProfile|null;steps:BrowserStep[];maximumArtifactBytes:number;allowedUploadRoots:string[]}
+export interface BrowserExecution {executionId:string;workspaceId:string;environmentId:string;deploymentId:string;region:string;profile:CloudProfile|null;steps:BrowserStep[];maximumArtifactBytes:number;allowedUploadRoots:string[]}
 export interface ArtifactScanner {scan(filePath:string):Promise<"clean"|"malicious"|"unknown">}
 export interface ArtifactSink {upload(filePath:string,metadata:{executionId:string;workspaceId:string;contentType:string}):Promise<string>}
 export interface NetworkPolicy {inspect(url:string):Promise<{allowed:boolean;reason:string|null;resolvedAddresses:string[]}>}
 export interface BrowserExecutionResult {outputs:unknown[];artifacts:{reference:string;sizeBytes:number}[];blockedRequests:{url:string;reason:string}[];sandboxDestroyed:boolean}
 
 export class ManagedBrowserWorker {
-  constructor(private readonly networkPolicy:NetworkPolicy=new BrowserNetworkPolicy(),private readonly scanner:ArtifactScanner={scan:async()=>"unknown"},private readonly artifactSink:ArtifactSink={upload:async()=>{throw new Error("No durable artifact sink is configured.");}}){}
+  constructor(private readonly networkPolicy:NetworkPolicy=new BrowserNetworkPolicy(),private readonly scanner:ArtifactScanner={scan:async()=>"unknown"},private readonly artifactSink:ArtifactSink={upload:async()=>{throw new Error("No durable artifact sink is configured.");}},private readonly usageReporter?:UsageReporter){}
   async execute(input:BrowserExecution):Promise<BrowserExecutionResult>{
+    const usageStartedAt=new Date(),usageStarted=performance.now();
     const profile=input.profile?cloudProfileSchema.parse(input.profile):null;if(profile&&profile.workspaceId!==input.workspaceId)throw new Error("Cloud browser profile belongs to another workspace.");
     const root=await mkdtemp(path.join(tmpdir(),`sandbox-browser-${input.executionId}-`));let browser:Browser|undefined,context:BrowserContext|undefined;const result:BrowserExecutionResult={outputs:[],artifacts:[],blockedRequests:[],sandboxDestroyed:false};
     try{
@@ -24,7 +26,7 @@ export class ManagedBrowserWorker {
       const page=await context.newPage();
       for(const step of input.steps){if(step.type==="close")break;await this.runStep(page,step,root,input,result.outputs,result.artifacts);}
       return result;
-    }finally{await context?.close().catch(()=>undefined);await browser?.close().catch(()=>undefined);await rm(root,{recursive:true,force:true});result.sandboxDestroyed=true;}
+    }finally{await context?.close().catch(()=>undefined);await browser?.close().catch(()=>undefined);await rm(root,{recursive:true,force:true});result.sandboxDestroyed=true;const usageEndedAt=new Date();await this.usageReporter?.recordBrowserSeconds(input,usageStartedAt,usageEndedAt,Math.max(1,Math.ceil((performance.now()-usageStarted)/1000)));}
   }
   private async runStep(page:Page,step:Exclude<BrowserStep,{type:"close"}>,root:string,input:BrowserExecution,outputs:unknown[],artifacts:{reference:string;sizeBytes:number}[]):Promise<void>{
     switch(step.type){

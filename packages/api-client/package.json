@@ -1,7 +1,24 @@
 {
   "name": "@sandbox/api-client",
-  "version": "0.6.0",
-  "private": true,
+  "version": "0.5.0",
+  "description": "Typed client for the stable Sandbox control-plane v1 API",
   "type": "module",
-  "exports": { ".": "./src/index.ts" }
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist/index.js", "dist/index.js.map", "dist/index.d.ts", "dist/index.d.ts.map", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": { "node": ">=20" }
 }

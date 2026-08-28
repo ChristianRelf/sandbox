@@ -40,8 +40,18 @@ describe("Authorizer", () => {
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa": ["members.manage"],
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb": []
     }));
-    await expect(authorizer.require(session, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "members.manage")).resolves.toBeUndefined();
-    await expect(authorizer.require(session, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "members.manage")).rejects.toMatchObject({ code: "permission_denied", statusCode: 403 });
+    await expect(authorizer.require(session, { workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",permission:"members.manage",resourceType:"workspace_member" })).resolves.toBeUndefined();
+    await expect(authorizer.require(session, { workspaceId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",permission:"members.manage",resourceType:"workspace_member" })).rejects.toMatchObject({ code: "permission_denied", statusCode: 403 });
+  });
+
+  it("enforces credential scopes plus workspace and environment restrictions before role permissions",async()=>{
+    const authorizer=new Authorizer(repository({"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa":["workflows.run","workflows.edit"]}));
+    const token:AuthenticatedSession={...session,principalType:"personal_access_token",principalId:"token-1",credentialScopes:["workflows.run"],workspaceRestrictions:["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],environmentRestrictions:["cccccccc-cccc-4ccc-8ccc-cccccccccccc"]};
+    await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",permission:"workflows.run",resourceType:"workflow"})).resolves.toBeUndefined();
+    await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",permission:"workflows.edit",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_scope_denied"});
+    await expect(authorizer.require(token,{workspaceId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_workspace_restricted"});
+    await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_environment_restricted"});
+    await expect(authorizer.require({...token,credentialScopes:["workflows.run"],principalPermissions:["workflows.view"]},{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"principal_permission_denied"});
   });
 
   it("returns actionable governance failures", () => {

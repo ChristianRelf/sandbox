@@ -11,6 +11,8 @@ export const permissions = [
   "organisation.owners.manage",
   "organisation.security.manage",
   "members.manage",
+  "service_accounts.manage",
+  "api_credentials.manage",
   "plugins.manage",
   "plugins.develop_private",
   "plugins.permissions.request",
@@ -39,7 +41,7 @@ export type BuiltInRole = "owner" | "administrator" | "developer" | "operator" |
 
 export const rolePermissionMatrix: Readonly<Record<BuiltInRole, readonly Permission[]>> = {
   owner: permissions,
-  administrator: ["members.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
+  administrator: ["members.manage", "service_accounts.manage", "api_credentials.manage", "plugins.manage", "runners.manage", "connections.manage", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.run", "workflows.pause", "workflows.publish", "workflows.approve", "deployments.manage", "deployments.promote", "workflows.view", "executions.view_summary", "executions.view_detail", "approvals.handle", "audit.view", "webhooks.manage", "policies.manage"],
   developer: ["plugins.develop_private", "plugins.permissions.request", "connections.use", "workflows.create", "workflows.edit", "workflows.test", "workflows.view", "executions.view_summary"],
   operator: ["connections.use", "workflows.run", "workflows.pause", "workflows.view", "executions.view_summary", "approvals.handle"],
   viewer: ["workflows.view", "executions.view_summary"]
@@ -85,6 +87,20 @@ export const workflowRevisionSchema = z.object({
 });
 export type WorkflowRevision = z.infer<typeof workflowRevisionSchema>;
 
+export const runnerAuthorizationContextSchema = z.object({
+  principalType: z.enum(["user", "personal_access_token", "service_account"]),
+  principalId: idSchema,
+  credentialId: idSchema.nullable(),
+  requiredPermission: z.enum(permissions),
+  environmentId: idSchema,
+  environment: z.enum(["development", "staging", "production"]),
+  credentialScopes: z.array(z.enum(permissions)).max(permissions.length).nullable(),
+  workspaceRestrictions: z.array(idSchema).max(100).nullable(),
+  environmentRestrictions: z.array(idSchema).max(100).nullable(),
+  principalPermissions: z.array(z.enum(permissions)).max(permissions.length).nullable()
+}).strict();
+export type RunnerAuthorizationContext = z.infer<typeof runnerAuthorizationContextSchema>;
+
 export const runnerCommandSchema = z.object({
   commandId: idSchema,
   issuerAccountId: idSchema,
@@ -96,6 +112,7 @@ export const runnerCommandSchema = z.object({
   expiresAt: z.string().datetime(),
   idempotencyKey: z.string().min(16).max(200),
   payload: z.record(z.string(), z.unknown()),
+  authorizationContext: runnerAuthorizationContextSchema,
   keyId: z.string().min(1),
   signature: z.string().min(1),
   status: z.enum(["queued", "delivered", "accepted", "rejected", "completed", "expired", "rerouted"])

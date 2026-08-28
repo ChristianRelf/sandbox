@@ -34,7 +34,10 @@ integration("durable scheduler and event queue",()=>{
     const first=await queue.claim("worker-a",new Date(due.getTime()+1_000),5);
     expect(first).not.toBeNull();
     expect(await queue.claim("worker-b",new Date(due.getTime()+1_000),5)).toBeNull();
-    expect(await queue.fail(first!,new Date(due.getTime()+2_000),"poison-payload")).toBe("retry");
+    expect(await queue.reclaimVisibilityTimeouts(new Date(due.getTime()+7_000))).toBe(1);
+    const recovered=await queue.claim("worker-b",new Date(due.getTime()+8_000),5);
+    expect(recovered).toMatchObject({queueId:first!.queueId,attempt:2});
+    expect(await queue.fail(recovered!,new Date(due.getTime()+9_000),"poison-payload")).toBe("retry");
     const second=await queue.claim("worker-a",new Date(due.getTime()+3_600_000),5);
     expect(await queue.fail(second!,new Date(due.getTime()+3_601_000),"poison-payload")).toBe("retry");
     const third=await queue.claim("worker-a",new Date(due.getTime()+7_200_000),5);
@@ -44,7 +47,7 @@ integration("durable scheduler and event queue",()=>{
     expect(replay).toMatchObject({queueId:replayId,eventId:first!.eventId,originalEventId:first!.originalEventId,attempt:1});
     await queue.complete(replay!,new Date(due.getTime()+7_204_000));
     const history=await pool.query<{outcome:string}>(`SELECT outcome FROM queue_attempt_events WHERE queued_event_id=$1 ORDER BY occurred_at`,[first!.queueId]);
-    expect(history.rows.map(row=>row.outcome)).toEqual(["claimed","retry","claimed","retry","claimed","dead_letter"]);
+    expect(history.rows.map(row=>row.outcome)).toEqual(["claimed","visibility_timeout","claimed","retry","claimed","retry","claimed","dead_letter"]);
     const replayRecord=await pool.query<{original_event_id:string}>(`SELECT original_event_id FROM queue_replays WHERE replay_queue_event_id=$1`,[replayId]);
     expect(replayRecord.rows[0].original_event_id).toBe(first!.originalEventId);
   });

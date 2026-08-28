@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+import type { Permission } from "@sandbox/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { TransactionalEmail } from "./email.js";
 import { createServer } from "./server.js";
@@ -6,6 +8,14 @@ import type { RunnerCommandSigner } from "./runner_protocol.js";
 import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
 import { WebhookProtector, webhookSignature } from "./webhook_crypto.js";
+import type { CredentialAdministration } from "./credentials.js";
+import { MemoryApiIdempotencyStore } from "./api_contract.js";
+import { HmacUsageProducerAuthenticator } from "./usage_producer.js";
+import type { UsageEventInput } from "./usage.js";
+import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
+import { ReadinessService, ServiceMetrics } from "./reliability.js";
+import type { SupportAccessAdministration,SupportAccessRequest } from "./support_access.js";
+import type { PrivacyAdministration,WorkspaceRetentionPolicy } from "./privacy.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -44,16 +54,155 @@ function dependencies(permissions: string[]) {
     listProtectedVariables: vi.fn(), upsertProtectedVariable: vi.fn(), resolveProtectedVariables: vi.fn()
   };
   const sessions: SessionVerifier = { verify: vi.fn(async () => session) };
-  const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined) };
+  const email: TransactionalEmail = { sendInvitation: vi.fn(async () => undefined),sendCredentialExpiry:vi.fn(async()=>undefined) };
   const packageStorage = { createUpload: vi.fn(), createDownload: vi.fn(), inspect: vi.fn() };
   const packageScanner = { scan: vi.fn() };
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
+  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),createOrganisationServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn(),registerServiceAccountAssertionKey:vi.fn(),revokeServiceAccountAssertionKey:vi.fn(),exchangeServiceAccountAssertion:vi.fn()};
+  const accessReviews:ServiceAccountAccessReviewAdministration={list:vi.fn(),workspaceIds:vi.fn(),decide:vi.fn()};
+  return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, accessReviews, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
 describe("control-plane API", () => {
+  it("accepts only signed events from a trusted usage producer",async()=>{
+    const secret=Buffer.alloc(32,8),record=vi.fn(async(input:UsageEventInput)=>({eventId:input.eventId,created:true}));
+    const deps={...dependencies([]),usageLedger:{record},usageProducerAuthenticator:new HmacUsageProducerAuthenticator(new Map([["hosted-runner",secret]]))};
+    const server=await createServer(deps);const payload={eventId:"10000000-0000-4000-8000-000000000001",workspaceId:"20000000-0000-4000-8000-000000000002",environmentId:"30000000-0000-4000-8000-000000000003",executionId:"40000000-0000-4000-8000-000000000004",deploymentId:"50000000-0000-4000-8000-000000000005",meter:"hosted_runner_seconds" as const,quantity:3,unit:"seconds" as const,sourceEventId:"hosted-runner-stop:execution",idempotencyKey:"hosted-runner-usage:execution",periodStartedAt:"2026-08-28T10:00:00.000Z",periodEndedAt:"2026-08-28T10:00:03.000Z",region:"eu-west-2",metadata:{producer:"hosted-runner"}};
+    const timestamp=Math.floor(Date.now()/1000).toString(),signature=createHmac("sha256",secret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex"),headers={"x-sandbox-usage-producer":"hosted-runner","x-sandbox-usage-timestamp":timestamp,"x-sandbox-usage-signature":signature};
+    const accepted=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers,payload});expect(accepted.statusCode,accepted.body).toBe(200);expect(record).toHaveBeenCalledWith(payload);
+    const rejected=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers:{...headers,"x-sandbox-usage-signature":"0".repeat(64)},payload});expect(rejected.statusCode).toBe(401);expect(record).toHaveBeenCalledTimes(1);await server.close();
+  });
+  it("returns stable structured transport errors and correlation headers",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);
+    const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","content-type":"application/json","x-correlation-id":"client-correlation-0001"},payload:'{"broken":'});
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["x-correlation-id"]).toBe("client-correlation-0001");
+    expect(response.json()).toEqual({error:{code:"invalid_json",message:"The request body must be valid JSON."},correlationId:"client-correlation-0001"});
+    await server.close();
+  });
+
+  it("replays identical mutating requests and rejects idempotency-key mutation",async()=>{
+    const deps={...dependencies(["members.manage"]),idempotencyStore:new MemoryApiIdempotencyStore()};
+    const server=await createServer(deps);const key="invitation-request-0001";
+    const request={method:"POST" as const,url:`/v1/workspaces/${workspaceId}/invitations`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString(),"idempotency-key":key},payload:{email:"developer@example.com",role:"developer",workspaceIds:[workspaceId],expiresInHours:24}};
+    const first=await server.inject(request);const replay=await server.inject(request);
+    expect(first.statusCode,first.body).toBe(200);expect(replay.statusCode,replay.body).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");expect(replay.json()).toEqual(first.json());
+    expect(deps.repository.createInvitation).toHaveBeenCalledTimes(1);expect(deps.email.sendInvitation).toHaveBeenCalledTimes(1);
+    const conflict=await server.inject({...request,payload:{...request.payload,email:"different@example.com"}});
+    expect(conflict.statusCode).toBe(409);expect(conflict.json().error.code).toBe("idempotency_key_reused");
+    await server.close();
+  });
+
+  it("publishes rate-limit headers and the machine-readable v1 route contract",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);
+    const health=await server.inject({method:"GET",url:"/health"});
+    expect(health.headers["x-ratelimit-limit"]).toBe("60");expect(health.headers["x-correlation-id"]).toBeTruthy();
+    let limited=health;
+    for(let index=1;index<=60;index+=1)limited=await server.inject({method:"GET",url:"/health"});
+    expect(limited.statusCode,limited.body).toBe(429);expect(limited.headers["retry-after"]).toBeTruthy();expect(limited.json()).toMatchObject({error:{code:"rate_limit_exceeded"},correlationId:expect.any(String)});
+    const contract=await server.inject({method:"GET",url:"/v1/openapi.json"});
+    expect(contract.statusCode,contract.body).toBe(200);
+    expect(contract.json()).toMatchObject({openapi:"3.1.0",info:{version:"0.5.0"},paths:{"/v1/personal-access-tokens":{get:expect.any(Object),post:expect.any(Object)}}});
+    await server.close();
+  });
+
+  it("reports dependency readiness and exposes authenticated bounded metrics",async()=>{
+    let databaseReady=false;
+    const metrics=new ServiceMetrics();
+    const readiness=new ReadinessService([{name:"database",check:async()=>{if(!databaseReady)throw new Error("database unavailable");}}]);
+    const server=await createServer({...dependencies([]),readiness,metrics,metricsBearerToken:"metrics-secret"});
+    const unavailable=await server.inject({method:"GET",url:"/ready"});
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toMatchObject({status:"not_ready",checks:[{name:"database",status:"not_ready"}]});
+    databaseReady=true;
+    const ready=await server.inject({method:"GET",url:"/ready"});
+    expect(ready.statusCode,ready.body).toBe(200);
+    expect(ready.json()).toMatchObject({status:"ready",checks:[{name:"database",status:"ready"}]});
+    const denied=await server.inject({method:"GET",url:"/metrics",headers:{authorization:"Bearer wrong"}});
+    expect(denied.statusCode).toBe(401);
+    const exported=await server.inject({method:"GET",url:"/metrics",headers:{authorization:"Bearer metrics-secret"}});
+    expect(exported.statusCode,exported.body).toBe(200);
+    expect(exported.headers["content-type"]).toContain("text/plain");
+    expect(exported.body).toContain('sandbox_http_requests_total{method="GET",route="/ready",status_class="2xx"} 1');
+    expect(exported.body).toContain('sandbox_readiness_checks_total{outcome="not_ready"} 1');
+    await server.close();
+  });
+
+  it("requires customer approval before support can collect redacted diagnostics",async()=>{
+    const requestId="99999999-9999-4999-8999-999999999999",now=new Date(),expiresAt=new Date(now.getTime()+3_600_000).toISOString();
+    const pending:SupportAccessRequest={id:requestId,workspaceId,requestedBy:"33333333-3333-4333-8333-333333333333",reason:"Investigate runner capacity failures.",scopes:["diagnostics.read"],requestedAt:now.toISOString(),expiresAt,status:"pending",decidedBy:null,decidedAt:null,rationale:null,revokedBy:null,revokedAt:null};
+    const supportAccess:SupportAccessAdministration={request:vi.fn(async()=>pending),workspaceId:vi.fn(async()=>workspaceId),list:vi.fn(async()=>[pending]),decide:vi.fn(async(_actor,_id,_decision,rationale):Promise<SupportAccessRequest>=>({...pending,status:"approved",decidedBy:session.accountId,decidedAt:new Date().toISOString(),rationale})),revoke:vi.fn(),diagnostics:vi.fn(async()=>({collectedAt:new Date().toISOString(),workspaceId,runners:{online:2},executionsLast24Hours:{failed:1},queuedEvents:{queued:3},webhookDeliveries:{delivered:4}}))};
+    const deps={...dependencies(["members.manage"]),supportAccess};
+    const staff={...session,accountId:pending.requestedBy,platformPermissions:["support_access.manage"]},customer={...session,issuedAt:new Date(),platformPermissions:[]};
+    vi.mocked(deps.sessions.verify).mockResolvedValueOnce(staff).mockResolvedValueOnce(customer).mockResolvedValueOnce(staff);
+    const server=await createServer(deps),headers={authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()};
+    const requested=await server.inject({method:"POST",url:"/v1/platform/support-access-requests",headers,payload:{workspaceId,reason:pending.reason,scopes:["diagnostics.read"],durationMinutes:60}});
+    expect(requested.statusCode,requested.body).toBe(200);expect(supportAccess.request).toHaveBeenCalledWith(staff,workspaceId,pending.reason,["diagnostics.read"],60,expect.any(String));
+    const approved=await server.inject({method:"POST",url:`/v1/support-access-requests/${requestId}/decision`,headers,payload:{decision:"approve",rationale:"Approved for aggregate diagnostics only."}});
+    expect(approved.statusCode,approved.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(customer.accountId,workspaceId);expect(supportAccess.decide).toHaveBeenCalled();
+    const diagnostics=await server.inject({method:"GET",url:`/v1/platform/support-access-requests/${requestId}/diagnostics`,headers});
+    expect(diagnostics.statusCode,diagnostics.body).toBe(200);expect(diagnostics.json().diagnostics).toMatchObject({workspaceId,runners:{online:2}});
+    await server.close();
+  });
+
+  it("enforces workspace retention administration and the production privacy deletion path",async()=>{
+    const policy:WorkspaceRetentionPolicy={executionDetailDays:90,queueEventDays:30,webhookDeliveryDays:7,runnerCommandDays:30,auditEventDays:2555,changedBy:session.accountId,changedAt:new Date().toISOString()};
+    const privacy:PrivacyAdministration={getRetention:vi.fn(async()=>policy),setRetention:vi.fn(async()=>policy),exportAccount:vi.fn(async()=>({exportVersion:1,account:{id:session.accountId}})),deleteAccount:vi.fn(async()=>({requestId:"88888888-8888-4888-8888-888888888888",completedAt:new Date().toISOString(),summary:{sessions:1}}))};
+    const deps={...dependencies(["policies.manage"]),privacy},server=await createServer(deps),headers={authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()};
+    const updated=await server.inject({method:"PUT",url:`/v1/workspaces/${workspaceId}/privacy-retention`,headers,payload:{executionDetailDays:90,queueEventDays:30,webhookDeliveryDays:7,runnerCommandDays:30,auditEventDays:2555}});expect(updated.statusCode,updated.body).toBe(200);expect(privacy.setRetention).toHaveBeenCalledWith(session,workspaceId,expect.objectContaining({auditEventDays:2555}));
+    const exported=await server.inject({method:"GET",url:"/v1/account/export",headers:{authorization:"Bearer token"}});expect(exported.statusCode,exported.body).toBe(200);expect(privacy.exportAccount).toHaveBeenCalled();
+    const deleted=await server.inject({method:"DELETE",url:"/v1/account",headers});expect(deleted.statusCode,deleted.body).toBe(200);expect(deleted.json()).toMatchObject({deleted:true,requestId:expect.any(String),summary:{sessions:1}});expect(deps.repository.requestAccountDeletion).not.toHaveBeenCalled();await server.close();
+  });
+
+  it("shows a newly issued personal token once and never asks the credential service to persist plaintext",async()=>{
+    const deps=dependencies([]);const organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.credentialService.issuePersonalToken).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"CI",prefix:"sbx_pat_abcdefghijkl",token:"sbx_pat_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+86_400_000).toISOString()});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"CI",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresInDays:1}});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json().credential.token).toMatch(/^sbx_pat_/);expect(deps.credentialService.issuePersonalToken).toHaveBeenCalledWith(session,expect.not.objectContaining({token:expect.anything()}),expect.any(String));await server.close();
+  });
+
+  it("requires server-side service-account management permission",async()=>{
+    const deps=dependencies([]);const server=await createServer(deps);const response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Deploy bot",roleId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}});
+    expect(response.statusCode).toBe(403);expect(deps.credentialService.createServiceAccount).not.toHaveBeenCalled();await server.close();
+  });
+
+  it("creates an organisation service account only after authorizing every workspace assignment",async()=>{
+    const deps=dependencies(["service_accounts.manage"]),organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",firstRoleId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",secondRoleId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",serviceAccountId="ffffffff-ffff-4fff-8fff-ffffffffffff";
+    vi.mocked(deps.credentialService.createOrganisationServiceAccount).mockResolvedValue({id:serviceAccountId,organisationId,name:"Deploy fleet",description:"",ownerAccountIds:[session.accountId],assignments:[{workspaceId,roleId:firstRoleId,environmentIds:[]},{workspaceId:secondWorkspaceId,roleId:secondRoleId,environmentIds:[]}],expiryPolicyDays:30,status:"active",createdAt:new Date().toISOString(),lastUsedAt:null});
+    const server=await createServer(deps),payload={name:"Deploy fleet",assignments:[{workspaceId,roleId:firstRoleId},{workspaceId:secondWorkspaceId,roleId:secondRoleId}],expiryPolicyDays:30},response=await server.inject({method:"POST",url:`/v1/organisations/${organisationId}/service-accounts`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,secondWorkspaceId);expect(deps.credentialService.createOrganisationServiceAccount).toHaveBeenCalledWith(session,expect.objectContaining({organisationId,assignments:expect.arrayContaining([expect.objectContaining({workspaceId:secondWorkspaceId})])}),expect.any(String));await server.close();
+  });
+
+  it("cannot issue a multi-workspace service token through a single authorized route",async()=>{
+    const deps=dependencies(["api_credentials.manage"]),secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";vi.mocked(deps.repository.permissions).mockImplementation(async(_accountId,requestedWorkspaceId)=>new Set<Permission>(requestedWorkspaceId===workspaceId?["api_credentials.manage"]:[]));
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts/dddddddd-dddd-4ddd-8ddd-dddddddddddd/tokens`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Fleet token",scopes:["workflows.run"],organisationId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",workspaceIds:[workspaceId,secondWorkspaceId],expiresInDays:1}});
+    expect(response.statusCode).toBe(403);expect(deps.credentialService.issueServiceAccountToken).not.toHaveBeenCalled();await server.close();
+  });
+
+  it("registers assertion keys only through a fresh human credential administrator",async()=>{
+    const deps=dependencies(["api_credentials.manage"]),serviceAccountId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",createdAt=new Date().toISOString();
+    vi.mocked(deps.credentialService.registerServiceAccountAssertionKey).mockResolvedValue({serviceAccountId,workspaceId,keyId:"ci-2026",algorithm:"EdDSA",createdAt,revokedAt:null});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts/${serviceAccountId}/assertion-keys`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{keyId:"ci-2026",publicKeyDerBase64:Buffer.alloc(44).toString("base64")}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.credentialService.registerServiceAccountAssertionKey).toHaveBeenCalledWith(session,serviceAccountId,workspaceId,"ci-2026",expect.any(String),expect.any(String));await server.close();
+  });
+
+  it("exchanges a signed client assertion without requiring an existing bearer token",async()=>{
+    const deps=dependencies([]),assertion=`${"a".repeat(40)}.${"b".repeat(40)}.${"c".repeat(40)}`,organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    vi.mocked(deps.credentialService.exchangeServiceAccountAssertion).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"assertion:ci",prefix:"sbx_sa_abcdefghijkl",token:"sbx_sa_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+900_000).toISOString()});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:"/v1/service-account-assertions/token",payload:{clientAssertion:assertion}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.sessions.verify).not.toHaveBeenCalled();expect(deps.credentialService.exchangeServiceAccountAssertion).toHaveBeenCalledWith(assertion);await server.close();
+  });
+
+  it("authorizes an access-review decision in every assigned workspace",async()=>{
+    const deps=dependencies(["service_accounts.manage"]),reviewId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",now=new Date().toISOString();
+    vi.mocked(deps.accessReviews.workspaceIds).mockResolvedValue([workspaceId,secondWorkspaceId]);vi.mocked(deps.accessReviews.decide).mockResolvedValue({id:reviewId,serviceAccountId:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",organisationId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",serviceAccountName:"Deploy bot",workspaceIds:[workspaceId,secondWorkspaceId],openedAt:now,dueAt:now,status:"retained",accessSnapshot:{},decidedBy:session.accountId,decidedAt:now,rationale:"Still required"});
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/service-account-access-reviews/${reviewId}/decision`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{decision:"retain",rationale:"Still required"}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,secondWorkspaceId);expect(deps.accessReviews.decide).toHaveBeenCalledWith(session,reviewId,"retain","Still required",expect.any(String));await server.close();
+  });
+
   it("requires server-side workspace permission for invitations", async () => {
     const deps = dependencies([]);
     const server = await createServer(deps);
@@ -189,13 +338,22 @@ describe("control-plane API", () => {
     const deps = dependencies(["workflows.run"]);
     const targetRunnerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const revisionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.repository.listWorkspaceEnvironments).mockResolvedValue([{environmentId,environment:"production"}]);
     vi.mocked(deps.repository.createRunnerCommand).mockImplementation(async (_actor, command) => ({ ...command, issuerAccountId: session.accountId, status: "queued" }));
     const server = await createServer(deps);
-    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId, action: "run_workflow", workflowRevisionId: revisionId, payload: { trigger: "remote" }, idempotencyKey: "remote-run-unique-0001", expiresInSeconds: 300 } });
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId,environmentId, action: "run_workflow", workflowRevisionId: revisionId, payload: { trigger: "remote" }, idempotencyKey: "remote-run-unique-0001", expiresInSeconds: 300 } });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().command).toMatchObject({ workspaceId, targetRunnerId, workflowRevisionId: revisionId, keyId: "control-plane-1", status: "queued" });
+    expect(response.json().command).toMatchObject({ workspaceId, targetRunnerId, workflowRevisionId: revisionId, keyId: "control-plane-1", status: "queued",authorizationContext:{principalType:"user",principalId:session.accountId,requiredPermission:"workflows.run",environmentId,environment:"production"} });
     expect(response.json().command.signature).toBeTruthy();
     await server.close();
+  });
+
+  it("rejects runner commands outside a token's environment restriction",async()=>{
+    const deps=dependencies(["workflows.run"]),environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.sessions.verify).mockResolvedValue({...session,principalType:"personal_access_token",principalId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",credentialScopes:["workflows.run"],workspaceRestrictions:[workspaceId],environmentRestrictions:["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]});
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/runner-commands`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{targetRunnerId:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",environmentId,action:"run_workflow",workflowRevisionId:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",idempotencyKey:"remote-run-restricted-0001"}});
+    expect(response.statusCode).toBe(403);expect(response.json().error.code).toBe("credential_environment_restricted");expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();await server.close();
   });
 
   it("keeps draft approval and publication as explicit authorized transitions", async () => {
@@ -221,9 +379,10 @@ describe("control-plane API", () => {
 
   it("returns an actionable governance failure when remote execution is disabled", async () => {
     const deps = dependencies(["workflows.run"]);
+    const environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";vi.mocked(deps.repository.listWorkspaceEnvironments).mockResolvedValue([{environmentId,environment:"production"}]);
     vi.mocked(deps.repository.getGovernancePolicies).mockResolvedValue({ remote_execution: false });
     const server = await createServer(deps);
-    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", action: "run_workflow", workflowRevisionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", idempotencyKey: "remote-run-unique-0002" } });
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",environmentId, action: "run_workflow", workflowRevisionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", idempotencyKey: "remote-run-unique-0002" } });
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toMatch(/remote_execution.*administrator.*local runner/i);
     expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();
