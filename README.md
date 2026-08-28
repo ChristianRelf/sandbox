@@ -1,6 +1,16 @@
-# Sandbox v0.5.0 GA candidate
+# Sandbox v0.6.0 development baseline
 
-Sandbox is a local-first visual desktop automation platform. The v0.5 branch builds GA governance and operability on the existing desktop, browser automation, plugin ecosystem, team control plane and always-on runner architecture. Existing personal workflows continue without an account or network connection. This branch is not GA until the blockers in `docs/ga-blockers-v0.5.md` are closed.
+Sandbox is a local-first visual desktop automation platform. This checkout combines the v0.5 general-availability control plane, runners, public API, security and operational controls with independent marketing, account and documentation applications for the v0.6 public-product architecture.
+
+## Public web development
+
+```powershell
+npm.cmd run marketing:dev  # http://localhost:3100
+npm.cmd run web:dev        # account application
+npm.cmd run docs:dev       # http://localhost:3200
+```
+
+See `docs/v0.6-public-architecture.md` and `docs/v0.6-launch-readiness.md` for routing, design, release, support, SEO, accessibility, deployment and migration details.
 
 ## Architecture
 

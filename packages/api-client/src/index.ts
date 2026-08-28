@@ -58,6 +58,20 @@ export class SandboxApiCompatibilityError extends Error {
   }
 }
 
+export interface MarketplaceListing {
+  pluginId: string; name: string; summary: string;
+  publisher: { publicId: string; publicName: string; verified: boolean };
+  version: string; packageIntegrity: string; categories: string[]; keywords: string[];
+  pricing: Record<string, unknown>; licence: string; documentationUrl: string;
+  privacyPolicyUrl: string | null; supportUrl: string; screenshots: unknown[];
+  securityNotices: unknown[]; capabilities: unknown[];
+  networkDomains: Array<{ domain?: string; methods?: string[] }>;
+  nodes: Array<{ displayName?: string; description?: string }>;
+  minimumHostVersion: string; maximumHostVersion: string | null;
+  installCount: number; ratingAverage: number | null; ratingCount: number;
+  updatedAt: string; visibility: string;
+}
+
 export interface MarketplaceListQuery {
   search?: string;
   category?: string;
@@ -71,6 +85,19 @@ export interface MarketplaceListQuery {
   limit?: number;
   hostVersion?: string;
 }
+
+export interface ProductPlan {
+  id:string;displayName:string;audience:"individual"|"team"|"enterprise";description:string;
+  price:{currency:string;unitAmount:number;interval:"month"|"year"}|null;
+  includedUsage:Record<string,number>;entitlements:Record<string,boolean|number|string>;
+  seatAllowance:number|null;offlineGraceDays:number;localExecutionUnmetered:true;
+  overagePolicy:"blocked"|"spending_limit"|"contract";
+}
+export interface ProductAccountSummary {
+  subscriptions:Array<{id:string;ownerType:"personal"|"organisation";ownerId:string;planId:string;planName:string;status:"trial"|"active"|"past_due"|"cancelled"|"expired";currentPeriodEndsAt:string|null;cancelAtPeriodEnd:boolean}>;
+  licences:Array<{id:string;ownerType:"personal"|"organisation";ownerId:string;planId:string;status:"active"|"past_due"|"expired"|"revoked";seatAllowance:number|null;seatsAssigned:number;devices:number;offlineGraceUntil:string}>;
+}
+export interface ProductCheckoutInput { ownerType:"personal"|"organisation";ownerId:string;planId:string }
 
 export interface PersonalAccessTokenInput {
   name: string;
@@ -129,6 +156,18 @@ export class SandboxApiClient {
 
   listMarketplace<T = unknown>(query: MarketplaceListQuery = {}, parse?: (value: unknown) => T): Promise<ApiResult<T>> {
     return this.request({ path: "/v1/marketplace/plugins", query: query as Record<string, QueryValue>, parse });
+  }
+
+  listProductPlans<T = {items:ProductPlan[]}>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/product-plans",parse});
+  }
+
+  getProductAccount<T = ProductAccountSummary>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/commerce",parse});
+  }
+
+  createProductCheckout<T = {checkout:{checkoutId:string;url:string;expiresAt:string}}>(input:ProductCheckoutInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:"/v1/product-checkout",body:input,parse});
   }
 
   listPersonalAccessTokens<T = {items:TokenSummary[]}>(parse?: (value: unknown) => T): Promise<ApiResult<T>> {

@@ -1,0 +1,1 @@
+.billing-plans article{grid-template-columns:40px 1fr minmax(110px,max-content);height:auto;min-height:62px}.billing-plans article>span:last-child{text-align:right;color:var(--muted);font-size:9px}.billing-plans form{display:flex;justify-content:flex-end}.billing-plans .portal-primary{min-width:82px}

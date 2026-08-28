@@ -1,0 +1,22 @@
+import { SandboxApiClient, type MarketplaceListing } from "@sandbox/api-client";
+import { BadgeCheck, Box, ShieldCheck } from "lucide-react";
+import { notFound } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+type Params = Promise<{ pluginId: string }>;
+
+export default async function Page({ params }: { params: Params }) {
+  const { pluginId } = await params;
+  const baseUrl = process.env.CONTROL_PLANE_URL;
+  if (!baseUrl) notFound();
+  let plugin: MarketplaceListing;
+  try {
+    plugin = (await new SandboxApiClient({ baseUrl }).request<{ listing: MarketplaceListing }>({ path: `/v1/marketplace/plugins/${encodeURIComponent(pluginId)}` })).data.listing;
+  } catch { notFound(); }
+
+  return <main id="content" className="detail-page plugin-page">
+    <section className="plugin-head"><span><Box size={25}/></span><div><small>PUBLIC PLUGIN · v{plugin.version}</small><h1>{plugin.name}</h1><p>{plugin.publisher.publicName} {plugin.publisher.verified && <BadgeCheck size={14}/>}</p></div><a className="sb-button sb-button--primary" href={`sandbox://marketplace/install?plugin=${encodeURIComponent(plugin.pluginId)}&version=${encodeURIComponent(plugin.version)}`}>Open in Sandbox</a></section>
+    <p className="plugin-summary">{plugin.summary}</p>
+    <section className="plugin-columns"><div><h2>Available nodes</h2>{plugin.nodes.map((node, index) => <article key={`${node.displayName}-${index}`}><Box size={14}/><div><strong>{node.displayName ?? "Plugin node"}</strong><p>{node.description ?? "See publisher documentation for configuration."}</p></div></article>)}</div><aside><h2><ShieldCheck size={15}/>Permissions</h2><p>Review these capabilities before enabling the plugin.</p><dl><div><dt>Publisher</dt><dd>{plugin.publisher.verified ? "Verified third party" : "Community"}</dd></div><div><dt>Network</dt><dd>{plugin.networkDomains.length ? plugin.networkDomains.map(value => value.domain).filter(Boolean).join(", ") : "None declared"}</dd></div><div><dt>Package</dt><dd><code>{plugin.packageIntegrity}</code></dd></div><div><dt>Host version</dt><dd>{plugin.minimumHostVersion}+</dd></div><div><dt>Licence</dt><dd>{plugin.licence}</dd></div></dl></aside></section>
+  </main>;
+}

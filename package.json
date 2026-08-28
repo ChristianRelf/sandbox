@@ -1,7 +1,7 @@
 {
   "name": "sandbox",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -29,9 +29,13 @@
     "control-plane:test": "npm run test --workspace @sandbox/control-plane",
     "web:dev": "npm run dev --workspace @sandbox/web",
     "web:build": "npm run build --workspace @sandbox/web",
+    "marketing:dev": "npm run dev --workspace @sandbox/marketing",
+    "marketing:build": "npm run build --workspace @sandbox/marketing",
+    "docs:dev": "npm run dev --workspace @sandbox/docs",
+    "docs:build": "npm run build --workspace @sandbox/docs",
     "services:build": "npm run control-plane:build && npm run build --workspace @sandbox/scheduler && npm run build --workspace @sandbox/browser-worker && npm run build --workspace @sandbox/plugin-sdk",
     "runners:build": "cargo build --release --manifest-path services/hosted-runner/Cargo.toml && cargo build --release --manifest-path agents/server/Cargo.toml",
-    "build:all": "npm run build && npm run browser:build && npm run web:build && npm run services:build && npm run runners:build",
+    "build:all": "npm run build && npm run browser:build && npm run api-client:build && npm run web:build && npm run marketing:build && npm run docs:build && npm run services:build && npm run runners:build",
     "test:node": "npm test && npm run browser:test && npm run test --workspace @sandbox/contracts && npm run test --workspace @sandbox/api-client && npm run test --workspace @sandbox/plugin-sdk && npm run control-plane:test && npm run test --workspace @sandbox/scheduler && npm run test --workspace @sandbox/browser-worker",
     "test:all": "npm run test:node && npm run test:rust && npm run test:rust:runners"
   },
