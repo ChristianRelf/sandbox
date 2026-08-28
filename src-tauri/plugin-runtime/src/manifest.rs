@@ -1,6 +1,6 @@
 use crate::{schema::validate_declared_schema, PluginError, MANIFEST_VERSION};
 use regex::Regex;
-use semver::{Version, VersionReq};
+use semver::{BuildMetadata, Prerelease, Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -276,7 +276,7 @@ impl Manifest {
                 errors.push(format!("{label} must be an HTTPS URL."));
             }
         }
-        if !self.minimum_host_version.matches(host_version) {
+        if !matches_host_version(&self.minimum_host_version, host_version) {
             errors.push(format!(
                 "Host {host_version} does not satisfy minimumHostVersion."
             ));
@@ -284,7 +284,7 @@ impl Manifest {
         if self
             .maximum_host_version
             .as_ref()
-            .is_some_and(|value| !value.matches(host_version))
+            .is_some_and(|value| !matches_host_version(value, host_version))
         {
             errors.push(format!(
                 "Host {host_version} does not satisfy maximumHostVersion."
@@ -599,6 +599,24 @@ fn bytes_mb(value: u64) -> u64 {
     value.div_ceil(1024 * 1024)
 }
 
+fn matches_host_version(requirement: &VersionReq, host_version: &Version) -> bool {
+    if requirement.matches(host_version) {
+        return true;
+    }
+    if host_version.pre.is_empty()
+        || requirement
+            .comparators
+            .iter()
+            .any(|comparator| !comparator.pre.is_empty())
+    {
+        return false;
+    }
+    let mut compatibility_base = host_version.clone();
+    compatibility_base.pre = Prerelease::EMPTY;
+    compatibility_base.build = BuildMetadata::EMPTY;
+    requirement.matches(&compatibility_base)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -674,6 +692,26 @@ pub(crate) mod tests {
         assert!(permission_summary(&manifest)
             .iter()
             .any(|item| item.contains("api.example.com")));
+    }
+
+    #[test]
+    fn prerelease_hosts_preserve_stable_ranges_and_explicit_beta_bounds() {
+        let mut manifest = manifest();
+        manifest.maximum_host_version = Some(VersionReq::parse("<0.8.0").unwrap());
+        assert!(manifest
+            .validate(&Version::parse("0.7.0-beta.1").unwrap(), true)
+            .valid);
+
+        manifest.minimum_host_version = VersionReq::parse(">=0.7.0-beta.2").unwrap();
+        assert!(!manifest
+            .validate(&Version::parse("0.7.0-beta.1").unwrap(), true)
+            .valid);
+
+        manifest.minimum_host_version = VersionReq::parse(">=0.3.0").unwrap();
+        manifest.maximum_host_version = Some(VersionReq::parse("<0.7.0").unwrap());
+        assert!(!manifest
+            .validate(&Version::parse("0.7.0-beta.1").unwrap(), true)
+            .valid);
     }
 
     #[test]

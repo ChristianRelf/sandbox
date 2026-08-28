@@ -4,26 +4,28 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const gaRuntimeVersion = "0.5.0";
-const publicExperienceVersion = "0.6.0";
+const betaVersion = "0.7.0-beta.1";
 
-describe("v0.5 runtime compatibility in the v0.6 public experience", () => {
-  it("keeps public surfaces and GA runtime components on their documented versions", () => {
-    for (const file of ["package.json", "apps/web/package.json", "apps/marketing/package.json", "apps/docs/package.json"]) {
-      expect(JSON.parse(read(file)).version, file).toBe(publicExperienceVersion);
-    }
-
+describe("v0.7 beta release compatibility", () => {
+  it("keeps first-party surfaces and runtime components on one beta version", () => {
     const packages = [
+      "package.json",
+      "apps/web/package.json",
+      "apps/marketing/package.json",
+      "apps/docs/package.json",
       "browser-sidecar/package.json",
       "packages/api-client/package.json",
+      "packages/brand/package.json",
+      "packages/content/package.json",
       "packages/contracts/package.json",
       "packages/plugin-sdk/package.json",
+      "packages/ui/package.json",
       "services/browser-worker/package.json",
       "services/control-plane/package.json",
       "services/scheduler/package.json"
     ];
     for (const file of packages) {
-      expect(JSON.parse(read(file)).version, file).toBe(gaRuntimeVersion);
+      expect(JSON.parse(read(file)).version, file).toBe(betaVersion);
     }
 
     const crates = [
@@ -34,28 +36,24 @@ describe("v0.5 runtime compatibility in the v0.6 public experience", () => {
       "src-tauri/plugin-runtime/Cargo.toml"
     ];
     for (const file of crates) {
-      expect(read(file), file).toMatch(/^version = "0\.5\.0"$/m);
+      expect(read(file), file).toMatch(/^version = "0\.7\.0-beta\.1"$/m);
     }
-    expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(gaRuntimeVersion);
+    expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(betaVersion);
   });
 
-  it("keeps runtime constants and the published matrix aligned", () => {
+  it("keeps runtime constants and protocol boundaries aligned", () => {
     expect(RUNNER_PROTOCOL_VERSION).toBe(2);
     expect(read("agents/server/src/lib.rs")).toContain('pub const RUNNER_PROTOCOL_VERSION: u16 = 2;');
-    expect(read("agents/server/src/lib.rs")).toContain('pub const ENGINE_VERSION: &str = "0.5.0";');
-    expect(read("agents/server/src/lib.rs")).toContain('pub const PLUGIN_RUNTIME_VERSION: &str = "0.5.0";');
-    expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain('pub const HOST_VERSION: &str = "0.5.0";');
-    const matrix = read("docs/support-matrix-v0.5.md");
-    expect(matrix).toContain("runner protocol 2");
-    expect(matrix).toContain("Node.js 20 or later");
-    expect(matrix).toContain("PostgreSQL 16");
-    expect(matrix).toContain('`minimumHostVersion: ">=0.5.0"`');
+    expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${betaVersion}";`);
+    expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${betaVersion}";`);
+    expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${betaVersion}";`);
+    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.0-beta.1,<0.8"');
   });
 
   it("fails release publication closed unless every artifact is signed and attested", () => {
     const workflow = read(".github/workflows/release.yml");
     expect(workflow).toContain('tags: ["v*.*.*"]');
-    expect(workflow).toContain("Release tags must use the exact vMAJOR.MINOR.PATCH form.");
+    expect(workflow).toContain("vMAJOR.MINOR.PATCH-beta.NUMBER");
     expect(workflow).toContain("WINDOWS_CERTIFICATE_PASSWORD");
     expect(workflow).toContain("Get-AuthenticodeSignature");
     expect(workflow).toContain('if ($signature.Status -ne "Valid")');
@@ -69,6 +67,9 @@ describe("v0.5 runtime compatibility in the v0.6 public experience", () => {
     expect(workflow).toContain("services/hosted-runner/Dockerfile");
     expect(workflow).toContain("services/browser-worker/Dockerfile");
     expect(workflow).toContain("needs: [verify-release, desktop-windows, agent-linux, containers]");
+    expect(workflow).toContain("generate-release-manifest.mjs");
+    expect(workflow).toContain("--prerelease");
+    expect(workflow).not.toContain("--draft");
     expect(workflow).not.toMatch(/uses: [^\n]+@(v\d+|stable|main)\s*$/m);
 
     const agentRelease = read("agents/server/packaging/build-release.sh");

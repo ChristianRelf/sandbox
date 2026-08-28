@@ -2,8 +2,10 @@ import { Blocks, Clock3, Command, GitFork, History, PanelLeftClose, PanelLeftOpe
 import type { ReactNode } from "react";
 import { usePreferences } from "../preferences";
 import { useAppStore, type View } from "../store";
+import { DesktopUpdateNotice } from "./DesktopUpdateNotice";
 export function Sidebar({onCommand}:{onCommand:()=>void}){const {sidebarCollapsed:collapsed,confirmBeforeLeaving,update}=usePreferences();const {view,setView}=useAppStore();const navigate=(next:View)=>{const dirty=(window as Window&{__sandboxUnsaved?:boolean}).__sandboxUnsaved;if(!dirty||!confirmBeforeLeaving||confirm("Leave without saving your workflow changes?"))setView(next)};const item=(next:View,label:string,icon:ReactNode)=><button title={collapsed?label:undefined} aria-current={view===next?"page":undefined} className={view===next?"active":""} onClick={()=>navigate(next)}>{icon}{!collapsed&&label}</button>;return <aside className={`sidebar ${collapsed?"sidebar-collapsed":""}`}>
   <div className="brand"><span className="brand-mark"><GitFork size={16}/></span>{!collapsed&&<span>Sandbox <small>0.7 beta</small></span>}</div>
+  <DesktopUpdateNotice collapsed={collapsed}/>
   <nav aria-label="Primary navigation">
     {item("workflows","Workflows",<GitFork size={16}/>) }
     {item("history","Run history",<History size={16}/>) }

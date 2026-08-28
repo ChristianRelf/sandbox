@@ -1,3 +1,54 @@
-"use client";import { useEffect,useState } from "react";import { Check,Monitor,PackageOpen } from "lucide-react";
-const platforms=[{id:"windows",name:"Windows",status:"Available source configuration",detail:"x64 · Windows 10 or later"},{id:"macos",name:"macOS",status:"No signed build published",detail:"Unsupported in current pipeline"},{id:"linux",name:"Linux",status:"No desktop build published",detail:"Self-hosted runner source available"},{id:"arm64",name:"ARM64 runner",status:"Build pipeline configured",detail:"Linux · Raspberry Pi or NAS"},{id:"cli",name:"CLI",status:"Source package only",detail:"No public binary release"}];
-export function DownloadsClient(){const [selected,setSelected]=useState("windows");useEffect(()=>{const p=navigator.platform.toLowerCase();setSelected(p.includes("mac")?"macos":p.includes("linux")?"linux":"windows")},[]);return <div className="download-picker"><nav aria-label="Platforms">{platforms.map(p=><button key={p.id} onClick={()=>setSelected(p.id)} className={selected===p.id?"active":""}>{p.name}</button>)}</nav><section>{platforms.map(p=>p.id===selected&&<div key={p.id}><span className="download-icon">{p.id==="windows"?<Monitor size={24}/>:<PackageOpen size={24}/>}</span><small>{p.name.toUpperCase()}</small><h2>{p.status}</h2><p>{p.detail}</p><dl><div><dt>Release</dt><dd>0.5.0 stable</dd></div><div><dt>Release pipeline</dt><dd>Signed artifacts publish from immutable version tags</dd></div><div><dt>Checksum</dt><dd>SHA-256 manifest generated with each release</dd></div><div><dt>Signature</dt><dd>Authenticode, Sigstore and provenance attestations</dd></div></dl><button disabled className="sb-button sb-button--primary"><Check size={14}/> Awaiting published manifest</button></div>)}</section></div>}
+"use client";
+
+import { Download, ExternalLink, Monitor, PackageOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { ReleaseArtifact, ReleaseManifest } from "../../lib/release-manifest";
+
+type PlatformId = "windows" | "linux-x64" | "linux-arm64" | "macos";
+const platforms: Array<{id: PlatformId; name: string; detail: string}> = [
+  { id: "windows", name: "Windows", detail: "x64 · Windows 10 or later · Desktop application" },
+  { id: "linux-x64", name: "Linux runner", detail: "x64 · Ubuntu/Debian · Headless self-hosted runner" },
+  { id: "linux-arm64", name: "ARM64 runner", detail: "ARM64 · Ubuntu/Debian · Headless self-hosted runner" },
+  { id: "macos", name: "macOS", detail: "No signed macOS build in the v0.7 beta" },
+];
+
+export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
+  const [selected, setSelected] = useState<PlatformId>("windows");
+  useEffect(() => {
+    const platform = navigator.platform.toLowerCase();
+    setSelected(platform.includes("mac") ? "macos" : platform.includes("linux") ? "linux-x64" : "windows");
+  }, []);
+  const platform = platforms.find(item => item.id === selected)!;
+  const artifact = findArtifact(manifest, selected);
+  const available = Boolean(artifact);
+  return <div className="download-picker">
+    <nav aria-label="Platforms">{platforms.map(item => <button key={item.id} onClick={() => setSelected(item.id)} className={selected === item.id ? "active" : ""}>{item.name}</button>)}</nav>
+    <section><div>
+      <span className="download-icon">{selected === "windows" ? <Monitor size={24}/> : <PackageOpen size={24}/>}</span>
+      <small>{platform.name.toUpperCase()}</small>
+      <h2>{available ? selected === "windows" ? "Desktop beta ready" : "Runner archive ready" : selected === "macos" ? "Not available in this beta" : "Release pending"}</h2>
+      <p>{platform.detail}</p>
+      <dl>
+        <div><dt>Release</dt><dd>{manifest ? `${manifest.version} ${manifest.channel}` : "0.7.0-beta.1 pending publication"}</dd></div>
+        <div><dt>Artifact</dt><dd>{artifact?.name ?? "No published artifact for this platform"}</dd></div>
+        <div><dt>Checksum</dt><dd className="download-digest">{artifact?.sha256 ?? "Generated and validated during release"}</dd></div>
+        <div><dt>Verification</dt><dd>{selected === "windows" ? "Authenticode signature + GitHub provenance" : "Sigstore bundle + GitHub provenance"}</dd></div>
+      </dl>
+      {artifact
+        ? <a className="sb-button sb-button--primary" href={artifact.downloadUrl}><Download size={14}/>Download · {formatBytes(artifact.bytes)}</a>
+        : <a className="sb-button" href="https://github.com/ChristianRelf/sandbox/releases"><ExternalLink size={14}/>View release status</a>}
+      {manifest && <a className="download-release-link" href={`https://github.com/${manifest.source.repository}/releases/tag/${manifest.tag}`}>Release notes and verification files <ExternalLink size={12}/></a>}
+    </div></section>
+  </div>;
+}
+
+function findArtifact(manifest: ReleaseManifest | undefined, platform: PlatformId): ReleaseArtifact | undefined {
+  if (!manifest) return undefined;
+  if (platform === "windows") return manifest.artifacts.find(item => item.kind === "desktop-installer" && item.name.endsWith(".exe")) ?? manifest.artifacts.find(item => item.kind === "desktop-installer");
+  if (platform === "linux-x64") return manifest.artifacts.find(item => item.kind === "runner-archive" && item.architecture === "x86_64");
+  if (platform === "linux-arm64") return manifest.artifacts.find(item => item.kind === "runner-archive" && item.architecture === "aarch64");
+}
+
+function formatBytes(bytes: number) {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}

@@ -37,3 +37,4 @@
 .footer-lower nav a:hover{color:var(--text)}
 .footer-lower nav a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 @media(max-width:620px){.site-footer{padding:55px 18px 28px}.footer-meta{grid-template-columns:1fr}.footer-meta>small{grid-column:1;grid-row:auto}.footer-display{padding:45px 0 47px;font-size:clamp(62px,20vw,112px)}.footer-display::after{bottom:24px}.footer-lower{align-items:flex-start;flex-direction:column-reverse}.footer-lower nav{flex-wrap:wrap;gap:15px 20px}}
+.download-digest{font:9px ui-monospace,monospace;overflow-wrap:anywhere;color:#b9bec4}.download-release-link{display:inline-flex;align-items:center;gap:6px;margin-left:16px;color:var(--muted);font-size:10px}.download-release-link:hover{color:var(--text)}

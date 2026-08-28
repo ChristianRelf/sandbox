@@ -1,0 +1,36 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { applyPreferences, defaultPreferences, normalisePreferences } from "./preferences";
+
+describe("app preferences", () => {
+  beforeEach(() => {
+    document.documentElement.removeAttribute("data-accent");
+    document.documentElement.removeAttribute("data-density");
+    document.documentElement.removeAttribute("data-surface");
+  });
+
+  it("uses safe defaults for missing and invalid stored values", () => {
+    expect(normalisePreferences(undefined)).toEqual(defaultPreferences);
+    expect(normalisePreferences({ accent: "red", gridSize: 999, updateChannel: "nightly" })).toEqual(defaultPreferences);
+  });
+
+  it("preserves supported preferences while filling new fields", () => {
+    expect(normalisePreferences({ accent: "blue", gridSize: 40, reduceMotion: true })).toMatchObject({
+      accent: "blue",
+      gridSize: 40,
+      reduceMotion: true,
+      startView: "workflows",
+      updateChannel: "beta"
+    });
+  });
+
+  it("applies visual and node preferences to the document", () => {
+    applyPreferences({ ...defaultPreferences, accent: "violet", surfaceTheme: "oled", increasedContrast: true, showNodeDescriptions: false });
+    expect(document.documentElement.dataset).toMatchObject({
+      accent: "violet",
+      density: "comfortable",
+      surface: "oled",
+      contrast: "high",
+      nodeDescriptions: "false"
+    });
+  });
+});

@@ -22,8 +22,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tags must use the exact vMAJOR.MINOR.PATCH form." >&2
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-beta.NUMBER." >&2
             exit 1
           fi
           version="${GITHUB_REF_NAME#v}"
@@ -138,7 +138,7 @@ jobs:
         run: >-
           cosign verify-blob
           --bundle SHA256SUMS.sigstore.json
-          --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+"
+          --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+(-(alpha|beta|rc)\\.[0-9]+)?"
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
           SHA256SUMS
       - name: Stage agent release assets
@@ -170,6 +170,9 @@ jobs:
           - name: browser-worker
             dockerfile: services/browser-worker/Dockerfile
             platforms: linux/amd64
+          - name: marketing
+            dockerfile: apps/marketing/Dockerfile
+            platforms: linux/amd64,linux/arm64
     permissions:
       contents: read
       packages: write
@@ -227,7 +230,7 @@ jobs:
       - name: Verify image signature
         run: >-
           cosign verify
-          --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+"
+          --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+(-(alpha|beta|rc)\\.[0-9]+)?"
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
           "${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}"
       - name: Record published digest
@@ -241,22 +244,33 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  publish-draft:
+  publish-release:
     needs: [verify-release, desktop-windows, agent-linux, containers]
     runs-on: ubuntu-latest
     environment: production-release
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: release-*
           path: release
           merge-multiple: true
-      - name: Publish draft release candidate
+      - name: Generate machine-readable release manifest
+        run: >-
+          node scripts/generate-release-manifest.mjs
+          --input release
+          --output release/release-manifest.json
+          --repository "$GITHUB_REPOSITORY"
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --generate-notes --title "Sandbox $GITHUB_REF_NAME"
+          release_flags=(--verify-tag --generate-notes --title "Sandbox $GITHUB_REF_NAME")
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then release_flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "${release_flags[@]}"
           find release -type f -print0 | sort -z | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber

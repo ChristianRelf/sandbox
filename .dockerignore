@@ -10,3 +10,7 @@ browser-sidecar/runtime
 screenshots
 *.tsbuildinfo
 *.log
+deploy/digitalocean/.env
+deploy/digitalocean/runner.toml
+deploy/digitalocean/data
+deploy/digitalocean/automation
