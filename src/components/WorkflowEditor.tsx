@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, type Connection, type Edge, type Node, type NodeChange, type ReactFlowInstance } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { Accessibility, AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Command, History, LayoutGrid, Play, Save, ShieldCheck, TestTube2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
