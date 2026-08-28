@@ -28,8 +28,9 @@ const pool = new Pool({
   idle_in_transaction_session_timeout: 15_000
 });
 
+const controlPlanePublicUrl=required("CONTROL_PLANE_PUBLIC_URL").replace(/\/$/,"");
 const oidcSessions=new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") });
-const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"));
+const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"),`${controlPlanePublicUrl}/v1/service-account-assertions/token`);
 const webhookProtector=new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"),"base64"));
 const idempotencyProtector=new WebhookProtector(Buffer.from(required("API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64"),"base64"));
 const email=new HttpTransactionalEmail(required("EMAIL_API_URL"),required("EMAIL_API_KEY"),required("EMAIL_SENDER"));
@@ -46,13 +47,13 @@ const server = await createServer({
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
   runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
-  entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), required("CONTROL_PLANE_PUBLIC_URL"), required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
+  entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), controlPlanePublicUrl, required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
   webhookProtector,
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   usageLedger: new PostgresUsageLedger(pool),
   usageProducerAuthenticator: new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(required("USAGE_PRODUCER_SECRETS_JSON"))),
   protectedValueProtector: new WebhookProtector(Buffer.from(required("PROTECTED_VALUE_ENCRYPTION_KEY_BASE64"), "base64")),
-  webhookBaseUrl: required("CONTROL_PLANE_PUBLIC_URL"),
+  webhookBaseUrl: controlPlanePublicUrl,
   webBaseUrl: required("WEB_BASE_URL"),
   logger: true
 });

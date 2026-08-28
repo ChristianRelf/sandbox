@@ -48,13 +48,29 @@ Service-account operations:
 GET    /v1/workspaces/{workspaceId}/service-accounts
 POST   /v1/workspaces/{workspaceId}/service-accounts
 POST   /v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens
+POST   /v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys
+DELETE /v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys/{keyId}
 DELETE /v1/workspaces/{workspaceId}/access-tokens/{tokenId}
 POST   /v1/organisations/{organisationId}/service-accounts
+POST   /v1/service-account-assertions/token
 ```
 
 Creation and revocation require `X-Sandbox-Request-Time` freshness. Service-account creation requires an interactive human and `service_accounts.manage` in every assigned workspace; credential issue/revocation requires `api_credentials.manage` in every workspace included by the token. The returned token is used as a normal bearer credential. Personal token management itself requires an interactive human session and cannot be performed using another access token.
 
 Organisation service accounts take one to 100 unique workspace assignments. Each assignment selects an organisation role and optional environment restrictions. The control plane validates every workspace, role and environment in one transaction, creates the non-interactive principal membership in each workspace, and writes a workspace-local audit event. Workspace listings include both workspace-scoped accounts and organisation accounts assigned there.
+
+## Signed client assertions
+
+Credential administrators can register workspace-bound Ed25519 public keys using SubjectPublicKeyInfo DER encoded as base64. Private keys remain in the client's secret manager. Registration and revocation require a fresh interactive human session and `api_credentials.manage` in that workspace.
+
+To obtain a 15-minute bearer credential, sign a compact JWT with `alg=EdDSA` and the registered `kid`. The assertion must have:
+
+- identical service-account UUID values for `iss` and `sub`;
+- audience equal to the public control-plane URL plus `/v1/service-account-assertions/token`;
+- `iat`, `exp`, and a unique 16–200 character `jti`, with a maximum five-minute assertion lifetime;
+- `sandbox_scopes`, `sandbox_workspace_ids`, and `sandbox_environment_ids` arrays. Exactly one workspace is allowed and must match the registered key.
+
+Submit only `{ "clientAssertion": "<signed-jwt>" }` to the exchange endpoint. The signed scopes and environments must remain within the service account's current workspace assignment; environment-restricted assignments require at least one signed environment. Assertion IDs are consumed atomically, so replay fails even across replicas. The exchange deliberately does not support the general API idempotency cache; retry with a newly signed assertion instead. Revoking a key immediately revokes every bearer credential derived from it and expires outstanding runner commands issued by those credentials.
 
 Example personal token request:
 
@@ -73,4 +89,4 @@ Do not print creation responses in CI logs. Capture the `credential.token` field
 
 ## Current limitation
 
-Organisation-wide assignment and expiry notifications are implemented. Periodic access-review decisions, signed client assertions and workload identity remain later items in the ordered v0.5 plan.
+Organisation-wide assignment, expiry notifications and signed client assertions are implemented. Periodic access-review decisions and managed workload identity remain later items in the ordered v0.5 plan.

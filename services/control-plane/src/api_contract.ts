@@ -132,15 +132,16 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
     const path = route.url.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
     const method = route.method.toLowerCase();
     const mutation = ["post", "put", "patch", "delete"].includes(method);
+    const idempotencySupported=mutation&&path!=="/v1/service-account-assertions/token";
     const parameters: unknown[] = [...path.matchAll(/\{([^}]+)\}/g)].map(match => ({ name: match[1], in: "path", required: true, schema: { type: "string" } }));
     parameters.push({ $ref: "#/components/parameters/CorrelationId" });
-    if (mutation) parameters.push({ $ref: "#/components/parameters/IdempotencyKey" });
+    if (idempotencySupported) parameters.push({ $ref: "#/components/parameters/IdempotencyKey" });
     const operation: Record<string, unknown> = {
       operationId: `${method}_${path.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
       tags: [path.split("/").filter(Boolean)[1] ?? "service"],
       parameters,
       "x-sandbox-stability": "stable",
-      "x-sandbox-idempotency": mutation ? "supported" : "not-applicable",
+      "x-sandbox-idempotency": idempotencySupported ? "supported" : "not-applicable",
       responses: {
         "200": { description: "Successful response.", headers: { "x-correlation-id": { $ref: "#/components/headers/CorrelationId" }, "idempotency-replayed": { $ref: "#/components/headers/IdempotencyReplayed" } }, content: { "application/json": { schema: responseSchema(path, method) } } },
         "400": { $ref: "#/components/responses/ApiError" },
@@ -153,7 +154,7 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
         "500": { $ref: "#/components/responses/ApiError" }
       }
     };
-    operation.security = path === "/health" || path === "/v1/openapi.json" || (method === "get" && path.startsWith("/v1/marketplace/"))
+    operation.security = path === "/health" || path === "/v1/openapi.json" || path === "/v1/service-account-assertions/token" || (method === "get" && path.startsWith("/v1/marketplace/"))
       ? []
       : path.startsWith("/v1/runner/")
         ? [{ runnerDevice: [] }]
@@ -197,6 +198,9 @@ function requestSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/personal-access-tokens/{tokenId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts" && method === "post") return { $ref: "#/components/schemas/ServiceAccountInput" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens" && method === "post") return { $ref: "#/components/schemas/PersonalAccessTokenInput" };
+  if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionKeyInput" };
+  if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys/{keyId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
+  if (path === "/v1/service-account-assertions/token" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionExchangeInput" };
   if (path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}" && method === "delete") return { $ref: "#/components/schemas/CredentialRevocationInput" };
   return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Input")}` };
 }
@@ -213,7 +217,9 @@ function responseSchema(path: string, method: string): { $ref: string } {
   if (path === "/v1/workspaces/{workspaceId}/service-accounts" && method === "get") return { $ref: "#/components/schemas/ServiceAccountList" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts" && method === "post") return { $ref: "#/components/schemas/ServiceAccountEnvelope" };
   if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/tokens" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
-  if ((path === "/v1/personal-access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}") && method === "delete") return { $ref: "#/components/schemas/RevocationResponse" };
+  if (path === "/v1/service-account-assertions/token" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
+  if (path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys" && method === "post") return { $ref: "#/components/schemas/ServiceAccountAssertionKeyEnvelope" };
+  if ((path === "/v1/personal-access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/access-tokens/{tokenId}" || path === "/v1/workspaces/{workspaceId}/service-accounts/{serviceAccountId}/assertion-keys/{keyId}") && method === "delete") return { $ref: "#/components/schemas/RevocationResponse" };
   return { $ref: `#/components/schemas/${operationSchemaName(path, method, "Response")}` };
 }
 
@@ -235,6 +241,8 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     HealthResponse: { type: "object", required: ["status", "service", "execution"], properties: { status: { const: "ok" }, service: { const: "sandbox-control-plane" }, execution: { const: "local-only" } }, additionalProperties: false },
     PersonalAccessTokenInput: { type: "object", required: ["name", "scopes", "organisationId", "workspaceIds"], properties: { name: { type: "string", minLength: 1, maxLength: 120 }, scopes: stringArray, organisationId: uuid, workspaceIds: { type: "array", minItems: 1, items: uuid }, environmentIds: { type: "array", items: uuid, default: [] }, expiresInDays: { type: "integer", minimum: 1, maximum: 90, default: 30 } }, additionalProperties: false },
     CredentialRevocationInput: { type: "object", required: ["reason"], properties: { reason: { type: "string", minLength: 1, maxLength: 500 } }, additionalProperties: false },
+    ServiceAccountAssertionKeyInput: { type: "object", required: ["keyId","publicKeyDerBase64"], properties: { keyId: { type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }, publicKeyDerBase64: { type:"string",contentEncoding:"base64",maxLength:2048 } }, additionalProperties:false },
+    ServiceAccountAssertionExchangeInput: { type:"object",required:["clientAssertion"],properties:{clientAssertion:{type:"string",minLength:100,maxLength:8192}},additionalProperties:false },
     TokenSummary: { type: "object", required: [...Object.keys(credentialProperties), "kind", "lastUsedAt", "revokedAt"], properties: { ...credentialProperties, kind: { type: "string", enum: ["personal", "service_account"] }, lastUsedAt: { oneOf: [dateTime, { type: "null" }] }, revokedAt: { oneOf: [dateTime, { type: "null" }] } }, additionalProperties: false },
     IssuedCredential: { type: "object", required: [...Object.keys(credentialProperties), "token"], properties: { ...credentialProperties, token: { type: "string", description: "Secret returned only on issuance or exact encrypted idempotent replay." } }, additionalProperties: false },
     TokenSummaryList: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/TokenSummary" } } }, additionalProperties: false },
@@ -243,6 +251,7 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     ServiceAccount: { type: "object", required: Object.keys(serviceAccountProperties), properties: serviceAccountProperties, additionalProperties: false },
     ServiceAccountList: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/ServiceAccount" } } }, additionalProperties: false },
     ServiceAccountEnvelope: { type: "object", required: ["serviceAccount"], properties: { serviceAccount: { $ref: "#/components/schemas/ServiceAccount" } }, additionalProperties: false },
+    ServiceAccountAssertionKeyEnvelope: { type:"object",required:["key"],properties:{key:{type:"object",required:["serviceAccountId","workspaceId","keyId","algorithm","createdAt","revokedAt"],properties:{serviceAccountId:uuid,workspaceId:uuid,keyId:{type:"string"},algorithm:{const:"EdDSA"},createdAt:dateTime,revokedAt:{oneOf:[dateTime,{type:"null"}]}},additionalProperties:false}},additionalProperties:false },
     RevocationResponse: { type: "object", required: ["revoked"], properties: { revoked: { const: true } }, additionalProperties: false },
     MarketplacePage: { type: "object", required: ["items", "nextCursor"], properties: { items: { type: "array", items: { type: "object", required: ["pluginId", "name", "version", "packageIntegrity"], properties: { pluginId: { type: "string" }, name: { type: "string" }, version: { type: "string" }, packageIntegrity: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } }, additionalProperties: true } }, nextCursor: { oneOf: [{ type: "string" }, { type: "null" }] } }, additionalProperties: false }
   };

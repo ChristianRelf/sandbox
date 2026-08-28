@@ -87,6 +87,8 @@ const serviceAccountInput=z.object({name:z.string().trim().min(1).max(120),descr
 const serviceAccountAssignmentInput=z.object({workspaceId:z.string().uuid(),roleId:z.string().uuid(),environmentIds:z.array(z.string().uuid()).max(100).default([])}).strict();
 const organisationServiceAccountInput=z.object({name:z.string().trim().min(1).max(120),description:z.string().trim().max(1000).default(""),assignments:z.array(serviceAccountAssignmentInput).min(1).max(100),expiryPolicyDays:z.number().int().min(1).max(365).default(90)}).strict();
 const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(500)}).strict();
+const serviceAssertionKeyInput=z.object({keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),publicKeyDerBase64:z.string().base64().max(2048)}).strict();
+const serviceAssertionExchangeInput=z.object({clientAssertion:z.string().min(100).max(8192)}).strict();
 const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
   meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
@@ -121,7 +123,7 @@ export function getOpenApiDocument(app: FastifyInstance): Record<string, unknown
 
 export async function createServer(dependencies: ApiDependencies): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","res.headers.set-cookie","body.token"] } : false,
+    logger: dependencies.logger ? { redact:["req.headers.authorization","req.headers.cookie","req.body.clientAssertion","res.headers.set-cookie","body.token","body.clientAssertion"] } : false,
     trustProxy: true,
     bodyLimit: 2 * 1024 * 1024,
     genReqId: request => {
@@ -174,7 +176,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.addHook("preHandler", async (request, reply) => {
     const store = dependencies.idempotencyStore;
-    if (!store || !request.url.startsWith("/v1/") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
+    if (!store || request.url==="/v1/service-account-assertions/token" || !request.url.startsWith("/v1/") || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
     const key = request.headers["idempotency-key"];
     if (key === undefined) return;
     if (typeof key !== "string" || !/^[A-Za-z0-9._:-]{16,200}$/.test(key)) throw new DomainError("idempotency_key_invalid", "Idempotency-Key must contain 16 to 200 safe ASCII characters.", 400);
@@ -416,6 +418,27 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     for(const assignment of input.assignments)await authorizer.require(session,{workspaceId:assignment.workspaceId,organisationId,permission:"service_accounts.manage",resourceType:"service_account_assignment"});
     if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service accounts are not configured.",503);
     return{serviceAccount:await dependencies.credentialService.createOrganisationServiceAccount(session,{organisationId,...input},request.id)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/assertion-keys",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId,serviceAccountId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid()}).parse(request.params);const input=serviceAssertionKeyInput.parse(request.body);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    return{key:await dependencies.credentialService.registerServiceAccountAssertionKey(session,serviceAccountId,workspaceId,input.keyId,input.publicKeyDerBase64,request.id)};
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/assertion-keys/:keyId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId,serviceAccountId,keyId}=z.object({workspaceId:z.string().uuid(),serviceAccountId:z.string().uuid(),keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)}).parse(request.params);const{reason}=credentialRevocationInput.parse(request.body);
+    await authorizer.require(session,{workspaceId,permission:"api_credentials.manage",resourceType:"service_account",resourceId:serviceAccountId});
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    if(!await dependencies.credentialService.revokeServiceAccountAssertionKey(session,serviceAccountId,workspaceId,keyId,reason,request.id))throw new DomainError("assertion_key_not_found","Assertion key was not found or was already revoked.",404);
+    return{revoked:true};
+  });
+
+  app.post("/v1/service-account-assertions/token",{config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async request=>{
+    if(!dependencies.credentialService)throw new DomainError("credential_service_unavailable","Service-account assertions are not configured.",503);
+    const input=serviceAssertionExchangeInput.parse(request.body);
+    return{credential:await dependencies.credentialService.exchangeServiceAccountAssertion(input.clientAssertion)};
   });
 
   app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{

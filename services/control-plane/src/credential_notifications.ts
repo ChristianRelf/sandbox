@@ -26,13 +26,13 @@ export class PostgresCredentialExpiryNotifier {
     const candidates=await this.databaseQuery<CandidateRow>(`
       WITH recipients AS (
         SELECT token.id token_id,token.expires_at,token.token_kind,token.revoked_at,token.owner_account_id recipient_account_id
-        FROM access_tokens token WHERE token.token_kind='personal'
+        FROM access_tokens token WHERE token.token_kind='personal' AND token.expiry_notification_enabled
         UNION ALL
         SELECT token.id,token.expires_at,token.token_kind,token.revoked_at,owner.account_id
         FROM access_tokens token
         JOIN service_accounts service ON service.id=token.service_account_id AND service.status='active'
         JOIN service_account_owners owner ON owner.service_account_id=service.id
-        WHERE token.token_kind='service_account'
+        WHERE token.token_kind='service_account' AND token.expiry_notification_enabled
       )
       SELECT recipient.token_id,recipient.recipient_account_id,threshold.reminder_days
       FROM recipients recipient

@@ -1,5 +1,6 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createPublicKey,randomBytes, randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { exportSPKI,generateKeyPair,SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthenticatedSession } from "./types.js";
 import { CompositeSessionVerifier, PostgresCredentialService } from "./credentials.js";
@@ -10,7 +11,8 @@ const integration=connectionString?describe:describe.skip;
 
 integration("service accounts and access tokens",()=>{
   const pool=new Pool({connectionString,max:4});
-  const credentials=new PostgresCredentialService(pool,randomBytes(32));
+  const assertionAudience="https://api.example.test/v1/service-account-assertions/token";
+  const credentials=new PostgresCredentialService(pool,randomBytes(32),assertionAudience);
   const accountId=randomUUID(),organisationId=randomUUID(),workspaceId=randomUUID(),secondWorkspaceId=randomUUID(),environmentId=randomUUID(),secondEnvironmentId=randomUUID(),ownerRoleId=randomUUID(),serviceRoleId=randomUUID();
   const actor:AuthenticatedSession={accountId,sessionId:randomUUID(),subject:`user:${accountId}`,email:`${accountId}@example.invalid`,issuedAt:new Date(),expiresAt:new Date(Date.now()+3600_000),authenticationMethods:["passkey"],platformPermissions:[]};
   let serviceAccountId:string;
@@ -54,11 +56,24 @@ integration("service accounts and access tokens",()=>{
     const issued=await credentials.issueServiceAccountToken(actor,service.id,{name:"Production deploy",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresAt:new Date(Date.now()+14*86_400_000)},randomUUID());
     expect(issued.token).toMatch(/^sbx_sa_/);
     expect(await credentials.verify(issued.token)).toMatchObject({principalType:"service_account",principalId:service.id,credentialScopes:["workflows.run"],principalPermissions:expect.arrayContaining(["workflows.run","workflows.view"])});
+    await expect(credentials.issueServiceAccountToken(actor,service.id,{name:"Unbounded",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[],expiresAt:new Date(Date.now()+86_400_000)},randomUUID())).rejects.toMatchObject({code:"credential_environment_required"});
     await expect(credentials.issueServiceAccountToken(actor,service.id,{name:"Escalated",scopes:["organisation.delete"],organisationId,workspaceIds:[workspaceId],environmentIds:[environmentId],expiresAt:new Date(Date.now()+86_400_000)},randomUUID())).rejects.toMatchObject({code:"credential_scope_denied"});
     const interactive=new CompositeSessionVerifier({verify:async()=>({...actor,accountId:servicePrincipalId})},credentials);
     await expect(interactive.verify("oidc-token")).rejects.toMatchObject({code:"interactive_login_forbidden"});
     const client=await pool.connect();
     try{await client.query('BEGIN');await client.query(`DELETE FROM service_account_owners WHERE service_account_id=$1`,[service.id]);await expect(client.query('COMMIT')).rejects.toThrow(/human_owner_required/);}finally{await client.query('ROLLBACK').catch(()=>undefined);client.release();}
+  });
+
+  it("exchanges an audience-bound Ed25519 assertion once and rejects a revoked key",async()=>{
+    const keyId="integration-2026",{publicKey,privateKey}=await generateKeyPair("EdDSA"),publicKeyDer=createPublicKey(await exportSPKI(publicKey)).export({format:"der",type:"spki"});
+    await credentials.registerServiceAccountAssertionKey(actor,serviceAccountId,workspaceId,keyId,publicKeyDer.toString("base64"),randomUUID());
+    const assertion=async()=>new SignJWT({sandbox_scopes:["workflows.run"],sandbox_workspace_ids:[workspaceId],sandbox_environment_ids:[environmentId]}).setProtectedHeader({alg:"EdDSA",kid:keyId}).setIssuer(serviceAccountId).setSubject(serviceAccountId).setAudience(assertionAudience).setJti(randomUUID()).setIssuedAt().setExpirationTime("4m").sign(privateKey);
+    const signed=await assertion(),issued=await credentials.exchangeServiceAccountAssertion(signed);
+    expect(await credentials.verify(issued.token)).toMatchObject({principalType:"service_account",principalId:serviceAccountId,credentialScopes:["workflows.run"],workspaceRestrictions:[workspaceId],environmentRestrictions:[environmentId]});
+    await expect(credentials.exchangeServiceAccountAssertion(signed)).rejects.toMatchObject({code:"client_assertion_replayed"});
+    expect(await credentials.revokeServiceAccountAssertionKey(actor,serviceAccountId,workspaceId,keyId,"rotation",randomUUID())).toBe(true);
+    await expect(credentials.verify(issued.token)).rejects.toMatchObject({code:"invalid_session"});
+    await expect(credentials.exchangeServiceAccountAssertion(await assertion())).rejects.toMatchObject({code:"client_assertion_invalid"});
   });
 
   it("creates one organisation principal with separately bounded workspace assignments",async()=>{

@@ -56,7 +56,7 @@ function dependencies(permissions: string[]) {
   const runnerCommandSigner: RunnerCommandSigner = { keyId: "control-plane-1", sign: vi.fn(() => Buffer.alloc(64, 7).toString("base64")) };
   const billing: BillingProvider = { createCheckout: vi.fn(), parseWebhook: vi.fn() };
   const entitlementSigner: EntitlementClaimSigner = { keyId: "entitlement-1", issuer: "https://api.sandbox.test", sign: vi.fn(record => ({ entitlementId: record.entitlementId, owner: { ownerType: record.ownerType, ownerId: record.ownerId }, pluginId: record.pluginId, planId: record.planId, status: record.status, seatAllowance: record.seatAllowance, validFrom: record.startsAt, validUntil: record.renewsAt, offlineGraceUntil: record.offlineGraceUntil, issuer: "https://api.sandbox.test", keyId: "entitlement-1", signature: Buffer.alloc(64, 8).toString("base64") })) };
-  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),createOrganisationServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn()};
+  const credentialService:CredentialAdministration={createServiceAccount:vi.fn(),createOrganisationServiceAccount:vi.fn(),listServiceAccounts:vi.fn(),issuePersonalToken:vi.fn(),issueServiceAccountToken:vi.fn(),listPersonalTokens:vi.fn(),revokeToken:vi.fn(),registerServiceAccountAssertionKey:vi.fn(),revokeServiceAccountAssertionKey:vi.fn(),exchangeServiceAccountAssertion:vi.fn()};
   return { repository, sessions, email, packageStorage, packageScanner, runnerCommandSigner, billing, entitlementSigner, credentialService, webhookProtector: new WebhookProtector(Buffer.alloc(32, 4)), protectedValueProtector: new WebhookProtector(Buffer.alloc(32, 5)), webhookBaseUrl: "https://hooks.sandbox.test", webBaseUrl: "https://app.sandbox.test" };
 }
 
@@ -127,6 +127,20 @@ describe("control-plane API", () => {
     const deps=dependencies(["api_credentials.manage"]),secondWorkspaceId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";vi.mocked(deps.repository.permissions).mockImplementation(async(_accountId,requestedWorkspaceId)=>new Set<Permission>(requestedWorkspaceId===workspaceId?["api_credentials.manage"]:[]));
     const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts/dddddddd-dddd-4ddd-8ddd-dddddddddddd/tokens`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{name:"Fleet token",scopes:["workflows.run"],organisationId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",workspaceIds:[workspaceId,secondWorkspaceId],expiresInDays:1}});
     expect(response.statusCode).toBe(403);expect(deps.credentialService.issueServiceAccountToken).not.toHaveBeenCalled();await server.close();
+  });
+
+  it("registers assertion keys only through a fresh human credential administrator",async()=>{
+    const deps=dependencies(["api_credentials.manage"]),serviceAccountId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",createdAt=new Date().toISOString();
+    vi.mocked(deps.credentialService.registerServiceAccountAssertionKey).mockResolvedValue({serviceAccountId,workspaceId,keyId:"ci-2026",algorithm:"EdDSA",createdAt,revokedAt:null});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/service-accounts/${serviceAccountId}/assertion-keys`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{keyId:"ci-2026",publicKeyDerBase64:Buffer.alloc(44).toString("base64")}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.credentialService.registerServiceAccountAssertionKey).toHaveBeenCalledWith(session,serviceAccountId,workspaceId,"ci-2026",expect.any(String),expect.any(String));await server.close();
+  });
+
+  it("exchanges a signed client assertion without requiring an existing bearer token",async()=>{
+    const deps=dependencies([]),assertion=`${"a".repeat(40)}.${"b".repeat(40)}.${"c".repeat(40)}`,organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    vi.mocked(deps.credentialService.exchangeServiceAccountAssertion).mockResolvedValue({id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",name:"assertion:ci",prefix:"sbx_sa_abcdefghijkl",token:"sbx_sa_abcdefghijkl.secret",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId],environmentIds:[],createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+900_000).toISOString()});
+    const server=await createServer(deps);const response=await server.inject({method:"POST",url:"/v1/service-account-assertions/token",payload:{clientAssertion:assertion}});
+    expect(response.statusCode,response.body).toBe(200);expect(deps.sessions.verify).not.toHaveBeenCalled();expect(deps.credentialService.exchangeServiceAccountAssertion).toHaveBeenCalledWith(assertion);await server.close();
   });
 
   it("requires server-side workspace permission for invitations", async () => {
