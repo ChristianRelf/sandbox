@@ -4,6 +4,8 @@ import { apiInfo, apiOperations } from "../../../../lib/openapi";
 export const metadata: Metadata = {
   title: "API reference",
   description: "Generated reference for the stable Sandbox control-plane v1 API.",
+  openGraph: { images: [] },
+  twitter: { images: [] },
 };
 
 export default function ApiReferencePage() {

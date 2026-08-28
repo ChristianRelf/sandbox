@@ -12,6 +12,18 @@ export const metadata: Metadata = {
   title: { default: "Sandbox documentation", template: "%s — Sandbox Docs" },
   description: "Practical guides and technical reference for building, running and operating Sandbox visual automations.",
   alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    title: "Sandbox Docs",
+    description: "Build it. Run it. Understand every step.",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Sandbox Docs" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sandbox Docs",
+    description: "Build it. Run it. Understand every step.",
+    images: ["/og.png"],
+  },
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

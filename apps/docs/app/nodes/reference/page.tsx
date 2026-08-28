@@ -1,7 +1,12 @@
 import catalogue from "../../../generated/nodes.json";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Node reference", description: "Generated reference for built-in Sandbox workflow nodes." };
+export const metadata: Metadata = {
+  title: "Node reference",
+  description: "Generated reference for built-in Sandbox workflow nodes.",
+  openGraph: { images: [] },
+  twitter: { images: [] },
+};
 
 export default function NodeReferencePage() {
   const groups = Object.groupBy(catalogue.nodes, node => node.category);

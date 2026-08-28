@@ -20,7 +20,20 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Params }) {
   const { slug } = await params;
   const page = docs.find(candidate => candidate.slug === (slug?.join("/") ?? "getting-started"));
-  return page ? { title: page.title, description: page.description } : {};
+  if (!page) return {};
+
+  const articleMetadata = {
+    title: page.title,
+    description: page.description,
+  };
+
+  return slug?.length
+    ? {
+        ...articleMetadata,
+        openGraph: { ...articleMetadata, images: [] },
+        twitter: { ...articleMetadata, images: [] },
+      }
+    : articleMetadata;
 }
 
 export default async function Page({ params }: { params: Params }) {
