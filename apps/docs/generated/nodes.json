@@ -1,0 +1,594 @@
+{
+  "generatedFrom": "src/catalogue.ts",
+  "nodes": [
+    {
+      "type": "manual_trigger",
+      "name": "Manual Trigger",
+      "description": "Run from the toolbar",
+      "category": "Triggers",
+      "version": 1,
+      "configurationDefaults": {},
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "schedule_trigger",
+      "name": "Schedule Trigger",
+      "description": "Run on a local schedule",
+      "category": "Triggers",
+      "version": 1,
+      "configurationDefaults": {
+        "scheduleType": "minutes",
+        "every": 15,
+        "time": "09:00",
+        "cron": "0 */15 * * *"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "file_watch_trigger",
+      "name": "File Watch Trigger",
+      "description": "Watch an approved folder",
+      "category": "Triggers",
+      "version": 1,
+      "configurationDefaults": {
+        "folder": "",
+        "events": [
+          "created"
+        ],
+        "pattern": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "gmail_new_email_trigger",
+      "name": "New Email",
+      "description": "Poll Gmail safely for matching messages",
+      "category": "Triggers",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "pollIntervalMinutes": 5,
+        "sender": "",
+        "recipient": "",
+        "subjectContains": "",
+        "hasAttachment": false,
+        "label": "",
+        "includeHtmlBody": false,
+        "markAsProcessed": "deduplicate"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "condition",
+      "name": "Condition",
+      "description": "Follow a true or false branch",
+      "category": "Logic",
+      "version": 1,
+      "configurationDefaults": {
+        "left": "",
+        "operator": "equals",
+        "right": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "set_data",
+      "name": "Set Data",
+      "description": "Construct a structured object",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "values": {
+          "key": "value"
+        }
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "delay",
+      "name": "Delay",
+      "description": "Wait without blocking the runner",
+      "category": "Logic",
+      "version": 1,
+      "configurationDefaults": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "http_request",
+      "name": "HTTP Request",
+      "description": "Call an HTTP endpoint",
+      "category": "Network",
+      "version": 1,
+      "configurationDefaults": {
+        "method": "GET",
+        "url": "",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "timeoutMs": 30000,
+        "retryCount": 0
+      },
+      "risk": "medium",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "desktop_notification",
+      "name": "Desktop Notification",
+      "description": "Show a native notification",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "title": "Sandbox",
+        "message": "Workflow completed"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "move_file",
+      "name": "Move File",
+      "description": "Move within approved folders",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "source": "",
+        "destinationFolder": "",
+        "renameTo": "",
+        "overwrite": false
+      },
+      "risk": "medium",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "run_command",
+      "name": "Run Command",
+      "description": "Execute an explicitly approved process",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "executable": "",
+        "arguments": [],
+        "workingDirectory": "",
+        "timeoutMs": 30000
+      },
+      "risk": "high",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "open_browser",
+      "name": "Open Browser",
+      "description": "Start a managed Chromium session",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "profileId": "",
+        "headed": true,
+        "initialUrl": "",
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "defaultTimeoutMs": 30000,
+        "closeAutomatically": true,
+        "keepOpenAfterManualTest": false,
+        "maximumDurationMs": 1800000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "navigate",
+      "name": "Navigate",
+      "description": "Load a URL in the active session",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "url": "",
+        "waitCondition": "dom_ready",
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "click_element",
+      "name": "Click Element",
+      "description": "Click a recorded element",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "clickType": "normal",
+        "mouseButton": "left",
+        "modifiers": [],
+        "waitAfterMs": 0,
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "fill_field",
+      "name": "Fill Field",
+      "description": "Enter static or protected data",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "value": "",
+        "clearExisting": true,
+        "inputDelayMs": 0,
+        "sensitive": false,
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "select_option",
+      "name": "Select Option",
+      "description": "Choose an option by value, label or index",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "selectBy": "value",
+        "option": "",
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "press_key",
+      "name": "Press Key",
+      "description": "Send a validated key combination",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "key": "Enter",
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "wait_for",
+      "name": "Wait For",
+      "description": "Wait for page state or an element",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "waitFor": "element_visible",
+        "locator": null,
+        "delayMs": 1000,
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "extract_data",
+      "name": "Extract Data",
+      "description": "Extract structured values from the page",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "extract": "text",
+        "fieldName": "value",
+        "repeated": false,
+        "fields": {},
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "screenshot",
+      "name": "Screenshot",
+      "description": "Capture viewport, page or element",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "mode": "viewport",
+        "includeInHistory": true,
+        "maximumBytes": 10485760,
+        "timeoutMs": 30000
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "download_file",
+      "name": "Download File",
+      "description": "Save a browser download safely",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "destinationFolder": "",
+        "filename": "",
+        "collisionBehaviour": "rename",
+        "maximumBytes": 104857600,
+        "timeoutMs": 60000
+      },
+      "risk": "medium",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "upload_file",
+      "name": "Upload File",
+      "description": "Upload an approved local file",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {
+        "locator": null,
+        "file": "",
+        "timeoutMs": 30000
+      },
+      "risk": "high",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "close_browser",
+      "name": "Close Browser",
+      "description": "Close the active managed session",
+      "category": "Browser",
+      "version": 1,
+      "configurationDefaults": {},
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "managed-browser"
+      ]
+    },
+    {
+      "type": "gmail_get_email",
+      "name": "Get Email",
+      "description": "Retrieve a Gmail message",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "messageId": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "gmail_create_draft",
+      "name": "Create Gmail Draft",
+      "description": "Create an editable draft without sending",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "to": "",
+        "cc": "",
+        "bcc": "",
+        "subject": "",
+        "body": "",
+        "htmlBody": "",
+        "replyToMessage": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "gmail_send_email",
+      "name": "Send Email",
+      "description": "Send only after explicit workflow approval",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "to": "",
+        "cc": "",
+        "bcc": "",
+        "subject": "",
+        "body": "",
+        "htmlBody": "",
+        "replyToMessage": "",
+        "attachments": []
+      },
+      "risk": "high",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "gmail_add_label",
+      "name": "Add Gmail Label",
+      "description": "Add or remove message labels",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "messageId": "",
+        "addLabelIds": [],
+        "removeLabelIds": []
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "discord_webhook",
+      "name": "Discord Webhook",
+      "description": "Send a webhook message",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "content": "",
+        "username": "",
+        "avatarUrl": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "discord_embed",
+      "name": "Discord Embed",
+      "description": "Send a structured webhook embed",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "content": "",
+        "title": "",
+        "description": "",
+        "fields": [],
+        "color": 5793266,
+        "link": "",
+        "image": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "slack_webhook",
+      "name": "Slack Webhook",
+      "description": "Send an incoming webhook message",
+      "category": "Communication",
+      "version": 1,
+      "configurationDefaults": {
+        "credentialId": "",
+        "content": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "approval",
+      "name": "Manual Approval",
+      "description": "Pause for local review",
+      "category": "Logic",
+      "version": 1,
+      "configurationDefaults": {
+        "proposedAction": "",
+        "recipient": "",
+        "subject": "",
+        "messagePreview": "",
+        "attachments": [],
+        "expiresInMinutes": 60
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    }
+  ]
+}

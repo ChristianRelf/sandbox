@@ -4,13 +4,16 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseVersion = "0.5.0";
+const gaRuntimeVersion = "0.5.0";
+const publicExperienceVersion = "0.6.0";
 
-describe("v0.5 release compatibility", () => {
-  it("keeps product package and crate metadata on the documented release", () => {
+describe("v0.5 runtime compatibility in the v0.6 public experience", () => {
+  it("keeps public surfaces and GA runtime components on their documented versions", () => {
+    for (const file of ["package.json", "apps/web/package.json", "apps/marketing/package.json", "apps/docs/package.json"]) {
+      expect(JSON.parse(read(file)).version, file).toBe(publicExperienceVersion);
+    }
+
     const packages = [
-      "package.json",
-      "apps/web/package.json",
       "browser-sidecar/package.json",
       "packages/api-client/package.json",
       "packages/contracts/package.json",
@@ -20,7 +23,7 @@ describe("v0.5 release compatibility", () => {
       "services/scheduler/package.json"
     ];
     for (const file of packages) {
-      expect(JSON.parse(read(file)).version, file).toBe(releaseVersion);
+      expect(JSON.parse(read(file)).version, file).toBe(gaRuntimeVersion);
     }
 
     const crates = [
@@ -33,7 +36,7 @@ describe("v0.5 release compatibility", () => {
     for (const file of crates) {
       expect(read(file), file).toMatch(/^version = "0\.5\.0"$/m);
     }
-    expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(releaseVersion);
+    expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(gaRuntimeVersion);
   });
 
   it("keeps runtime constants and the published matrix aligned", () => {
