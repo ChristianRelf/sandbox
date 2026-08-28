@@ -1,6 +1,16 @@
-# Sandbox v0.3.0
+# Sandbox v0.6.0 development baseline
 
-Sandbox is a local-first visual desktop automation platform. v0.3 adds a capability-controlled WebAssembly plugin ecosystem, signed packages and exact workflow pins, optional encrypted sync, marketplace and publisher services, team workspaces, governed workflow publication, shared-connection deployment, and signed coordination of multiple local runners. Workflow execution remains local and existing personal workflows continue without an account or network connection.
+Sandbox is a local-first visual desktop automation platform. This checkout now includes independent marketing, account and documentation applications for the v0.6 public-product architecture. The execution and control-plane implementation in repository history remains v0.4; unavailable v0.5 commercial services are exposed as explicit launch blockers rather than simulated product data.
+
+## Public web development
+
+```powershell
+npm.cmd run marketing:dev  # http://localhost:3100
+npm.cmd run web:dev        # account application
+npm.cmd run docs:dev       # http://localhost:3200
+```
+
+See `docs/v0.6-public-architecture.md` and `docs/v0.6-launch-readiness.md` for routing, design, release, support, SEO, accessibility, deployment and migration details.
 
 ## Architecture
 
