@@ -71,6 +71,47 @@
         "security": []
       }
     },
+    "/ready": {
+      "get": {
+        "operationId": "get_ready",
+        "tags": [
+          "service"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "All required dependencies are ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "description": "At least one required dependency is not ready.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
     "/v1/account": {
       "delete": {
         "operationId": "delete_v1_account",
@@ -6797,6 +6838,56 @@
           },
           "execution": {
             "const": "local-only"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "checkedAt",
+          "checks"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "status",
+                "durationMs"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "not_ready"
+                  ]
+                },
+                "durationMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
           }
         },
         "additionalProperties": false

@@ -17,6 +17,7 @@ import { apiActorScope, apiRequestHash, buildOpenApiDocument, type ApiIdempotenc
 import type { PostgresUsageLedger } from "./usage.js";
 import type { UsageProducerAuthenticator } from "./usage_producer.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
+import { validMetricsBearer, type ReadinessService, type ServiceMetrics } from "./reliability.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -110,6 +111,9 @@ export interface ApiDependencies {
   protectedValueProtector?: WebhookProtector;
   credentialService?: CredentialAdministration;
   accessReviews?: ServiceAccountAccessReviewAdministration;
+  readiness?: ReadinessService;
+  metrics?: ServiceMetrics;
+  metricsBearerToken?: string;
   idempotencyStore?: ApiIdempotencyStore;
   usageLedger?: Pick<PostgresUsageLedger,"record">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
@@ -176,6 +180,9 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     reply.header("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
     return payload;
   });
+  app.addHook("onResponse", async (request, reply) => {
+    dependencies.metrics?.recordRequest(request.method, request.routeOptions.url ?? "unmatched", reply.statusCode, reply.elapsedTime);
+  });
 
   app.addHook("preHandler", async (request, reply) => {
     const store = dependencies.idempotencyStore;
@@ -227,6 +234,22 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   });
 
   app.get("/health", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async () => ({ status: "ok", service: "sandbox-control-plane", execution: "local-only" }));
+  app.get("/ready", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (_request, reply) => {
+    if (!dependencies.readiness) {
+      reply.status(503);
+      return { status: "not_ready", checkedAt: new Date().toISOString(), checks: [] };
+    }
+    const result = await dependencies.readiness.check();
+    dependencies.metrics?.recordReadiness(result.status === "ready");
+    if (result.status !== "ready") reply.status(503);
+    return result;
+  });
+  app.get("/metrics", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request, reply) => {
+    if (!dependencies.metrics || !dependencies.metricsBearerToken) throw new DomainError("metrics_unavailable", "Metrics are not configured.", 503);
+    if (!validMetricsBearer(request.headers.authorization, dependencies.metricsBearerToken)) throw new DomainError("authentication_required", "A valid metrics bearer token is required.", 401);
+    reply.type("text/plain; version=0.0.4; charset=utf-8");
+    return dependencies.metrics.prometheus();
+  });
   app.get("/v1/openapi.json", async () => getOpenApiDocument(app));
 
   app.post("/v1/internal/usage-events", async request => {

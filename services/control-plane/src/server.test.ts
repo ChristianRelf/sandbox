@@ -13,6 +13,7 @@ import { MemoryApiIdempotencyStore } from "./api_contract.js";
 import { HmacUsageProducerAuthenticator } from "./usage_producer.js";
 import type { UsageEventInput } from "./usage.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
+import { ReadinessService, ServiceMetrics } from "./reliability.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -103,6 +104,28 @@ describe("control-plane API", () => {
     const contract=await server.inject({method:"GET",url:"/v1/openapi.json"});
     expect(contract.statusCode,contract.body).toBe(200);
     expect(contract.json()).toMatchObject({openapi:"3.1.0",info:{version:"0.5.0"},paths:{"/v1/personal-access-tokens":{get:expect.any(Object),post:expect.any(Object)}}});
+    await server.close();
+  });
+
+  it("reports dependency readiness and exposes authenticated bounded metrics",async()=>{
+    let databaseReady=false;
+    const metrics=new ServiceMetrics();
+    const readiness=new ReadinessService([{name:"database",check:async()=>{if(!databaseReady)throw new Error("database unavailable");}}]);
+    const server=await createServer({...dependencies([]),readiness,metrics,metricsBearerToken:"metrics-secret"});
+    const unavailable=await server.inject({method:"GET",url:"/ready"});
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toMatchObject({status:"not_ready",checks:[{name:"database",status:"not_ready"}]});
+    databaseReady=true;
+    const ready=await server.inject({method:"GET",url:"/ready"});
+    expect(ready.statusCode,ready.body).toBe(200);
+    expect(ready.json()).toMatchObject({status:"ready",checks:[{name:"database",status:"ready"}]});
+    const denied=await server.inject({method:"GET",url:"/metrics",headers:{authorization:"Bearer wrong"}});
+    expect(denied.statusCode).toBe(401);
+    const exported=await server.inject({method:"GET",url:"/metrics",headers:{authorization:"Bearer metrics-secret"}});
+    expect(exported.statusCode,exported.body).toBe(200);
+    expect(exported.headers["content-type"]).toContain("text/plain");
+    expect(exported.body).toContain('sandbox_http_requests_total{method="GET",route="/ready",status_class="2xx"} 1');
+    expect(exported.body).toContain('sandbox_readiness_checks_total{outcome="not_ready"} 1');
     await server.close();
   });
 

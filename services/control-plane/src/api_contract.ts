@@ -127,7 +127,7 @@ export interface ApiRouteDescription { method: string; url: string }
 export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<string, unknown> {
   const paths: Record<string, Record<string, unknown>> = {};
   for (const route of routes
-    .filter(route => route.method !== "HEAD" && (route.url === "/health" || route.url.startsWith("/v1/")))
+    .filter(route => route.method !== "HEAD" && (["/health", "/ready"].includes(route.url) || route.url.startsWith("/v1/")))
     .sort((left, right) => left.url.localeCompare(right.url) || left.method.localeCompare(right.method))) {
     const path = route.url.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
     const method = route.method.toLowerCase();
@@ -154,7 +154,12 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
         "500": { $ref: "#/components/responses/ApiError" }
       }
     };
-    operation.security = path === "/health" || path === "/v1/openapi.json" || path === "/v1/service-account-assertions/token" || (method === "get" && path.startsWith("/v1/marketplace/"))
+    if (path === "/ready") operation.responses = {
+      "200": { description: "All required dependencies are ready.", content: { "application/json": { schema: { $ref: "#/components/schemas/ReadinessResponse" } } } },
+      "503": { description: "At least one required dependency is not ready.", content: { "application/json": { schema: { $ref: "#/components/schemas/ReadinessResponse" } } } },
+      "429": { $ref: "#/components/responses/RateLimited" }
+    };
+    operation.security = path === "/health" || path === "/ready" || path === "/v1/openapi.json" || path === "/v1/service-account-assertions/token" || (method === "get" && path.startsWith("/v1/marketplace/"))
       ? []
       : path.startsWith("/v1/runner/")
         ? [{ runnerDevice: [] }]
@@ -212,6 +217,7 @@ function isExplicitRequestSchema(path: string, method: string): boolean {
 
 function responseSchema(path: string, method: string): { $ref: string } {
   if (path === "/health") return { $ref: "#/components/schemas/HealthResponse" };
+  if (path === "/ready") return { $ref: "#/components/schemas/ReadinessResponse" };
   if (path === "/v1/marketplace/plugins" && method === "get") return { $ref: "#/components/schemas/MarketplacePage" };
   if (path === "/v1/personal-access-tokens" && method === "get") return { $ref: "#/components/schemas/TokenSummaryList" };
   if (path === "/v1/personal-access-tokens" && method === "post") return { $ref: "#/components/schemas/IssuedCredentialEnvelope" };
@@ -242,6 +248,7 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     ApiObject: { type: "object", description: "A versioned API resource object. Resource-specific fields are additive within v1.", additionalProperties: true },
     ApiError: { type: "object", required: ["error", "correlationId"], properties: { error: { type: "object", required: ["code", "message"], properties: { code: { type: "string" }, message: { type: "string" }, details: {} } }, correlationId: { type: "string" } } },
     HealthResponse: { type: "object", required: ["status", "service", "execution"], properties: { status: { const: "ok" }, service: { const: "sandbox-control-plane" }, execution: { const: "local-only" } }, additionalProperties: false },
+    ReadinessResponse: { type: "object", required: ["status", "checkedAt", "checks"], properties: { status: { type: "string", enum: ["ready", "not_ready"] }, checkedAt: dateTime, checks: { type: "array", items: { type: "object", required: ["name", "status", "durationMs"], properties: { name: { type: "string" }, status: { type: "string", enum: ["ready", "not_ready"] }, durationMs: { type: "integer", minimum: 0 } }, additionalProperties: false } } }, additionalProperties: false },
     PersonalAccessTokenInput: { type: "object", required: ["name", "scopes", "organisationId", "workspaceIds"], properties: { name: { type: "string", minLength: 1, maxLength: 120 }, scopes: stringArray, organisationId: uuid, workspaceIds: { type: "array", minItems: 1, items: uuid }, environmentIds: { type: "array", items: uuid, default: [] }, expiresInDays: { type: "integer", minimum: 1, maximum: 90, default: 30 } }, additionalProperties: false },
     CredentialRevocationInput: { type: "object", required: ["reason"], properties: { reason: { type: "string", minLength: 1, maxLength: 500 } }, additionalProperties: false },
     ServiceAccountAssertionKeyInput: { type: "object", required: ["keyId","publicKeyDerBase64"], properties: { keyId: { type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" }, publicKeyDerBase64: { type:"string",contentEncoding:"base64",maxLength:2048 } }, additionalProperties:false },
@@ -262,7 +269,7 @@ function apiSchemas(routes: ApiRouteDescription[]): Record<string, unknown> {
     RevocationResponse: { type: "object", required: ["revoked"], properties: { revoked: { const: true } }, additionalProperties: false },
     MarketplacePage: { type: "object", required: ["items", "nextCursor"], properties: { items: { type: "array", items: { type: "object", required: ["pluginId", "name", "version", "packageIntegrity"], properties: { pluginId: { type: "string" }, name: { type: "string" }, version: { type: "string" }, packageIntegrity: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" } }, additionalProperties: true } }, nextCursor: { oneOf: [{ type: "string" }, { type: "null" }] } }, additionalProperties: false }
   };
-  for (const route of routes.filter(route => route.method !== "HEAD" && (route.url === "/health" || route.url.startsWith("/v1/")))) {
+  for (const route of routes.filter(route => route.method !== "HEAD" && (["/health", "/ready"].includes(route.url) || route.url.startsWith("/v1/")))) {
     const path = route.url.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
     const method = route.method.toLowerCase();
     if (["post", "put", "patch", "delete"].includes(method)) {

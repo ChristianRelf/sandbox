@@ -14,6 +14,7 @@ import { PostgresUsageLedger } from "./usage.js";
 import { HmacUsageProducerAuthenticator,parseUsageProducerSecrets } from "./usage_producer.js";
 import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
 import { PostgresServiceAccountAccessReviews } from "./access_reviews.js";
+import { ReadinessService, RecurringTaskMonitor, ServiceMetrics } from "./reliability.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -39,6 +40,14 @@ const credentialExpiryNotifier=new PostgresCredentialExpiryNotifier(pool,email);
 const accessReviews=new PostgresServiceAccountAccessReviews(pool);
 const credentialExpirySweepIntervalMs=Number(process.env.CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS??3_600_000);
 if(!Number.isSafeInteger(credentialExpirySweepIntervalMs)||credentialExpirySweepIntervalMs<60_000)throw new Error("CREDENTIAL_EXPIRY_SWEEP_INTERVAL_MS must be an integer of at least 60000");
+const recurringTasks=new RecurringTaskMonitor();
+const recurringTaskMaximumAgeMs=credentialExpirySweepIntervalMs*2;
+const metrics=new ServiceMetrics();
+const readiness=new ReadinessService([
+  {name:"database",check:async()=>{await pool.query("SELECT 1");}},
+  recurringTasks.probe("credential-expiry-notifications",recurringTaskMaximumAgeMs),
+  recurringTasks.probe("service-account-access-reviews",recurringTaskMaximumAgeMs)
+]);
 
 const server = await createServer({
   repository: new PostgresRepository(pool),
@@ -55,6 +64,9 @@ const server = await createServer({
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   usageLedger: new PostgresUsageLedger(pool),
   usageProducerAuthenticator: new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(required("USAGE_PRODUCER_SECRETS_JSON"))),
+  readiness,
+  metrics,
+  metricsBearerToken:required("METRICS_BEARER_TOKEN"),
   protectedValueProtector: new WebhookProtector(Buffer.from(required("PROTECTED_VALUE_ENCRYPTION_KEY_BASE64"), "base64")),
   webhookBaseUrl: controlPlanePublicUrl,
   webBaseUrl: required("WEB_BASE_URL"),
@@ -62,8 +74,8 @@ const server = await createServer({
 });
 
 let credentialNotificationTimer:NodeJS.Timeout|undefined,accessReviewTimer:NodeJS.Timeout|undefined;
-const runCredentialNotifications=async()=>{try{const result=await credentialExpiryNotifier.runOnce();if(result.enqueued||result.sent||result.failed)server.log.info(result,"credential expiry notification sweep completed");}catch(error){server.log.error(error,"credential expiry notification sweep failed");}};
-const runAccessReviews=async()=>{try{const result=await accessReviews.runOnce();if(result.opened||result.overdue||result.revokedCredentials)server.log.info(result,"service-account access-review sweep completed");}catch(error){server.log.error(error,"service-account access-review sweep failed");}};
+const runCredentialNotifications=async()=>{try{const result=await credentialExpiryNotifier.runOnce();recurringTasks.success("credential-expiry-notifications");if(result.enqueued||result.sent||result.failed)server.log.info(result,"credential expiry notification sweep completed");}catch(error){server.log.error(error,"credential expiry notification sweep failed");}};
+const runAccessReviews=async()=>{try{const result=await accessReviews.runOnce();recurringTasks.success("service-account-access-reviews");if(result.opened||result.overdue||result.revokedCredentials)server.log.info(result,"service-account access-review sweep completed");}catch(error){server.log.error(error,"service-account access-review sweep failed");}};
 const shutdown = async () => {
   if(credentialNotificationTimer)clearInterval(credentialNotificationTimer);
   if(accessReviewTimer)clearInterval(accessReviewTimer);
