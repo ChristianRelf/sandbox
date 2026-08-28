@@ -235,6 +235,10 @@
   box-shadow: 0 0 0 2px var(--accent-ring), 0 5px 20px rgba(0, 0, 0, .3);
 }
 
+:root[data-node-descriptions="false"] .node-card > small {
+  display: none;
+}
+
 :root[data-density="compact"] .content {
   padding: 24px 30px;
 }

@@ -1,4 +1,4 @@
-import { Accessibility, Copy, ExternalLink, LayoutPanelLeft, MoreHorizontal, Palette, Plus, RefreshCcw, RotateCcw, ShieldCheck, Trash2, Workflow } from "lucide-react";
+import { Accessibility, Cable, Copy, ExternalLink, FlaskConical, Globe2, LayoutPanelLeft, MoreHorizontal, Palette, Plus, RefreshCcw, RotateCcw, Settings2, ShieldCheck, Trash2, Workflow } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import { usePreferences } from "../preferences";
@@ -6,8 +6,20 @@ import type { BrowserEngineStatus, BrowserProfile, BrowserProfileSettings } from
 import { ConnectionsSettings } from "./ConnectionsSettings";
 
 const defaults: BrowserProfileSettings = { viewportWidth: 1280, viewportHeight: 800, permissions: [] };
+type SettingsSectionId = "general" | "appearance" | "accessibility" | "nodes" | "connections" | "browser" | "beta";
+const settingsSections: Array<{id: SettingsSectionId; label: string; icon: ReactNode}> = [
+  { id: "general", label: "General", icon: <Settings2 size={15}/> },
+  { id: "appearance", label: "Appearance", icon: <Palette size={15}/> },
+  { id: "accessibility", label: "Accessibility", icon: <Accessibility size={15}/> },
+  { id: "nodes", label: "Node editor", icon: <Workflow size={15}/> },
+  { id: "connections", label: "Connections", icon: <Cable size={15}/> },
+  { id: "browser", label: "Browser", icon: <Globe2 size={15}/> },
+  { id: "beta", label: "Beta & updates", icon: <FlaskConical size={15}/> },
+];
 
 export function SettingsView() {
+  const preferences = usePreferences();
+  const [section, setSection] = useState<SettingsSectionId>("general");
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [engine, setEngine] = useState<BrowserEngineStatus>();
   const [editing, setEditing] = useState<BrowserProfile | "new">();
@@ -40,11 +52,38 @@ export function SettingsView() {
   };
 
   return <main className="content settings-page">
-    <header className="page-header"><div><h1>Settings</h1><p>Personalise Sandbox, choose accessible defaults, and manage local connections.</p></div></header>
-    <AppPreferenceSettings />
-    <div className="settings-service-grid"><section className="settings-section">
+    <header className="settings-topbar"><span>Settings</span><button className="settings-reset" onClick={preferences.reset}><RotateCcw size={13}/>Restore defaults</button></header>
+    <div className="settings-layout">
+      <nav className="settings-nav" aria-label="Settings sections">{settingsSections.map(item=><button key={item.id} className={section===item.id?"active":""} aria-current={section===item.id?"page":undefined} onClick={()=>setSection(item.id)}>{item.icon}<span>{item.label}</span></button>)}</nav>
+      <div className="settings-panel">
+        {section==="general"&&<PreferencePanel title="General" description="Choose how Sandbox starts and how everyday workflow information is presented.">
+          <SelectPreference label="Start screen" description="The view Sandbox opens after launch." value={preferences.startView} onChange={value=>preferences.update({startView:value as "workflows"|"history"})}><option value="workflows">Workflows</option><option value="history">Run history</option></SelectPreference>
+          <SelectPreference label="Date and time" description="Show timestamps relative to now or with your system locale." value={preferences.dateDisplay} onChange={value=>preferences.update({dateDisplay:value as "relative"|"absolute"})}><option value="relative">Relative</option><option value="absolute">Date and time</option></SelectPreference>
+          <PreferenceToggle label="Confirm unsaved navigation" description="Warn before leaving a workflow with local changes." checked={preferences.confirmBeforeLeaving} onChange={confirmBeforeLeaving=>preferences.update({confirmBeforeLeaving})}/>
+        </PreferencePanel>}
+        {section==="appearance"&&<PreferencePanel title="Appearance" description="Tune the workspace for your display without changing workflow content.">
+          <SelectPreference label="Surface" description="Choose the base application background." value={preferences.surfaceTheme} onChange={value=>preferences.update({surfaceTheme:value as "charcoal"|"oled"})}><option value="charcoal">Charcoal</option><option value="oled">OLED black</option></SelectPreference>
+          <SelectPreference label="Accent colour" description="Used for focus, active controls, and live workflow state." value={preferences.accent} onChange={value=>preferences.update({accent:value as "lime"|"violet"|"blue"})}><option value="lime">Sandbox lime</option><option value="violet">Violet</option><option value="blue">Electric blue</option></SelectPreference>
+          <SelectPreference label="Interface density" description="Reduce spacing on information-dense screens." value={preferences.density} onChange={value=>preferences.update({density:value as "comfortable"|"compact"})}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></SelectPreference>
+          <PreferenceToggle icon={<LayoutPanelLeft size={14}/>} label="Compact sidebar" description="Give the canvas and wide tables more horizontal room." checked={preferences.sidebarCollapsed} onChange={sidebarCollapsed=>preferences.update({sidebarCollapsed})}/>
+        </PreferencePanel>}
+        {section==="accessibility"&&<PreferencePanel title="Accessibility" description="Defaults that reduce visual load and keep the editor usable without drag interactions.">
+          <PreferenceToggle label="Reduce motion" description="Stop decorative transitions and pulsing states." checked={preferences.reduceMotion} onChange={reduceMotion=>preferences.update({reduceMotion})}/>
+          <PreferenceToggle label="Increase contrast" description="Strengthen borders, muted text, and keyboard focus rings." checked={preferences.increasedContrast} onChange={increasedContrast=>preferences.update({increasedContrast})}/>
+          <PreferenceToggle label="Accessible editor by default" description="Open the structured, keyboard-friendly workflow editor with each workflow." checked={preferences.accessibleEditorDefault} onChange={accessibleEditorDefault=>preferences.update({accessibleEditorDefault})}/>
+        </PreferencePanel>}
+        {section==="nodes"&&<PreferencePanel title="Node editor" description="Control canvas guidance, node detail, and placement behaviour.">
+          <PreferenceToggle label="Show canvas minimap" description="Keep a workflow overview in the lower-right corner." checked={preferences.showMinimap} onChange={showMinimap=>preferences.update({showMinimap})}/>
+          <PreferenceToggle label="Snap nodes to grid" description="Align moved nodes to a consistent canvas grid." checked={preferences.snapToGrid} onChange={snapToGrid=>preferences.update({snapToGrid})}/>
+          <SelectPreference disabled={!preferences.snapToGrid} label="Grid spacing" description="Distance between canvas alignment points." value={String(preferences.gridSize)} onChange={value=>preferences.update({gridSize:Number(value) as 10|20|40})}><option value="10">Fine · 10 px</option><option value="20">Balanced · 20 px</option><option value="40">Wide · 40 px</option></SelectPreference>
+          <PreferenceToggle label="Show canvas hints" description="Display the add-node keyboard and double-click hint." checked={preferences.showCanvasHints} onChange={showCanvasHints=>preferences.update({showCanvasHints})}/>
+          <PreferenceToggle label="Show node descriptions" description="Keep configuration summaries visible inside node cards." checked={preferences.showNodeDescriptions} onChange={showNodeDescriptions=>preferences.update({showNodeDescriptions})}/>
+          <PreferenceToggle label="Confirm configured node deletion" description="Ask before deleting a node that already contains configuration." checked={preferences.confirmNodeDeletion} onChange={confirmNodeDeletion=>preferences.update({confirmNodeDeletion})}/>
+        </PreferencePanel>}
+        {section==="connections"&&<ConnectionsSettings/>}
+        {section==="browser"&&<section className="settings-section settings-browser-section">
       <div className="settings-heading">
-        <div><h2>Browser Profiles</h2><p>Isolated Chromium identities. Sandbox never reads your personal browser profile.</p></div>
+        <div><h2>Browser profiles</h2><p>Isolated Chromium identities. Sandbox never reads your personal browser profile.</p></div>
         <button className="button primary" onClick={() => setEditing("new")}><Plus size={14} />New profile</button>
       </div>
       <div className={`engine-health ${engine?.available ? "available" : "unavailable"}`}>
@@ -64,8 +103,13 @@ export function SettingsView() {
         <button className="icon-button" title="Duplicate without browser data" aria-label={`Duplicate ${profile.name} without browser data`} onClick={() => act(() => api.duplicateBrowserProfile(profile.id))}><Copy size={14} /></button>
         <button className="icon-button" title="Edit profile" aria-label={`Edit ${profile.name}`} onClick={() => setEditing(profile)}><MoreHorizontal size={15} /></button>
       </div>)}</div> : <div className="settings-empty"><ShieldCheck size={22} /><h3>No managed profiles</h3><p>Create an isolated Chromium identity for browser workflows and recording.</p><button className="button" onClick={() => setEditing("new")}>Create browser profile</button></div>}
-    </section>
-    <ConnectionsSettings />
+    </section>}
+        {section==="beta"&&<PreferencePanel title="Beta & updates" description="Control prerelease discovery for this device. Beta updates may change workflow behaviour.">
+          <PreferenceToggle label="Check for desktop updates" description="Check the signed GitHub release feed when Sandbox starts." checked={preferences.checkForUpdates} onChange={checkForUpdates=>preferences.update({checkForUpdates})}/>
+          <SelectPreference disabled={!preferences.checkForUpdates} label="Update channel" description="Stable ignores prerelease builds; Beta includes newer beta and release-candidate builds." value={preferences.updateChannel} onChange={value=>preferences.update({updateChannel:value as "beta"|"stable"})}><option value="beta">Beta</option><option value="stable">Stable</option></SelectPreference>
+          <div className="settings-release-card"><span>Installed version</span><strong>Sandbox 0.7.0-beta.1</strong><small>Desktop installers and Linux runners are verified against the same immutable release tag.</small></div>
+        </PreferencePanel>}
+      </div>
     </div>
     {editing && <ProfileEditor
       profile={editing === "new" ? undefined : editing}
@@ -78,33 +122,16 @@ export function SettingsView() {
   </main>;
 }
 
-function AppPreferenceSettings() {
-  const preferences = usePreferences();
-  const update = preferences.update;
-  return <section className="preference-section" aria-labelledby="app-preferences-title">
-    <div className="settings-heading preference-heading"><div><h2 id="app-preferences-title">App preferences</h2><p>Saved on this device and applied immediately.</p></div><button className="button" onClick={preferences.reset}><RotateCcw size={13}/>Reset defaults</button></div>
-    <div className="preference-grid">
-      <article className="preference-card"><header><span><Palette size={16}/></span><div><h3>Appearance</h3><p>Shape the workspace around your display.</p></div></header>
-        <label className="field"><span>Surface</span><select value={preferences.surfaceTheme} onChange={event=>update({surfaceTheme:event.target.value as "charcoal"|"oled"})}><option value="charcoal">Charcoal</option><option value="oled">OLED black</option></select></label>
-        <label className="field"><span>Accent</span><select value={preferences.accent} onChange={event=>update({accent:event.target.value as "lime"|"violet"|"blue"})}><option value="lime">Sandbox lime</option><option value="violet">Violet</option><option value="blue">Electric blue</option></select></label>
-        <label className="field"><span>Interface density</span><select value={preferences.density} onChange={event=>update({density:event.target.value as "comfortable"|"compact"})}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
-      </article>
-      <article className="preference-card"><header><span><Accessibility size={16}/></span><div><h3>Accessibility</h3><p>Reduce visual load without losing context.</p></div></header>
-        <PreferenceToggle label="Reduce motion" description="Stops decorative transitions and pulsing states." checked={preferences.reduceMotion} onChange={reduceMotion=>update({reduceMotion})}/>
-        <PreferenceToggle label="Increase contrast" description="Strengthens borders, muted text, and focus rings." checked={preferences.increasedContrast} onChange={increasedContrast=>update({increasedContrast})}/>
-        <PreferenceToggle label="Accessible editor by default" description="Opens the structured, non-drag workflow editor with each workflow." checked={preferences.accessibleEditorDefault} onChange={accessibleEditorDefault=>update({accessibleEditorDefault})}/>
-      </article>
-      <article className="preference-card"><header><span><Workflow size={16}/></span><div><h3>Workspace</h3><p>Choose what the workflow canvas shows.</p></div></header>
-        <PreferenceToggle label="Show canvas minimap" description="Keeps a workflow overview in the lower-right corner." checked={preferences.showMinimap} onChange={showMinimap=>update({showMinimap})}/>
-        <PreferenceToggle label="Confirm unsaved navigation" description="Warns before leaving a workflow with local changes." checked={preferences.confirmBeforeLeaving} onChange={confirmBeforeLeaving=>update({confirmBeforeLeaving})}/>
-        <PreferenceToggle label="Compact sidebar" description="Gives the canvas and wide tables more horizontal room." checked={preferences.sidebarCollapsed} onChange={sidebarCollapsed=>update({sidebarCollapsed})} icon={<LayoutPanelLeft size={13}/>}/>
-      </article>
-    </div>
-  </section>;
+function PreferencePanel({title,description,children}:{title:string;description:string;children:ReactNode}) {
+  return <section className="preference-panel"><header><h1>{title}</h1><p>{description}</p></header><div className="preference-list">{children}</div></section>;
 }
 
 function PreferenceToggle({label,description,checked,onChange,icon}:{label:string;description:string;checked:boolean;onChange:(checked:boolean)=>void;icon?:ReactNode}) {
-  return <label className="preference-toggle"><span>{icon}<span><b>{label}</b><small>{description}</small></span></span><input type="checkbox" checked={checked} onChange={event=>onChange(event.target.checked)}/><i aria-hidden="true"/></label>;
+  return <label className="preference-row preference-toggle"><span>{icon}<span><b>{label}</b><small>{description}</small></span></span><input aria-label={label} type="checkbox" checked={checked} onChange={event=>onChange(event.target.checked)}/><i aria-hidden="true"/></label>;
+}
+
+function SelectPreference({label,description,value,onChange,disabled=false,children}:{label:string;description:string;value:string;onChange:(value:string)=>void;disabled?:boolean;children:ReactNode}) {
+  return <label className={`preference-row preference-select ${disabled?"disabled":""}`}><span><b>{label}</b><small>{description}</small></span><select aria-label={label} disabled={disabled} value={value} onChange={event=>onChange(event.target.value)}>{children}</select></label>;
 }
 
 function ProfileEditor({ profile, busy, onClose, onSave, onClear, onDelete }: {

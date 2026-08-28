@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { api } from "../api";
 import { definitionFor } from "../catalogue";
+import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
 import { Status } from "./Status";
 import { EmptyState } from "./EmptyState";
@@ -18,6 +19,7 @@ const templates = [
 
 export function Dashboard() {
   const { workflows, load, loading, openWorkflow, createWorkflow, deleteWorkflow } = useAppStore();
+  const dateDisplay = usePreferences(state => state.dateDisplay);
   const [search, setSearch] = useState("");
   const [running, setRunning] = useState<string>();
   useEffect(() => { load(); }, [load]);
@@ -43,10 +45,10 @@ export function Dashboard() {
         const trigger = workflow.nodes.find(node => node.id === workflow.triggerNodeId);
         const TriggerIcon = trigger ? definitionFor(trigger.type).icon : Clock3;
         return <div className="workflow-row" key={workflow.id} tabIndex={0} onDoubleClick={() => openWorkflow(workflow.id)} onKeyDown={event => event.key === "Enter" && openWorkflow(workflow.id)}>
-          <div className="workflow-name"><span className={`enable-dot ${workflow.enabled ? "enabled" : ""}`} /><div><b>{workflow.name}</b><small>{workflow.description || `${workflow.nodes.length} nodes · Updated ${formatDistanceToNow(new Date(workflow.updatedAt), { addSuffix: true })}`}</small></div></div>
+          <div className="workflow-name"><span className={`enable-dot ${workflow.enabled ? "enabled" : ""}`} /><div><b>{workflow.name}</b><small>{workflow.description || `${workflow.nodes.length} nodes · Updated ${formatDate(workflow.updatedAt, dateDisplay)}`}</small></div></div>
           <div className="muted-cell"><TriggerIcon size={14} />{trigger?.name ?? "Missing trigger"}</div>
-          <div>{lastExecution ? <><Status status={lastExecution.status} /><small>{formatDistanceToNow(new Date(lastExecution.startedAt), { addSuffix: true })}</small></> : <span className="muted">Never run</span>}</div>
-          <div className="muted-cell">{nextRunAt ? <><Clock3 size={14} />{formatDistanceToNow(new Date(nextRunAt), { addSuffix: true })}</> : <span>—</span>}</div>
+          <div>{lastExecution ? <><Status status={lastExecution.status} /><small>{formatDate(lastExecution.startedAt, dateDisplay)}</small></> : <span className="muted">Never run</span>}</div>
+          <div className="muted-cell">{nextRunAt ? <><Clock3 size={14} />{formatDate(nextRunAt, dateDisplay)}</> : <span>—</span>}</div>
           <div className="row-actions"><button className="icon-button" title="Run workflow" aria-label={`Run ${workflow.name}`} disabled={running === workflow.id} onClick={() => run(workflow.id)}><Play size={14} fill="currentColor" /></button><DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="icon-button" aria-label={`More actions for ${workflow.name}`}><MoreHorizontal size={16} /></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content className="menu" align="end"><DropdownMenu.Item onSelect={() => openWorkflow(workflow.id)}>Open workflow</DropdownMenu.Item><DropdownMenu.Item onSelect={() => run(workflow.id)}>Run now</DropdownMenu.Item><DropdownMenu.Item onSelect={() => api.exportWorkflow(workflow.id)}><Download size={14} />Export securely</DropdownMenu.Item><DropdownMenu.Separator /><DropdownMenu.Item className="danger" onSelect={() => confirm(`Delete ${workflow.name}?`) && deleteWorkflow(workflow.id)}><Trash2 size={14} />Delete</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>
         </div>;
       })}
@@ -54,6 +56,13 @@ export function Dashboard() {
     {workflows.length > 0 && <section className="compact-templates"><div className="compact-templates-heading"><span>Quick start</span><h3>Start from a template</h3><p>Imports stay disabled until you review permissions and connections.</p></div><div className="template-grid">{templates.map(template => <button key={template.key} onClick={() => createWorkflow(template.key)}><b>{template.name}</b><small>{template.flow}</small></button>)}</div></section>}
     </div>
   </main>;
+}
+
+function formatDate(value: string, display: "relative" | "absolute") {
+  const date = new Date(value);
+  return display === "relative"
+    ? formatDistanceToNow(date, { addSuffix: true })
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function PageHeader({ onCreate, onImport }: { onCreate: () => void; onImport?: () => void }) {

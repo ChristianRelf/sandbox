@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { CommandPalette } from "./components/CommandPalette";
 import { Dashboard } from "./components/Dashboard";
@@ -6,7 +6,7 @@ import { Sidebar } from "./components/Sidebar";
 import { api } from "./api";
 import type { PendingApproval } from "./types";
 import { useAppStore } from "./store";
-import { useApplyPreferences } from "./preferences";
+import { useApplyPreferences, usePreferences } from "./preferences";
 import "./plugins.css";
 
 const HistoryView = lazy(() => import("./components/HistoryView").then(module => ({ default: module.HistoryView })));
@@ -20,9 +20,16 @@ const ApprovalRequest = lazy(() => import("./components/ApprovalRequest").then(m
 export default function App() {
   useApplyPreferences();
   const { view, activeWorkflow, createWorkflow, setView } = useAppStore();
+  const startView = usePreferences(state => state.startView);
+  const initialViewApplied = useRef(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [approvalPrompt, setApprovalPrompt] = useState<PendingApproval>();
   const [approvalBusy, setApprovalBusy] = useState(false);
+  useEffect(() => {
+    if (initialViewApplied.current) return;
+    initialViewApplied.current = true;
+    if (startView !== "workflows") setView(startView);
+  }, [setView, startView]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k" && view !== "editor") {
