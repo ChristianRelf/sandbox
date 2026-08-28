@@ -12,6 +12,8 @@ npm.cmd run desktop:dev
 
 The desktop remains usable without the control-plane environment. Production control-plane startup requires PostgreSQL/OIDC, transactional email, immutable object-storage signer, package scanner, Stripe, Ed25519 signing keys, a dedicated metrics bearer token and separate 32-byte webhook/protected-value encryption keys. See `services/control-plane/src/main.ts` for the authoritative environment-variable names and `reliability-v0.5.md` for probe and scrape behaviour.
 
+The privacy retention worker runs daily by default. `PRIVACY_RETENTION_SWEEP_INTERVAL_MS` may change the cadence but cannot be below 60 seconds; see `privacy-and-retention-v0.5.md` for enforced classes and limits.
+
 ## Tests
 
 ```powershell

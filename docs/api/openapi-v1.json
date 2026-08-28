@@ -142,7 +142,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeleteV1AccountResponse"
+                  "$ref": "#/components/schemas/AccountDeletionResponse"
                 }
               }
             }
@@ -216,7 +216,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetV1AccountExportResponse"
+                  "$ref": "#/components/schemas/AccountExport"
                 }
               }
             }
@@ -5030,6 +5030,161 @@
         }
       }
     },
+    "/v1/workspaces/{workspaceId}/privacy-retention": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_privacy_retention",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "put_v1_workspaces_workspaceId_privacy_retention",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionPolicyEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPolicyInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/workspaces/{workspaceId}/runner-commands": {
       "post": {
         "operationId": "post_v1_workspaces_workspaceId_runner_commands",
@@ -8181,6 +8336,224 @@
         },
         "additionalProperties": false
       },
+      "RetentionPolicyInput": {
+        "type": "object",
+        "required": [
+          "executionDetailDays",
+          "queueEventDays",
+          "webhookDeliveryDays",
+          "runnerCommandDays",
+          "auditEventDays"
+        ],
+        "properties": {
+          "executionDetailDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650
+          },
+          "queueEventDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "webhookDeliveryDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "runnerCommandDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "auditEventDays": {
+            "type": "integer",
+            "minimum": 365,
+            "maximum": 3650
+          }
+        },
+        "additionalProperties": false
+      },
+      "RetentionPolicy": {
+        "type": "object",
+        "required": [
+          "executionDetailDays",
+          "queueEventDays",
+          "webhookDeliveryDays",
+          "runnerCommandDays",
+          "auditEventDays",
+          "changedBy",
+          "changedAt"
+        ],
+        "properties": {
+          "executionDetailDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650
+          },
+          "queueEventDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "webhookDeliveryDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "runnerCommandDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "auditEventDays": {
+            "type": "integer",
+            "minimum": 365,
+            "maximum": 3650
+          },
+          "changedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RetentionPolicyEnvelope": {
+        "type": "object",
+        "required": [
+          "policy"
+        ],
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccountExport": {
+        "type": "object",
+        "required": [
+          "exportVersion",
+          "exportedAt",
+          "classification",
+          "account",
+          "memberships",
+          "workspaceMemberships",
+          "sessions",
+          "invitations",
+          "credentials",
+          "personalWorkflows",
+          "auditEvents"
+        ],
+        "properties": {
+          "exportVersion": {
+            "const": 1
+          },
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "classification": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "account": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "workspaceMemberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "personalWorkflows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "auditEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccountDeletionResponse": {
+        "type": "object",
+        "required": [
+          "deleted",
+          "requestId",
+          "completedAt",
+          "summary"
+        ],
+        "properties": {
+          "deleted": {
+            "const": true
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "RevocationResponse": {
         "type": "object",
         "required": [
@@ -8353,14 +8726,6 @@
         ],
         "description": "Successful response for POST /v1/marketplace/plugins/{pluginId}/reviews/{reviewId}/report."
       },
-      "GetV1AccountExportResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ApiObject"
-          }
-        ],
-        "description": "Successful response for GET /v1/account/export."
-      },
       "GetV1AccountProfileResponse": {
         "allOf": [
           {
@@ -8376,14 +8741,6 @@
           }
         ],
         "description": "Request body for DELETE /v1/account."
-      },
-      "DeleteV1AccountResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ApiObject"
-          }
-        ],
-        "description": "Successful response for DELETE /v1/account."
       },
       "GetV1AccountSessionsResponse": {
         "allOf": [

@@ -15,6 +15,7 @@ import type { UsageEventInput } from "./usage.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 import { ReadinessService, ServiceMetrics } from "./reliability.js";
 import type { SupportAccessAdministration,SupportAccessRequest } from "./support_access.js";
+import type { PrivacyAdministration,WorkspaceRetentionPolicy } from "./privacy.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -145,6 +146,15 @@ describe("control-plane API", () => {
     const diagnostics=await server.inject({method:"GET",url:`/v1/platform/support-access-requests/${requestId}/diagnostics`,headers});
     expect(diagnostics.statusCode,diagnostics.body).toBe(200);expect(diagnostics.json().diagnostics).toMatchObject({workspaceId,runners:{online:2}});
     await server.close();
+  });
+
+  it("enforces workspace retention administration and the production privacy deletion path",async()=>{
+    const policy:WorkspaceRetentionPolicy={executionDetailDays:90,queueEventDays:30,webhookDeliveryDays:7,runnerCommandDays:30,auditEventDays:2555,changedBy:session.accountId,changedAt:new Date().toISOString()};
+    const privacy:PrivacyAdministration={getRetention:vi.fn(async()=>policy),setRetention:vi.fn(async()=>policy),exportAccount:vi.fn(async()=>({exportVersion:1,account:{id:session.accountId}})),deleteAccount:vi.fn(async()=>({requestId:"88888888-8888-4888-8888-888888888888",completedAt:new Date().toISOString(),summary:{sessions:1}}))};
+    const deps={...dependencies(["policies.manage"]),privacy},server=await createServer(deps),headers={authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()};
+    const updated=await server.inject({method:"PUT",url:`/v1/workspaces/${workspaceId}/privacy-retention`,headers,payload:{executionDetailDays:90,queueEventDays:30,webhookDeliveryDays:7,runnerCommandDays:30,auditEventDays:2555}});expect(updated.statusCode,updated.body).toBe(200);expect(privacy.setRetention).toHaveBeenCalledWith(session,workspaceId,expect.objectContaining({auditEventDays:2555}));
+    const exported=await server.inject({method:"GET",url:"/v1/account/export",headers:{authorization:"Bearer token"}});expect(exported.statusCode,exported.body).toBe(200);expect(privacy.exportAccount).toHaveBeenCalled();
+    const deleted=await server.inject({method:"DELETE",url:"/v1/account",headers});expect(deleted.statusCode,deleted.body).toBe(200);expect(deleted.json()).toMatchObject({deleted:true,requestId:expect.any(String),summary:{sessions:1}});expect(deps.repository.requestAccountDeletion).not.toHaveBeenCalled();await server.close();
   });
 
   it("shows a newly issued personal token once and never asks the credential service to persist plaintext",async()=>{

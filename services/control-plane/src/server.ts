@@ -19,6 +19,7 @@ import type { UsageProducerAuthenticator } from "./usage_producer.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 import { validMetricsBearer, type ReadinessService, type ServiceMetrics } from "./reliability.js";
 import type { SupportAccessAdministration } from "./support_access.js";
+import type { PrivacyAdministration } from "./privacy.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -96,6 +97,7 @@ const accessReviewDecisionInput=z.object({decision:z.enum(["retain","revoke"]),r
 const supportAccessRequestInput=z.object({workspaceId:z.string().uuid(),reason:z.string().trim().min(10).max(2000),scopes:z.array(z.literal("diagnostics.read")).min(1).max(1),durationMinutes:z.number().int().min(15).max(480)}).strict();
 const supportAccessDecisionInput=z.object({decision:z.enum(["approve","reject"]),rationale:z.string().trim().min(1).max(2000)}).strict();
 const supportAccessRevocationInput=z.object({rationale:z.string().trim().min(1).max(2000)}).strict();
+const retentionPolicyInput=z.object({executionDetailDays:z.number().int().min(1).max(3650),queueEventDays:z.number().int().min(1).max(365),webhookDeliveryDays:z.number().int().min(1).max(30),runnerCommandDays:z.number().int().min(1).max(365),auditEventDays:z.number().int().min(365).max(3650)}).strict();
 const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
   meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
@@ -116,6 +118,7 @@ export interface ApiDependencies {
   credentialService?: CredentialAdministration;
   accessReviews?: ServiceAccountAccessReviewAdministration;
   supportAccess?: SupportAccessAdministration;
+  privacy?: PrivacyAdministration;
   readiness?: ReadinessService;
   metrics?: ServiceMetrics;
   metricsBearerToken?: string;
@@ -369,7 +372,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   app.get("/v1/account/export", async request => {
     const session = await authenticate(request, dependencies.sessions);
     requireHumanPrincipal(session);
-    return dependencies.repository.exportAccountData(session);
+    return dependencies.privacy?dependencies.privacy.exportAccount(session):dependencies.repository.exportAccountData(session);
   });
 
   app.get("/v1/account/profile", async request => {
@@ -386,11 +389,9 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const session = await authenticate(request, dependencies.sessions);
     requireHumanPrincipal(session);
     requireFreshRequest(request);
-    if (!session.authenticationMethods.some(method => method === "mfa" || method === "webauthn" || method === "passkey")) {
-      throw new DomainError("step_up_required", "Account deletion requires a recent passkey or multi-factor authentication step.", 403);
-    }
-    await dependencies.repository.requestAccountDeletion(session, request.id);
-    return { deleted: true };
+    requireRecentStepUp(session);
+    if(dependencies.privacy)return{deleted:true,...await dependencies.privacy.deleteAccount(session,request.id)};
+    await dependencies.repository.requestAccountDeletion(session, request.id);return { deleted: true };
   });
 
   app.get("/v1/account/sessions", async request => {
@@ -498,6 +499,16 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request"});
     if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
     return{items:await dependencies.supportAccess.list(workspaceId)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/privacy-retention",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);await authorizer.require(session,{workspaceId,permission:"policies.manage",resourceType:"privacy_retention"});
+    if(!dependencies.privacy)throw new DomainError("privacy_service_unavailable","Privacy controls are not configured.",503);return{policy:await dependencies.privacy.getRetention(workspaceId)};
+  });
+
+  app.put("/v1/workspaces/:workspaceId/privacy-retention",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);await authorizer.require(session,{workspaceId,permission:"policies.manage",resourceType:"privacy_retention"});
+    if(!dependencies.privacy)throw new DomainError("privacy_service_unavailable","Privacy controls are not configured.",503);return{policy:await dependencies.privacy.setRetention(session,workspaceId,retentionPolicyInput.parse(request.body))};
   });
 
   app.post("/v1/support-access-requests/:requestId/decision",async request=>{

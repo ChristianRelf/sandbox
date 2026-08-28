@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { AuthenticatedSession, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
+import type { Pool } from "pg";
 
 export interface OidcConfiguration {
   issuer: string;
@@ -47,6 +48,11 @@ export class OidcSessionVerifier implements SessionVerifier {
       throw new DomainError("invalid_session", `The session is invalid or expired: ${error instanceof Error ? error.message : "verification failed"}`, 401);
     }
   }
+}
+
+export class ActiveAccountSessionVerifier implements SessionVerifier {
+  constructor(private readonly verifier:SessionVerifier,private readonly database:Pick<Pool,"query">){}
+  async verify(token:string):Promise<AuthenticatedSession>{const session=await this.verifier.verify(token);const active=await this.database.query(`SELECT 1 FROM accounts WHERE id=$1 AND deleted_at IS NULL`,[session.accountId]);if(!active.rowCount)throw new DomainError("invalid_session","The account is unavailable or deleted.",401);return session;}
 }
 
 function stringClaim(value: unknown, name: string): string {
