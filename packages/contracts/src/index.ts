@@ -87,6 +87,20 @@ export const workflowRevisionSchema = z.object({
 });
 export type WorkflowRevision = z.infer<typeof workflowRevisionSchema>;
 
+export const runnerAuthorizationContextSchema = z.object({
+  principalType: z.enum(["user", "personal_access_token", "service_account"]),
+  principalId: idSchema,
+  credentialId: idSchema.nullable(),
+  requiredPermission: z.enum(permissions),
+  environmentId: idSchema,
+  environment: z.enum(["development", "staging", "production"]),
+  credentialScopes: z.array(z.enum(permissions)).max(permissions.length).nullable(),
+  workspaceRestrictions: z.array(idSchema).max(100).nullable(),
+  environmentRestrictions: z.array(idSchema).max(100).nullable(),
+  principalPermissions: z.array(z.enum(permissions)).max(permissions.length).nullable()
+}).strict();
+export type RunnerAuthorizationContext = z.infer<typeof runnerAuthorizationContextSchema>;
+
 export const runnerCommandSchema = z.object({
   commandId: idSchema,
   issuerAccountId: idSchema,
@@ -98,6 +112,7 @@ export const runnerCommandSchema = z.object({
   expiresAt: z.string().datetime(),
   idempotencyKey: z.string().min(16).max(200),
   payload: z.record(z.string(), z.unknown()),
+  authorizationContext: runnerAuthorizationContextSchema,
   keyId: z.string().min(1),
   signature: z.string().min(1),
   status: z.enum(["queued", "delivered", "accepted", "rejected", "completed", "expired", "rerouted"])

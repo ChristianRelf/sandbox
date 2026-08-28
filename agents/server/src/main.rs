@@ -110,11 +110,11 @@ async fn run_service(config: &RunnerConfig) -> Result<(), String> {
                     Ok(commands) => for command in commands {
                         let Ok(permit) = permits.clone().try_acquire_owned() else { break };
                         let device = device.clone(); let engine = engine.clone(); let verifier = verifier.clone();
-                        let runner_id = runner_id.clone(); let workspace_id = config.workspace_id.clone(); let active = active.clone();
+                        let runner_id = runner_id.clone(); let workspace_id = config.workspace_id.clone();let environment_id=config.environment_id.clone();let environment=config.environment.clone(); let active = active.clone();
                         active.fetch_add(1, Ordering::Relaxed);
                         tasks.spawn(async move {
                             let _permit = permit;
-                            process_command(&device, &engine, &verifier, &runner_id, &workspace_id, command).await;
+                            process_command(&device, &engine, &verifier, &runner_id, &workspace_id,&environment_id,&environment, command).await;
                             active.fetch_sub(1, Ordering::Relaxed);
                         });
                     },

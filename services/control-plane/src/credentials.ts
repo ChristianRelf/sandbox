@@ -98,6 +98,7 @@ export class PostgresCredentialService implements SessionVerifier,CredentialAdmi
       if(token.rows[0].owner_account_id && token.rows[0].owner_account_id!==actor.accountId) throw new DomainError("credential_owner_required","Only the token owner can revoke this personal token.",403);
       if(workspaceId&&(!token.rows[0].service_account_id||!token.rows[0].workspace_restrictions.includes(workspaceId)))return false;
       await client.query(`UPDATE access_tokens SET revoked_at=now(),revocation_reason=$2 WHERE id=$1`,[tokenId,reason]);
+      await client.query(`UPDATE runner_commands SET status='expired',result_summary=jsonb_build_object('reason','issuing_credential_revoked') WHERE authorization_context->>'credentialId'=$1 AND status IN ('queued','delivered','accepted')`,[tokenId]);
       const auditWorkspaceId=token.rows[0].workspace_restrictions[0];
       if(auditWorkspaceId) await audit(client,actor,auditWorkspaceId,"access_token.revoked","access_token",tokenId,null,correlationId);
       return true;

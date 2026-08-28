@@ -1,4 +1,4 @@
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerAuthorizationContext, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
 import type { BillingEvent } from "./billing.js";
 
 export interface AuthenticatedSession {
@@ -12,8 +12,8 @@ export interface AuthenticatedSession {
   platformPermissions: string[];
   principalType?: "user" | "personal_access_token" | "service_account";
   principalId?: string;
-  credentialScopes?: string[];
-  principalPermissions?: string[];
+  credentialScopes?: Permission[];
+  principalPermissions?: Permission[];
   organisationRestriction?: string | null;
   workspaceRestrictions?: string[];
   environmentRestrictions?: string[];
@@ -67,6 +67,7 @@ export interface RunnerCommandInput {
   idempotencyKey: string;
   keyId: string;
   signature: string;
+  authorizationContext: RunnerAuthorizationContext;
 }
 export interface WorkflowApprovalRecord { approvalId: string; workflowId: string; revisionId: string; status: "pending" | "approved" | "rejected" | "expired"; requiredApprovals: number; approvalCount: number; createdAt: string }
 export type GovernancePolicies = Record<string, unknown>;

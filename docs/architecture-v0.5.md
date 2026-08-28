@@ -52,6 +52,7 @@ Local personal workflows bypass organisation identity because they do not use or
 - `service_account_role_assignments` bounds workspaces, roles and environments.
 - `access_tokens` stores prefix, HMAC digest, scope, restrictions, expiry, last use and revocation metadata; plaintext is never persisted.
 - `api_idempotency_records` binds caller, key and canonical request hash, and stores the replay response encrypted for 24 hours.
+- `runner_commands.authorization_context` persists the signed principal, required permission, environment and credential restrictions used at command issuance. Legacy queued commands are expired by migration rather than delivered without this context, and credential revocation expires its queued, delivered, or accepted commands.
 - `@sandbox/api-client` implements the stable v1 transport contract with bounded idempotent retries and optional runtime response validation.
 
 ## Security boundaries
@@ -61,10 +62,10 @@ Local personal workflows bypass organisation identity because they do not use or
 3. Organisation API checks are server-side; UI visibility is not an access control.
 4. Credential scope and restrictions narrow RBAC and never expand it.
 5. Service-account tokens cannot create personal tokens or obtain interactive sessions.
-6. Runner commands and events require device authentication. Environment and permission enforcement at the execution boundary remains a GA blocker until every runner class applies the consolidated policy.
+6. Runner commands and events require device authentication. Desktop and self-hosted agents verify the signed action-to-permission mapping, immutable environment identity, credential scopes/restrictions and service-account role again before accepting work. Managed orchestrator enforcement and the remaining resource/action audit still gate GA-011.
 7. Meter input accepts only managed billable deployment types. Local execution cannot enter hosted-runner or managed-browser billing meters. Managed workers sign payload-bound usage events with independently configured HMAC producer keys; the control plane enforces a five-minute freshness window and verifies the execution, deployment, workspace and environment relationship before inserting them.
 8. Invoice inputs include only usage whose latest immutable reconciliation is `matched`. A discrepancy removes the execution from invoice aggregation until a later reconciliation resolves it, and every aggregate carries a digest of its event and reconciliation evidence.
-8. Plugin Wasm remains outside browser, process, filesystem, socket and environment authority except through the existing capability broker.
+9. Plugin Wasm remains outside browser, process, filesystem, socket and environment authority except through the existing capability broker.
 
 ## Unfinished joins
 

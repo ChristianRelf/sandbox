@@ -250,13 +250,22 @@ describe("control-plane API", () => {
     const deps = dependencies(["workflows.run"]);
     const targetRunnerId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const revisionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.repository.listWorkspaceEnvironments).mockResolvedValue([{environmentId,environment:"production"}]);
     vi.mocked(deps.repository.createRunnerCommand).mockImplementation(async (_actor, command) => ({ ...command, issuerAccountId: session.accountId, status: "queued" }));
     const server = await createServer(deps);
-    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId, action: "run_workflow", workflowRevisionId: revisionId, payload: { trigger: "remote" }, idempotencyKey: "remote-run-unique-0001", expiresInSeconds: 300 } });
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId,environmentId, action: "run_workflow", workflowRevisionId: revisionId, payload: { trigger: "remote" }, idempotencyKey: "remote-run-unique-0001", expiresInSeconds: 300 } });
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json().command).toMatchObject({ workspaceId, targetRunnerId, workflowRevisionId: revisionId, keyId: "control-plane-1", status: "queued" });
+    expect(response.json().command).toMatchObject({ workspaceId, targetRunnerId, workflowRevisionId: revisionId, keyId: "control-plane-1", status: "queued",authorizationContext:{principalType:"user",principalId:session.accountId,requiredPermission:"workflows.run",environmentId,environment:"production"} });
     expect(response.json().command.signature).toBeTruthy();
     await server.close();
+  });
+
+  it("rejects runner commands outside a token's environment restriction",async()=>{
+    const deps=dependencies(["workflows.run"]),environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.sessions.verify).mockResolvedValue({...session,principalType:"personal_access_token",principalId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",credentialScopes:["workflows.run"],workspaceRestrictions:[workspaceId],environmentRestrictions:["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]});
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/runner-commands`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{targetRunnerId:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",environmentId,action:"run_workflow",workflowRevisionId:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",idempotencyKey:"remote-run-restricted-0001"}});
+    expect(response.statusCode).toBe(403);expect(response.json().error.code).toBe("credential_environment_restricted");expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();await server.close();
   });
 
   it("keeps draft approval and publication as explicit authorized transitions", async () => {
@@ -282,9 +291,10 @@ describe("control-plane API", () => {
 
   it("returns an actionable governance failure when remote execution is disabled", async () => {
     const deps = dependencies(["workflows.run"]);
+    const environmentId="cccccccc-cccc-4ccc-8ccc-cccccccccccc";vi.mocked(deps.repository.listWorkspaceEnvironments).mockResolvedValue([{environmentId,environment:"production"}]);
     vi.mocked(deps.repository.getGovernancePolicies).mockResolvedValue({ remote_execution: false });
     const server = await createServer(deps);
-    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", action: "run_workflow", workflowRevisionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", idempotencyKey: "remote-run-unique-0002" } });
+    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${workspaceId}/runner-commands`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { targetRunnerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",environmentId, action: "run_workflow", workflowRevisionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", idempotencyKey: "remote-run-unique-0002" } });
     expect(response.statusCode).toBe(403);
     expect(response.json().error.message).toMatch(/remote_execution.*administrator.*local runner/i);
     expect(deps.repository.createRunnerCommand).not.toHaveBeenCalled();

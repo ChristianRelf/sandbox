@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { permissions, runSummarySchema, workflowRevisionSchema } from "@sandbox/contracts";
+import { permissions, runSummarySchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -50,7 +50,7 @@ const runnerPairingInput = z.object({
 const runnerPairingConfirmation = z.object({ challengeId: z.string().uuid(), challenge: z.string().min(32).max(256), signatureBase64: z.string().base64().max(256), workspaceId: z.string().uuid().nullable(), displayName: z.string().trim().min(1).max(100) });
 const runnerCommandInput = z.object({
   targetRunnerId: z.string().uuid(), action: z.enum(["run_workflow", "cancel_execution", "pause_workflow", "resume_workflow", "request_diagnostics", "sync_revision"]),
-  workflowRevisionId: z.string().uuid().nullable().default(null), payload: z.record(z.string(), z.unknown()).default({}), idempotencyKey: z.string().min(16).max(200), expiresInSeconds: z.number().int().min(15).max(86_400).default(300)
+  environmentId:z.string().uuid(),workflowRevisionId: z.string().uuid().nullable().default(null), payload: z.record(z.string(), z.unknown()).default({}), idempotencyKey: z.string().min(16).max(200), expiresInSeconds: z.number().int().min(15).max(86_400).default(300)
 });
 const approvalDecisionInput = z.object({ decision: z.enum(["approved", "rejected"]), reason: z.string().trim().min(1).max(2_000).nullable().default(null) });
 const publishWorkflowInput = z.object({ changeSummary: z.string().trim().min(1).max(2_000) });
@@ -584,7 +584,10 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     requireFreshRequest(request);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     const input = runnerCommandInput.parse(request.body);
-    await authorizer.require(session, workspaceId, input.action === "request_diagnostics" ? "runners.manage" : "workflows.run");
+    const requiredPermission=runnerActionPermission(input.action);
+    await authorizer.require(session,{workspaceId,environmentId:input.environmentId,permission:requiredPermission,resourceType:"runner_command",resourceId:input.targetRunnerId});
+    const environment=(await dependencies.repository.listWorkspaceEnvironments(session,workspaceId)).find(item=>item.environmentId===input.environmentId);
+    if(!environment)throw new DomainError("environment_not_found","The command environment was not found in this workspace.",404);
     const policies = await dependencies.repository.getGovernancePolicies(session, workspaceId);
     authorizer.enforcePolicy(policies.remote_execution !== false, { policy: "remote_execution", resource: `runner command ${input.action}`, administratorAction: "A workspace administrator can enable remote execution in Governance.", userAction: "Run the workflow directly on an eligible local runner instead." });
     if (!dependencies.runnerCommandSigner) throw new DomainError("runner_signing_unavailable", "Remote commands are unavailable because the control-plane signing key is not configured.", 503);
@@ -592,7 +595,8 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const expiresAt = new Date(createdAt.getTime() + input.expiresInSeconds * 1_000);
     const command = buildSignedRunnerCommand(dependencies.runnerCommandSigner, {
       commandId: randomUUID(), issuerAccountId: session.accountId, workspaceId, targetRunnerId: input.targetRunnerId, action: input.action,
-      workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload
+      workflowRevisionId: input.workflowRevisionId, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), idempotencyKey: input.idempotencyKey, payload: input.payload,
+      authorizationContext:{principalType:session.principalType??"user",principalId:session.principalId??session.accountId,credentialId:(session.principalType??"user")==="user"?null:session.sessionId,requiredPermission,environmentId:input.environmentId,environment:environment.environment,credentialScopes:session.credentialScopes??null,workspaceRestrictions:session.workspaceRestrictions??null,environmentRestrictions:session.environmentRestrictions??null,principalPermissions:session.principalPermissions??null}
     });
     return { command: await dependencies.repository.createRunnerCommand(session, command, request.id) };
   });
@@ -989,6 +993,12 @@ function requirePlatform(session: AuthenticatedSession, permission: string): voi
 
 function requireHumanPrincipal(session:AuthenticatedSession):void {
   if((session.principalType??"user")!=="user")throw new DomainError("human_principal_required","This account-security operation requires an interactive human session.",403);
+}
+
+function runnerActionPermission(action:RunnerCommand["action"]):Permission {
+  if(action==="request_diagnostics")return "runners.manage";
+  if(["cancel_execution","pause_workflow","resume_workflow"].includes(action))return "workflows.pause";
+  return "workflows.run";
 }
 
 function publicKeyPem(derBase64: string): string {

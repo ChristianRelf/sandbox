@@ -44,6 +44,7 @@ pub struct RunnerConfig {
     pub control_plane_url: String,
     pub runner_name: String,
     pub workspace_id: String,
+    pub environment_id: String,
     pub environment: String,
     pub tags: Vec<String>,
     pub concurrency: u16,
@@ -96,6 +97,8 @@ impl RunnerConfig {
         }
         uuid::Uuid::parse_str(&self.workspace_id)
             .map_err(|_| ConfigError::Policy("workspace_id must be a UUID".into()))?;
+        uuid::Uuid::parse_str(&self.environment_id)
+            .map_err(|_| ConfigError::Policy("environment_id must be a UUID".into()))?;
         if !matches!(
             self.environment.as_str(),
             "development" | "staging" | "production"
@@ -217,6 +220,7 @@ mod tests {
 control_plane_url="https://control.example"
 runner_name="server"
 workspace_id="workspace"
+environment_id="environment"
 environment="production"
 tags=[]
 concurrency=1

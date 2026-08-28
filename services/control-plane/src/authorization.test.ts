@@ -46,7 +46,7 @@ describe("Authorizer", () => {
 
   it("enforces credential scopes plus workspace and environment restrictions before role permissions",async()=>{
     const authorizer=new Authorizer(repository({"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa":["workflows.run","workflows.edit"]}));
-    const token={...session,principalType:"personal_access_token" as const,principalId:"token-1",credentialScopes:["workflows.run"],workspaceRestrictions:["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],environmentRestrictions:["cccccccc-cccc-4ccc-8ccc-cccccccccccc"]};
+    const token:AuthenticatedSession={...session,principalType:"personal_access_token",principalId:"token-1",credentialScopes:["workflows.run"],workspaceRestrictions:["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],environmentRestrictions:["cccccccc-cccc-4ccc-8ccc-cccccccccccc"]};
     await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",permission:"workflows.run",resourceType:"workflow"})).resolves.toBeUndefined();
     await expect(authorizer.require(token,{workspaceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",environmentId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",permission:"workflows.edit",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_scope_denied"});
     await expect(authorizer.require(token,{workspaceId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",permission:"workflows.run",resourceType:"workflow"})).rejects.toMatchObject({code:"credential_workspace_restricted"});

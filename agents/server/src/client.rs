@@ -150,9 +150,25 @@ pub struct RunnerCommand {
     pub expires_at: String,
     pub idempotency_key: String,
     pub payload: Value,
+    pub authorization_context: RunnerAuthorizationContext,
     pub key_id: String,
     pub signature: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunnerAuthorizationContext {
+    pub principal_type: String,
+    pub principal_id: String,
+    pub credential_id: Option<String>,
+    pub required_permission: String,
+    pub environment_id: String,
+    pub environment: String,
+    pub credential_scopes: Option<Vec<String>>,
+    pub workspace_restrictions: Option<Vec<String>>,
+    pub environment_restrictions: Option<Vec<String>>,
+    pub principal_permissions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -241,6 +257,7 @@ mod tests {
                 "workspaceId":"33333333-3333-4333-8333-333333333333","targetRunnerId":"44444444-4444-4444-8444-444444444444",
                 "action":"run_workflow","workflowRevisionId":"55555555-5555-4555-8555-555555555555","createdAt":"2026-08-28T00:00:00Z",
                 "expiresAt":"2026-08-29T00:00:00Z","idempotencyKey":"idempotency-key-0001","payload":{},"keyId":"release","signature":"signed","status":"delivered"
+                ,"authorizationContext":{"principalType":"user","principalId":"22222222-2222-4222-8222-222222222222","credentialId":null,"requiredPermission":"workflows.run","environmentId":"55555555-5555-4555-8555-555555555556","environment":"production","credentialScopes":null,"workspaceRestrictions":null,"environmentRestrictions":null,"principalPermissions":null}
             }]})))
             .mount(&server).await;
         Mock::given(method("POST"))

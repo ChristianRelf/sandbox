@@ -37,10 +37,13 @@ impl CommandVerifier {
         command: &RunnerCommand,
         runner_id: &str,
         workspace_id: &str,
+        environment_id: &str,
+        environment: &str,
     ) -> Result<VerifiedCommand, String> {
         if command.target_runner_id != runner_id || command.workspace_id != workspace_id {
             return Err("command target does not match this runner and workspace".into());
         }
+        verify_authorization_context(command, workspace_id, environment_id, environment)?;
         let expires_at = DateTime::parse_from_rfc3339(&command.expires_at)
             .map_err(|_| "command expiry is invalid")?
             .with_timezone(&Utc);
@@ -128,9 +131,17 @@ pub async fn process_command(
     verifier: &CommandVerifier,
     runner_id: &str,
     workspace_id: &str,
+    environment_id: &str,
+    environment: &str,
     command: RunnerCommand,
 ) {
-    let verified = match verifier.verify(&command, runner_id, workspace_id) {
+    let verified = match verifier.verify(
+        &command,
+        runner_id,
+        workspace_id,
+        environment_id,
+        environment,
+    ) {
         Ok(command) => command,
         Err(error) => {
             let _ = device
@@ -240,15 +251,21 @@ pub async fn process_command(
                 .await
             {
                 Ok(record) => {
-                    let failed_node_id = record.node_executions.iter()
+                    let failed_node_id = record
+                        .node_executions
+                        .iter()
                         .find(|node| matches!(node.status, sandbox_engine::NodeStatus::Failed))
                         .map(|node| node.node_id.clone());
-                    (CommandStatus::Completed, "completed", json!({
-                        "revisionId": revision_id, "executionId": record.id, "status": record.status,
-                        "startedAt": record.started_at, "durationMs": record.duration_ms, "failedNodeId": failed_node_id,
-                        "errorCode": record.error.map(|error| error.code)
-                    }))
-                },
+                    (
+                        CommandStatus::Completed,
+                        "completed",
+                        json!({
+                            "revisionId": revision_id, "executionId": record.id, "status": record.status,
+                            "startedAt": record.started_at, "durationMs": record.duration_ms, "failedNodeId": failed_node_id,
+                            "errorCode": record.error.map(|error| error.code)
+                        }),
+                    )
+                }
                 Err(error) => (
                     CommandStatus::Rejected,
                     "rejected",
@@ -287,9 +304,83 @@ fn canonical_command(command: &RunnerCommand) -> Result<Vec<u8>, String> {
         "expiresAt": command.expires_at,
         "idempotencyKey": command.idempotency_key,
         "payload": command.payload,
+        "authorizationContext": command.authorization_context,
         "keyId": command.key_id,
     });
     serde_json::to_vec(&sort_value(value)).map_err(|error| error.to_string())
+}
+
+fn verify_authorization_context(
+    command: &RunnerCommand,
+    workspace_id: &str,
+    environment_id: &str,
+    environment: &str,
+) -> Result<(), String> {
+    let context = &command.authorization_context;
+    let required = match command.action {
+        RunnerCommandAction::RequestDiagnostics => "runners.manage",
+        RunnerCommandAction::CancelExecution
+        | RunnerCommandAction::PauseWorkflow
+        | RunnerCommandAction::ResumeWorkflow => "workflows.pause",
+        RunnerCommandAction::RunWorkflow | RunnerCommandAction::SyncRevision => "workflows.run",
+    };
+    if context.required_permission != required {
+        return Err("authorization permission does not match the command action".into());
+    }
+    if context.environment_id != environment_id || context.environment != environment {
+        return Err("command environment does not match this runner".into());
+    }
+    if context
+        .workspace_restrictions
+        .as_ref()
+        .is_some_and(|items| !items.is_empty() && !items.iter().any(|item| item == workspace_id))
+    {
+        return Err("credential is restricted to another workspace".into());
+    }
+    if context
+        .environment_restrictions
+        .as_ref()
+        .is_some_and(|items| !items.is_empty() && !items.iter().any(|item| item == environment_id))
+    {
+        return Err("credential is restricted to another environment".into());
+    }
+    match context.principal_type.as_str() {
+        "user" => {
+            if context.credential_id.is_some() || context.principal_id != command.issuer_account_id
+            {
+                return Err("human authorization identity is inconsistent".into());
+            }
+        }
+        "personal_access_token" => {
+            if context.credential_id.is_none()
+                || !context
+                    .credential_scopes
+                    .as_ref()
+                    .is_some_and(|items| items.iter().any(|item| item == required))
+            {
+                return Err("credential scope does not authorize the command".into());
+            }
+        }
+        "service_account" => {
+            if context.credential_id.is_none()
+                || !context
+                    .credential_scopes
+                    .as_ref()
+                    .is_some_and(|items| items.iter().any(|item| item == required))
+                || !context
+                    .principal_permissions
+                    .as_ref()
+                    .is_some_and(|items| items.iter().any(|item| item == required))
+            {
+                return Err(
+                    "service account role or credential scope does not authorize the command"
+                        .into(),
+                );
+            }
+        }
+        _ => return Err("authorization principal type is unsupported".into()),
+    }
+    Ok(())
 }
 
 fn sort_value(value: Value) -> Value {
@@ -311,6 +402,7 @@ fn sort_value(value: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::RunnerAuthorizationContext;
     use crate::identity::StoredIdentity;
     use ed25519_dalek::{pkcs8::EncodePublicKey, Signer, SigningKey};
     use reqwest::Client;
@@ -329,19 +421,54 @@ mod tests {
             keys: BTreeMap::from([("release".into(), key.verifying_key())]),
         };
         assert!(verifier
-            .verify(&command, &command.target_runner_id, &command.workspace_id)
+            .verify(
+                &command,
+                &command.target_runner_id,
+                &command.workspace_id,
+                "77777777-7777-4777-8777-777777777777",
+                "production"
+            )
             .is_ok());
         command.payload["workflow"]["name"] = json!("Tampered");
         command.signature =
             BASE64.encode(key.sign(&canonical_command(&command).unwrap()).to_bytes());
         assert!(verifier
-            .verify(&command, &command.target_runner_id, &command.workspace_id)
+            .verify(
+                &command,
+                &command.target_runner_id,
+                &command.workspace_id,
+                "77777777-7777-4777-8777-777777777777",
+                "production"
+            )
             .unwrap_err()
             .contains("content"));
         command.payload["workflowRevisionId"] = json!("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
         assert!(verifier
-            .verify(&command, &command.target_runner_id, &command.workspace_id)
+            .verify(
+                &command,
+                &command.target_runner_id,
+                &command.workspace_id,
+                "77777777-7777-4777-8777-777777777777",
+                "production"
+            )
             .is_err());
+        let mut restricted = sample_command();
+        restricted.authorization_context.environment_restrictions =
+            Some(vec!["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into()]);
+        restricted.signature = BASE64.encode(
+            key.sign(&canonical_command(&restricted).unwrap())
+                .to_bytes(),
+        );
+        assert!(verifier
+            .verify(
+                &restricted,
+                &restricted.target_runner_id,
+                &restricted.workspace_id,
+                "77777777-7777-4777-8777-777777777777",
+                "production"
+            )
+            .unwrap_err()
+            .contains("restricted"));
         let der = key.verifying_key().to_public_key_der().unwrap();
         assert!(VerifyingKey::from_public_key_der(der.as_bytes()).is_ok());
     }
@@ -378,6 +505,8 @@ mod tests {
             &verifier,
             &command.target_runner_id,
             &command.workspace_id,
+            "77777777-7777-4777-8777-777777777777",
+            "production",
             command.clone(),
         )
         .await;
@@ -395,6 +524,8 @@ mod tests {
             &verifier,
             &command.target_runner_id,
             &command.workspace_id,
+            "77777777-7777-4777-8777-777777777777",
+            "production",
             command.clone(),
         )
         .await;
@@ -429,6 +560,18 @@ mod tests {
                     "edges": [], "settings": {}, "createdAt": Utc::now(), "updatedAt": Utc::now()
                 }
             }),
+            authorization_context: RunnerAuthorizationContext {
+                principal_type: "personal_access_token".into(),
+                principal_id: "88888888-8888-4888-8888-888888888888".into(),
+                credential_id: Some("99999999-9999-4999-8999-999999999999".into()),
+                required_permission: "workflows.run".into(),
+                environment_id: "77777777-7777-4777-8777-777777777777".into(),
+                environment: "production".into(),
+                credential_scopes: Some(vec!["workflows.run".into()]),
+                workspace_restrictions: Some(vec!["33333333-3333-4333-8333-333333333333".into()]),
+                environment_restrictions: Some(vec!["77777777-7777-4777-8777-777777777777".into()]),
+                principal_permissions: None,
+            },
             key_id: "release".into(),
             signature: String::new(),
             status: "delivered".into(),

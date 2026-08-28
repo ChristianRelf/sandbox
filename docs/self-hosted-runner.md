@@ -13,6 +13,8 @@ The runner creates an Ed25519 device key locally, sends only its public key with
 
 Configuration is versioned and rejects unknown fields. HTTPS is required except for a localhost development control plane. Working directories and local-network targets are explicit allowlists. Simple command execution is disabled by default and does not grant plugins the same permission. Pairing tokens should never be written into the config file, shell history, image, or systemd unit.
 
+Set both `workspace_id` and the immutable `environment_id`; the human-readable `environment` must be `development`, `staging`, or `production`. A command for any other environment is rejected locally even when its control-plane signature is otherwise valid.
+
 Validate configuration before starting:
 
 ```sh
@@ -24,7 +26,10 @@ capacity is available, and reports `draining` during a graceful shutdown. Each
 command is verified against an Ed25519 public key in `command_signing_keys`, its
 runner/workspace target and expiry are checked, and the executable workflow is
 hashed locally before it can match the signed, approved revision identity and
-content hash. Unknown actions are rejected.
+content hash. The signed authorization context must map the action to its exact
+permission and repeat any credential workspace, environment, scope, and
+service-account role restrictions. The runner applies those restrictions again
+before claiming the durable receipt. Unknown actions are rejected.
 
 Command receipts are claimed atomically in `runner.sqlite3` before execution.
 Accepted, completed and rejected states are reported to the control plane. A
