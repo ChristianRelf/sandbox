@@ -15,6 +15,7 @@ import { HmacUsageProducerAuthenticator,parseUsageProducerSecrets } from "./usag
 import { PostgresCredentialExpiryNotifier } from "./credential_notifications.js";
 import { PostgresServiceAccountAccessReviews } from "./access_reviews.js";
 import { ReadinessService, RecurringTaskMonitor, ServiceMetrics } from "./reliability.js";
+import { PostgresSupportAccess } from "./support_access.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -54,6 +55,7 @@ const server = await createServer({
   sessions: new CompositeSessionVerifier(oidcSessions,credentialService),
   credentialService,
   accessReviews,
+  supportAccess:new PostgresSupportAccess(pool),
   email,
   packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
   packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),

@@ -14,6 +14,7 @@ import { HmacUsageProducerAuthenticator } from "./usage_producer.js";
 import type { UsageEventInput } from "./usage.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 import { ReadinessService, ServiceMetrics } from "./reliability.js";
+import type { SupportAccessAdministration,SupportAccessRequest } from "./support_access.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -126,6 +127,23 @@ describe("control-plane API", () => {
     expect(exported.headers["content-type"]).toContain("text/plain");
     expect(exported.body).toContain('sandbox_http_requests_total{method="GET",route="/ready",status_class="2xx"} 1');
     expect(exported.body).toContain('sandbox_readiness_checks_total{outcome="not_ready"} 1');
+    await server.close();
+  });
+
+  it("requires customer approval before support can collect redacted diagnostics",async()=>{
+    const requestId="99999999-9999-4999-8999-999999999999",now=new Date(),expiresAt=new Date(now.getTime()+3_600_000).toISOString();
+    const pending:SupportAccessRequest={id:requestId,workspaceId,requestedBy:"33333333-3333-4333-8333-333333333333",reason:"Investigate runner capacity failures.",scopes:["diagnostics.read"],requestedAt:now.toISOString(),expiresAt,status:"pending",decidedBy:null,decidedAt:null,rationale:null,revokedBy:null,revokedAt:null};
+    const supportAccess:SupportAccessAdministration={request:vi.fn(async()=>pending),workspaceId:vi.fn(async()=>workspaceId),list:vi.fn(async()=>[pending]),decide:vi.fn(async(_actor,_id,_decision,rationale):Promise<SupportAccessRequest>=>({...pending,status:"approved",decidedBy:session.accountId,decidedAt:new Date().toISOString(),rationale})),revoke:vi.fn(),diagnostics:vi.fn(async()=>({collectedAt:new Date().toISOString(),workspaceId,runners:{online:2},executionsLast24Hours:{failed:1},queuedEvents:{queued:3},webhookDeliveries:{delivered:4}}))};
+    const deps={...dependencies(["members.manage"]),supportAccess};
+    const staff={...session,accountId:pending.requestedBy,platformPermissions:["support_access.manage"]},customer={...session,issuedAt:new Date(),platformPermissions:[]};
+    vi.mocked(deps.sessions.verify).mockResolvedValueOnce(staff).mockResolvedValueOnce(customer).mockResolvedValueOnce(staff);
+    const server=await createServer(deps),headers={authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()};
+    const requested=await server.inject({method:"POST",url:"/v1/platform/support-access-requests",headers,payload:{workspaceId,reason:pending.reason,scopes:["diagnostics.read"],durationMinutes:60}});
+    expect(requested.statusCode,requested.body).toBe(200);expect(supportAccess.request).toHaveBeenCalledWith(staff,workspaceId,pending.reason,["diagnostics.read"],60,expect.any(String));
+    const approved=await server.inject({method:"POST",url:`/v1/support-access-requests/${requestId}/decision`,headers,payload:{decision:"approve",rationale:"Approved for aggregate diagnostics only."}});
+    expect(approved.statusCode,approved.body).toBe(200);expect(deps.repository.permissions).toHaveBeenCalledWith(customer.accountId,workspaceId);expect(supportAccess.decide).toHaveBeenCalled();
+    const diagnostics=await server.inject({method:"GET",url:`/v1/platform/support-access-requests/${requestId}/diagnostics`,headers});
+    expect(diagnostics.statusCode,diagnostics.body).toBe(200);expect(diagnostics.json().diagnostics).toMatchObject({workspaceId,runners:{online:2}});
     await server.close();
   });
 

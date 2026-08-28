@@ -18,6 +18,7 @@ import type { PostgresUsageLedger } from "./usage.js";
 import type { UsageProducerAuthenticator } from "./usage_producer.js";
 import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.js";
 import { validMetricsBearer, type ReadinessService, type ServiceMetrics } from "./reliability.js";
+import type { SupportAccessAdministration } from "./support_access.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -92,6 +93,9 @@ const credentialRevocationInput=z.object({reason:z.string().trim().min(1).max(50
 const serviceAssertionKeyInput=z.object({keyId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),publicKeyDerBase64:z.string().base64().max(2048)}).strict();
 const serviceAssertionExchangeInput=z.object({clientAssertion:z.string().min(100).max(8192)}).strict();
 const accessReviewDecisionInput=z.object({decision:z.enum(["retain","revoke"]),rationale:z.string().trim().min(1).max(2000)}).strict();
+const supportAccessRequestInput=z.object({workspaceId:z.string().uuid(),reason:z.string().trim().min(10).max(2000),scopes:z.array(z.literal("diagnostics.read")).min(1).max(1),durationMinutes:z.number().int().min(15).max(480)}).strict();
+const supportAccessDecisionInput=z.object({decision:z.enum(["approve","reject"]),rationale:z.string().trim().min(1).max(2000)}).strict();
+const supportAccessRevocationInput=z.object({rationale:z.string().trim().min(1).max(2000)}).strict();
 const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
   meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
@@ -111,6 +115,7 @@ export interface ApiDependencies {
   protectedValueProtector?: WebhookProtector;
   credentialService?: CredentialAdministration;
   accessReviews?: ServiceAccountAccessReviewAdministration;
+  supportAccess?: SupportAccessAdministration;
   readiness?: ReadinessService;
   metrics?: ServiceMetrics;
   metricsBearerToken?: string;
@@ -479,6 +484,40 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     if(!dependencies.accessReviews)throw new DomainError("access_reviews_unavailable","Service-account access reviews are not configured.",503);
     const workspaceIds=await dependencies.accessReviews.workspaceIds(session,reviewId);for(const workspaceId of workspaceIds)await authorizer.require(session,{workspaceId,permission:"service_accounts.manage",resourceType:"service_account_access_review",resourceId:reviewId});
     return{review:await dependencies.accessReviews.decide(session,reviewId,input.decision,input.rationale,request.id)};
+  });
+
+  app.post("/v1/platform/support-access-requests",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requirePlatform(session,"support_access.manage");
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const input=supportAccessRequestInput.parse(request.body);
+    return{request:await dependencies.supportAccess.request(session,input.workspaceId,input.reason,input.scopes,input.durationMinutes,request.id)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/support-access-requests",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);const{workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request"});
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    return{items:await dependencies.supportAccess.list(workspaceId)};
+  });
+
+  app.post("/v1/support-access-requests/:requestId/decision",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);const input=supportAccessDecisionInput.parse(request.body);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const workspaceId=await dependencies.supportAccess.workspaceId(requestId);await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request",resourceId:requestId});
+    return{request:await dependencies.supportAccess.decide(session,requestId,input.decision,input.rationale,request.id)};
+  });
+
+  app.post("/v1/support-access-requests/:requestId/revoke",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);const input=supportAccessRevocationInput.parse(request.body);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    const workspaceId=await dependencies.supportAccess.workspaceId(requestId);await authorizer.require(session,{workspaceId,permission:"members.manage",resourceType:"support_access_request",resourceId:requestId});
+    return{request:await dependencies.supportAccess.revoke(session,requestId,input.rationale,request.id)};
+  });
+
+  app.get("/v1/platform/support-access-requests/:requestId/diagnostics",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requirePlatform(session,"support_access.manage");const{requestId}=z.object({requestId:z.string().uuid()}).parse(request.params);
+    if(!dependencies.supportAccess)throw new DomainError("support_access_unavailable","Support access is not configured.",503);
+    return{diagnostics:await dependencies.supportAccess.diagnostics(session,requestId,request.id)};
   });
 
   app.post("/v1/workspaces/:workspaceId/service-accounts/:serviceAccountId/tokens",async request=>{
@@ -1066,6 +1105,10 @@ function requirePlatform(session: AuthenticatedSession, permission: string): voi
 
 function requireHumanPrincipal(session:AuthenticatedSession):void {
   if((session.principalType??"user")!=="user")throw new DomainError("human_principal_required","This account-security operation requires an interactive human session.",403);
+}
+
+function requireRecentStepUp(session:AuthenticatedSession):void {
+  if(!session.authenticationMethods.some(method=>method==="mfa"||method==="webauthn"||method==="passkey")||Math.abs(Date.now()-session.issuedAt.getTime())>15*60_000)throw new DomainError("step_up_required","Support access approval requires authentication within the last 15 minutes using a passkey or multi-factor method.",403);
 }
 
 function runnerActionPermission(action:RunnerCommand["action"]):Permission {
