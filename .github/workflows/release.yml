@@ -266,3 +266,15 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then release_flags+=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" "${release_flags[@]}"
           find release -type f -print0 | sort -z | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
+
+  deploy-digitalocean:
+    needs: [verify-release, publish-release]
+    if: ${{ vars.DEPLOY_DIGITALOCEAN == 'true' }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy-digitalocean.yml
+    with:
+      version: ${{ needs.verify-release.outputs.version }}
+      deployment: website
+    secrets: inherit

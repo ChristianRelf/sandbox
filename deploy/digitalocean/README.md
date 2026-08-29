@@ -1,10 +1,10 @@
 # DigitalOcean beta deployment
 
-This deployment is sized for an Ubuntu 24.04 Droplet with 2 GB RAM and 1 vCPU. It caps the public Sandbox website at 384 MB and an optional headless self-hosted runner at 512 MB, leaving headroom for Docker, Caddy, system services, updates, and short-lived spikes. Do not co-host PostgreSQL, the control plane, or the Chromium browser worker on this machine.
+This deployment is sized for an Ubuntu 24.04 Droplet with 2 GB RAM and 1 vCPU. It caps the public Sandbox website at 384 MB, Caddy at 128 MB, and an optional headless self-hosted runner at 512 MB, leaving headroom for Docker, system services, updates, and short-lived spikes. Do not co-host PostgreSQL, the control plane, or the Chromium browser worker on this machine.
 
 The Windows desktop application runs on a tester's PC. The Droplet runner is the always-on execution agent; it does not provide a remote desktop UI.
 
-## Website
+## One-time Droplet setup
 
 1. Create these DNS records, replacing `YOUR_DROPLET_IPV4` with the Droplet's public IPv4 address:
 
@@ -14,29 +14,47 @@ The Windows desktop application runs on a tester's PC. The Droplet runner is the
    | `CNAME` | `www` | `sndbox.app` | `300` or automatic |
 
    Do not point `app`, `docs`, `api`, `identity`, or `internal` at this small Droplet yet. Those names need their own deployed services, and `internal` should not receive a public DNS record. Only add an `AAAA` record when IPv6 is configured on the Droplet.
-2. Install Docker Engine and the Docker Compose plugin using DigitalOcean's current Ubuntu instructions.
-3. Copy this directory to `/opt/sandbox` and copy `.env.example` to `.env`.
-4. Keep `SANDBOX_HTTP_BIND=127.0.0.1` when placing the app behind Caddy, nginx, or a DigitalOcean load balancer. Only expose port 3100 directly if the Droplet firewall restricts it appropriately.
-5. Start and inspect the service:
+2. Add the SSH public key used by GitHub Actions to `/root/.ssh/authorized_keys`. Keep the private key only in GitHub's `digitalocean-beta` environment.
+3. Copy `bootstrap.sh` to the Droplet and run it once:
 
    ```bash
-   docker compose -f compose.yml pull website
-   docker compose -f compose.yml up -d website
-   docker compose -f compose.yml ps
-   curl --fail http://127.0.0.1:3100/
+   chmod 755 bootstrap.sh
+   sudo ./bootstrap.sh
    ```
 
-6. Terminate TLS at the reverse proxy. A minimal Caddy configuration is:
+   The script installs Docker Engine and Compose from Docker's official Ubuntu repository when needed, enables Docker, and creates `/opt/sandbox`. It does not change the host firewall.
+4. In the DigitalOcean cloud firewall, allow inbound TCP `22`, `80`, and `443`. UDP `443` is optional and enables HTTP/3. Do not expose `3100`, `12345`, PostgreSQL, or Docker's daemon port.
 
-   ```caddyfile
-   sndbox.app {
-     reverse_proxy 127.0.0.1:3100
-   }
+## One-click GitHub Actions deployment
 
-   www.sndbox.app {
-     redir https://sndbox.app{uri} permanent
-   }
-   ```
+Create a GitHub environment named `digitalocean-beta` and add these secrets:
+
+| Secret | Value |
+| --- | --- |
+| `DROPLET_HOST` | The Droplet's public IPv4 address or hostname. |
+| `DROPLET_SSH_PRIVATE_KEY` | A dedicated unencrypted SSH private key whose public key was installed during setup. |
+| `DROPLET_SSH_KNOWN_HOSTS` | The Droplet's complete `known_hosts` line. Obtain the key with `ssh-keyscan`, but compare its fingerprint against the DigitalOcean console before trusting it. |
+
+The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` default to `root` and `/opt/sandbox`. The workflow validates the host key, uploads only this deployment bundle, authenticates to GHCR with its short-lived GitHub token, pulls the selected immutable version, and waits for the website health check. Existing `.env`, `runner.toml`, data, automation files, and Docker volumes are not overwritten.
+
+For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.0-beta.1`), and select `website`.
+
+To deploy automatically after every successful signed release, create the repository variable `DEPLOY_DIGITALOCEAN=true`. Automatic deployments intentionally select the website-only profile; observability and the runner remain manual choices.
+
+Caddy runs in Compose, obtains and renews TLS certificates automatically, redirects `www` to the apex domain, and only starts after the website is healthy. Verify the result with:
+
+```bash
+cd /opt/sandbox
+docker compose ps
+curl --fail http://127.0.0.1:3100/
+curl --fail https://sndbox.app/
+```
+
+For a manual deployment without Actions, copy this directory to `/opt/sandbox`, copy `.env.example` to `.env`, authenticate Docker to GHCR if the package is private, and run:
+
+```bash
+./deploy.sh 0.7.0-beta.1 website
+```
 
 ## Grafana Application Observability
 
@@ -102,4 +120,4 @@ docker compose -f compose.yml --profile observability stop alloy
 
 ## Upgrade and rollback
 
-Set `SANDBOX_VERSION` to an immutable published version, pull, and recreate the selected services. To roll back, restore the previous version and repeat the same commands. Back up `data`, `automation`, `runner.toml`, and `.env` before changing runner versions.
+Run the deployment workflow again with any previously published version to roll back. `deploy.sh` also restores the prior website image automatically when a health check fails. Back up `data`, `automation`, `runner.toml`, `.env`, and the Caddy data volume before changing runner versions or moving hosts.

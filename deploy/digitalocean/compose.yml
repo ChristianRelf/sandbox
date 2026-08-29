@@ -17,6 +17,12 @@ services:
       OTEL_METRIC_EXPORT_INTERVAL: 60000
     ports:
       - "${SANDBOX_HTTP_BIND:-127.0.0.1}:3100:3100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
@@ -24,6 +30,37 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 384m
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      website:
+        condition: service_healthy
+    environment:
+      SANDBOX_DOMAIN: ${SANDBOX_DOMAIN:-sndbox.app}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 128m
 
   alloy:
     image: grafana/alloy:v1.18.1
@@ -71,3 +108,5 @@ services:
 
 volumes:
   alloy-data:
+  caddy-data:
+  caddy-config:

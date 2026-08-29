@@ -102,6 +102,33 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("apps/marketing/Dockerfile")).not.toContain("COPY . .");
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
   });
+
+  it("keeps the beta Droplet deployment repeatable and health-gated", () => {
+    const deploymentWorkflow = read(".github/workflows/deploy-digitalocean.yml");
+    expect(deploymentWorkflow).toContain("workflow_call:");
+    expect(deploymentWorkflow).toContain("workflow_dispatch:");
+    expect(deploymentWorkflow).toContain("environment: digitalocean-beta");
+    expect(deploymentWorkflow).toContain("packages: read");
+    expect(deploymentWorkflow).toContain("StrictHostKeyChecking yes");
+    expect(deploymentWorkflow).toContain("DROPLET_SSH_KNOWN_HOSTS");
+    expect(deploymentWorkflow).not.toContain("ssh-keyscan");
+
+    const releaseWorkflow = read(".github/workflows/release.yml");
+    expect(releaseWorkflow).toContain("vars.DEPLOY_DIGITALOCEAN == 'true'");
+    expect(releaseWorkflow).toContain("uses: ./.github/workflows/deploy-digitalocean.yml");
+
+    const compose = read("deploy/digitalocean/compose.yml");
+    expect(compose).toContain("image: caddy:2.11.4-alpine");
+    expect(compose).toContain("condition: service_healthy");
+    expect(compose).toContain("127.0.0.1}:3100:3100");
+    expect(compose).toContain('test: ["CMD", "node", "-e"');
+
+    const deployScript = read("deploy/digitalocean/deploy.sh");
+    expect(deployScript).toContain("Deployment failed; restoring the previous website version.");
+    expect(deployScript).toContain("--wait-timeout 180");
+    expect(deployScript).toContain("if [[ ! -f .env ]]");
+    expect(read("deploy/digitalocean/Caddyfile")).toContain("reverse_proxy website:3100");
+  });
 });
 
 function read(file: string): string {

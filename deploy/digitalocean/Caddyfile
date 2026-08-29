@@ -1,0 +1,14 @@
+{$SANDBOX_DOMAIN:sndbox.app} {
+	encode zstd gzip
+	reverse_proxy website:3100
+
+	header {
+		-Server
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+www.{$SANDBOX_DOMAIN:sndbox.app} {
+	redir https://{$SANDBOX_DOMAIN:sndbox.app}{uri} permanent
+}

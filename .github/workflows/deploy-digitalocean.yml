@@ -1,0 +1,119 @@
+name: Deploy DigitalOcean beta
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Immutable Sandbox image version to deploy
+        required: true
+        type: string
+      deployment:
+        description: Optional services to enable
+        required: false
+        default: website
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published version without the leading v
+        required: true
+        default: 0.7.0-beta.1
+        type: string
+      deployment:
+        description: Services to deploy
+        required: true
+        default: website
+        type: choice
+        options:
+          - website
+          - website+observability
+          - website+runner
+          - all
+
+concurrency:
+  group: digitalocean-beta
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: digitalocean-beta
+    env:
+      SANDBOX_VERSION: ${{ inputs.version }}
+      SANDBOX_DEPLOYMENT: ${{ inputs.deployment }}
+      DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+      DROPLET_USER: ${{ vars.DROPLET_USER || 'root' }}
+      DROPLET_DEPLOY_PATH: ${{ vars.DROPLET_DEPLOY_PATH || '/opt/sandbox' }}
+      SSH_PRIVATE_KEY: ${{ secrets.DROPLET_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.DROPLET_SSH_KNOWN_HOSTS }}
+      GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SANDBOX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { echo "Invalid version '$SANDBOX_VERSION'." >&2; exit 1; }
+          [[ "$SANDBOX_DEPLOYMENT" =~ ^(website|website\+observability|website\+runner|all)$ ]] || { echo "Invalid deployment '$SANDBOX_DEPLOYMENT'." >&2; exit 1; }
+          [[ "$DROPLET_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "DROPLET_HOST must be an IPv4 address or hostname." >&2; exit 1; }
+          [[ "$DROPLET_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "DROPLET_USER is invalid." >&2; exit 1; }
+          [[ "$DROPLET_DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "DROPLET_DEPLOY_PATH must be a simple absolute path." >&2; exit 1; }
+          [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]] || { echo "Droplet SSH secrets are not configured in the digitalocean-beta environment." >&2; exit 1; }
+
+      - name: Configure verified SSH access
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/digitalocean_deploy"
+          chmod 600 "$HOME/.ssh/digitalocean_deploy"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          cat > "$HOME/.ssh/config" <<EOF
+          Host sandbox-droplet
+            HostName $DROPLET_HOST
+            User $DROPLET_USER
+            IdentityFile $HOME/.ssh/digitalocean_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 15
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          ssh sandbox-droplet 'docker version >/dev/null && docker compose version >/dev/null'
+
+      - name: Upload immutable deployment bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/sandbox-digitalocean.tgz"
+          remote_archive=".sandbox-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tgz"
+          tar -C deploy/digitalocean -czf "$archive" .
+          scp "$archive" "sandbox-droplet:$remote_archive"
+          ssh sandbox-droplet "install -d -m 0755 '$DROPLET_DEPLOY_PATH' && tar -xzf '$remote_archive' -C '$DROPLET_DEPLOY_PATH' && rm -f '$remote_archive' && chmod 755 '$DROPLET_DEPLOY_PATH/bootstrap.sh' '$DROPLET_DEPLOY_PATH/deploy.sh'"
+
+      - name: Authenticate the Droplet to GHCR
+        shell: bash
+        run: printf '%s' "$GHCR_PASSWORD" | ssh sandbox-droplet "docker login ghcr.io --username '$GITHUB_ACTOR' --password-stdin"
+
+      - name: Deploy and verify
+        shell: bash
+        run: ssh sandbox-droplet "cd '$DROPLET_DEPLOY_PATH' && ./deploy.sh '$SANDBOX_VERSION' '$SANDBOX_DEPLOYMENT'"
+
+      - name: Remove temporary registry credentials
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: ssh sandbox-droplet 'docker logout ghcr.io >/dev/null 2>&1 || true'
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.ssh/digitalocean_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts"
