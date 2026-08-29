@@ -114,17 +114,26 @@ The local fingerprint must exactly match the fingerprint from the DigitalOcean c
 From the repository root on your computer, upload the bootstrap script:
 
 ```powershell
-scp -O -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" `
+if ([string]::IsNullOrWhiteSpace($DropletIp)) {
+  throw 'DropletIp is empty. Set it first: $DropletIp = "YOUR_DROPLET_IPV4"'
+}
+
+scp -4 `
+  -o KexAlgorithms=curve25519-sha256 `
+  -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" `
   .\deploy\digitalocean\bootstrap.sh `
   "root@${DropletIp}:/root/bootstrap.sh"
 ```
 
-The capital `-O` selects the legacy SCP transport because this Droplet profile may not expose an SFTP subsystem. The GitHub deployment workflow uses the same option.
+PowerShell variables exist only in the terminal session where they were set. If you open a new PowerShell window, set `$DropletIp` again before running these commands.
 
 Run it:
 
 ```powershell
-ssh -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" "root@$DropletIp" `
+ssh -4 `
+  -o KexAlgorithms=curve25519-sha256 `
+  -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" `
+  "root@$DropletIp" `
   'chmod 755 /root/bootstrap.sh && /root/bootstrap.sh'
 ```
 

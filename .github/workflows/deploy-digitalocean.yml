@@ -96,9 +96,7 @@ jobs:
           archive="$RUNNER_TEMP/sandbox-digitalocean.tgz"
           remote_archive=".sandbox-deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tgz"
           tar -C deploy/digitalocean -czf "$archive" .
-          # This Droplet profile may not expose an SFTP subsystem. The archive name and
-          # destination are fixed by this trusted workflow, so legacy SCP mode is safe here.
-          scp -O "$archive" "sandbox-droplet:$remote_archive"
+          scp "$archive" "sandbox-droplet:$remote_archive"
           ssh sandbox-droplet "install -d -m 0755 '$DROPLET_DEPLOY_PATH' && tar -xzf '$remote_archive' -C '$DROPLET_DEPLOY_PATH' && rm -f '$remote_archive' && chmod 755 '$DROPLET_DEPLOY_PATH/bootstrap.sh' '$DROPLET_DEPLOY_PATH/deploy.sh'"
 
       - name: Authenticate the Droplet to GHCR
