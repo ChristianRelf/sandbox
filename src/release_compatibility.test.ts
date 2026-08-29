@@ -77,6 +77,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(workflow).toContain("--prerelease");
     expect(workflow).not.toContain("--draft");
     expect(workflow).not.toMatch(/uses: [^\n]+@(v\d+|stable|main)\s*$/m);
+    expect(workflow.match(/if: github\.event\.repository\.private == false/g)).toHaveLength(3);
 
     const agentRelease = read("agents/server/packaging/build-release.sh");
     expect(agentRelease).toContain('RELEASE_SIGNING_REQUIRED:-0');
@@ -86,7 +87,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/Dockerfile")).toContain("USER nonroot:nonroot");
 
     const downloads = read("apps/marketing/app/downloads/DownloadsClient.tsx");
-    expect(downloads).toContain("Unsigned test build · SHA-256 + GitHub provenance");
+    expect(downloads).toContain("Unsigned test build · SHA-256 checksum");
     expect(downloads).toContain("SmartScreen may show an unknown publisher warning");
   });
 

@@ -33,7 +33,7 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
         <div><dt>Release</dt><dd>{manifest ? `${manifest.version} ${manifest.channel}` : "0.7.0-beta.1 pending publication"}</dd></div>
         <div><dt>Artifact</dt><dd>{artifact?.name ?? "No published artifact for this platform"}</dd></div>
         <div><dt>Checksum</dt><dd className="download-digest">{artifact?.sha256 ?? "Generated and validated during release"}</dd></div>
-        <div><dt>Verification</dt><dd>{selected === "windows" ? unsignedWindowsBeta ? "Unsigned test build · SHA-256 + GitHub provenance" : manifest ? "Authenticode signature + GitHub provenance" : "Declared in the published release" : "Sigstore bundle + GitHub provenance"}</dd></div>
+        <div><dt>Verification</dt><dd>{selected === "windows" ? unsignedWindowsBeta ? "Unsigned test build · SHA-256 checksum" : manifest ? "Authenticode signature + SHA-256 checksum" : "Declared in the published release" : "Sigstore bundle + SHA-256 checksum"}</dd></div>
       </dl>
       {unsignedWindowsBeta && <p className="download-beta-note"><strong>Unsigned Windows test build.</strong> SmartScreen may show an unknown publisher warning. Only install a checksum-verified copy shared through this release.</p>}
       {artifact

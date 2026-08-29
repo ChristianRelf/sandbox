@@ -131,11 +131,13 @@ jobs:
               "",
               "This installer is an invite-only Sandbox prerelease and is not Authenticode signed.",
               "Windows SmartScreen may display an unknown publisher warning. Verify the SHA-256",
-              "checksum and GitHub build provenance before installing it. Do not redistribute it",
+              "checksum and GitHub Actions release record before installing it. Do not redistribute it",
               "as a production release."
             ) | Set-Content -LiteralPath (Join-Path $output "UNSIGNED-WINDOWS-BETA.txt") -Encoding ascii
           }
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+      - name: Attest desktop artifacts when GitHub supports repository attestations
+        if: github.event.repository.private == false
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: release/desktop/**
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -178,7 +180,9 @@ jobs:
           SHA256SUMS
       - name: Stage agent release assets
         run: mkdir -p release/agent && cp agents/server/dist/* release/agent/
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+      - name: Attest agent artifacts when GitHub supports repository attestations
+        if: github.event.repository.private == false
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: release/agent/**
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -249,7 +253,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=container-${{ matrix.name }}
       - name: Sign immutable image digest
         run: cosign sign --yes "${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}"
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+      - name: Attest container image when GitHub supports repository attestations
+        if: github.event.repository.private == false
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build.outputs.digest }}

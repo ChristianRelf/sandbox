@@ -1,7 +1,7 @@
 {
   "name": "sandbox",
   "private": true,
-  "version": "0.7.0-beta.1",
+  "version": "0.7.0-beta.2",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -11,8 +11,10 @@
   ],
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run contracts:build",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "pretest": "npm run contracts:build",
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",

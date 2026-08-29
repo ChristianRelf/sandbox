@@ -174,7 +174,7 @@ In GitHub, open:
 
 Create `production-release`. You do not need to add a code-signing certificate for an `alpha`, `beta`, or `rc` test release.
 
-The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.0-beta.1`. It still publishes a SHA-256 checksum and GitHub build provenance. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
+The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.0-beta.1`. It still publishes a SHA-256 checksum and retains the GitHub Actions release record. GitHub artifact attestations are added when the repository visibility and account support them; they are unavailable for a private repository owned by a personal account. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
 
 You can optionally require manual approval on this environment before GitHub publishes a release.
 
@@ -258,7 +258,7 @@ Open **GitHub > Actions > Release**. Wait for every job to succeed. The workflow
 - An explicitly unsigned Windows NSIS test installer for this prerelease
 - Linux runner archives
 - Multi-architecture website and runner containers
-- Checksums, signatures, attestations, and `release-manifest.json`
+- Checksums, Sigstore signatures, `release-manifest.json`, and GitHub artifact attestations when the repository supports them
 - A published GitHub prerelease
 
 Do not start the Droplet deployment until the release and container jobs are green.
