@@ -2,12 +2,14 @@
 **/node_modules
 **/target
 **/dist
-!services/browser-worker/dist
-!services/browser-worker/dist/**
 **/.next
+**/.turbo
+**/coverage
+**/.cache
 browser-sidecar/browsers
 browser-sidecar/runtime
 screenshots
+release
 *.tsbuildinfo
 *.log
 deploy/digitalocean/.env

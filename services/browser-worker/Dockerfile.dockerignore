@@ -1,0 +1,15 @@
+**
+!package.json
+!package-lock.json
+!services
+!services/browser-worker
+!services/browser-worker/package.json
+!services/browser-worker/tsconfig.json
+!services/browser-worker/src
+!services/browser-worker/src/**
+services/browser-worker/src/**/*.test.ts
+services/browser-worker/src/**/*.spec.ts
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/*.log

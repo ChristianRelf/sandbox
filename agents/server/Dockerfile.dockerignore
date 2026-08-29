@@ -1,0 +1,11 @@
+**
+!agents
+!agents/server
+!agents/server/**
+!src-tauri
+!src-tauri/engine
+!src-tauri/engine/**
+agents/server/packaging
+agents/server/target
+src-tauri/engine/target
+**/*.log

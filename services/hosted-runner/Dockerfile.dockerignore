@@ -1,0 +1,11 @@
+**
+!services
+!services/hosted-runner
+!services/hosted-runner/**
+!src-tauri
+!src-tauri/engine
+!src-tauri/engine/**
+services/hosted-runner/examples
+services/hosted-runner/target
+src-tauri/engine/target
+**/*.log
