@@ -80,6 +80,28 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/Dockerfile")).toContain("COPY src-tauri/engine src-tauri/engine");
     expect(read("agents/server/Dockerfile")).toContain("USER nonroot:nonroot");
   });
+
+  it("keeps release container builds cacheable and independently scoped", () => {
+    const workflow = read(".github/workflows/release.yml");
+    expect(workflow).toContain("cache-from: type=gha,scope=container-${{ matrix.name }}");
+    expect(workflow).toContain("cache-to: type=gha,mode=max,scope=container-${{ matrix.name }}");
+    expect(workflow).not.toContain("Build browser worker distribution");
+
+    const dockerfiles = [
+      "agents/server/Dockerfile",
+      "apps/marketing/Dockerfile",
+      "services/browser-worker/Dockerfile",
+      "services/hosted-runner/Dockerfile",
+    ];
+    for (const file of dockerfiles) {
+      expect(read(file), file).toMatch(/^# syntax=docker\/dockerfile:1\.7/m);
+      expect(read(file), file).toContain("--mount=type=cache");
+      expect(read(`${file}.dockerignore`), `${file}.dockerignore`).toMatch(/^\*\*$/m);
+    }
+
+    expect(read("apps/marketing/Dockerfile")).not.toContain("COPY . .");
+    expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
+  });
 });
 
 function read(file: string): string {
