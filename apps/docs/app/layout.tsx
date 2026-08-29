@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_DOCS_URL ?? brand.domains.docs),
   title: { default: "Sandbox documentation", template: "%s — Sandbox Docs" },
   description: "Practical guides and technical reference for building, running and operating Sandbox visual automations.",
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     title: "Sandbox Docs",
@@ -32,7 +31,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <header className="topbar">
       <Link href="/getting-started" className="wordmark"><span><Box size={15}/></span>Sandbox <i>Docs</i></Link>
       <Search pages={docs}/>
-      <div className="topbar-links"><a href="https://sandbox.com">Product</a><a href="https://app.sandbox.com">Account <ExternalLink size={11}/></a></div>
+      <div className="topbar-links"><a href={brand.domains.marketing}>Product</a><a href={brand.domains.app}>Account <ExternalLink size={11}/></a></div>
       <details className="mobile-navigation">
         <summary aria-label="Open documentation navigation"><Menu size={18}/></summary>
         <div><DocsNavigation groups={nav}/></div>

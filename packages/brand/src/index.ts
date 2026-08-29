@@ -4,9 +4,11 @@ export const brand = {
   description:
     "Build visual workflows for your browser, files, apps and private network, then run them locally, in the cloud or on infrastructure you control.",
   domains: {
-    marketing: "https://sandbox.com",
-    app: "https://app.sandbox.com",
-    docs: "https://docs.sandbox.com",
+    marketing: "https://sndbox.app",
+    app: "https://app.sndbox.app",
+    docs: "https://docs.sndbox.app",
+    api: "https://api.sndbox.app",
+    identity: "https://identity.sndbox.app",
   },
   desktopScheme: "sandbox",
 } as const;

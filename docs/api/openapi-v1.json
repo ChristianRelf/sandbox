@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://api.sandbox.example"
+      "url": "https://api.sndbox.app"
     }
   ],
   "paths": {

@@ -6,8 +6,44 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: 3100
       SANDBOX_RELEASE_MANIFEST_URL: ${SANDBOX_RELEASE_MANIFEST_URL:-https://github.com/ChristianRelf/sandbox/releases/download/v0.7.0-beta.1/release-manifest.json}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      OTEL_NODE_RESOURCE_DETECTORS: env,os,process
+      OTEL_SERVICE_NAME: sandbox-marketing
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=sandbox,deployment.environment=${OTEL_DEPLOYMENT_ENVIRONMENT:-production},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-production},service.version=${SANDBOX_VERSION:-0.7.0-beta.1}
+      OTEL_METRIC_EXPORT_INTERVAL: 60000
     ports:
       - "${SANDBOX_HTTP_BIND:-127.0.0.1}:3100:3100"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 384m
+
+  alloy:
+    image: grafana/alloy:v1.18.1
+    profiles: [observability]
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      GRAFANA_CLOUD_OTLP_ENDPOINT: ${GRAFANA_CLOUD_OTLP_ENDPOINT:-}
+      GRAFANA_CLOUD_INSTANCE_ID: ${GRAFANA_CLOUD_INSTANCE_ID:-}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-}
+      OTEL_RESOURCE_ATTRIBUTES: grafana.host.id=${GRAFANA_HOST_ID:-sandbox-marketing-do-01}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "${SANDBOX_ALLOY_HTTP_BIND:-127.0.0.1}:12345:12345"
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
@@ -31,4 +67,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 192
-    mem_limit: 384m
+    mem_limit: 512m
+
+volumes:
+  alloy-data:

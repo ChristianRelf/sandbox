@@ -2,8 +2,14 @@
   "name": "@sandbox/marketing",
   "version": "0.7.0-beta.1",
   "private": true,
-  "scripts": { "dev": "next dev -p 3100", "build": "next build", "start": "next start -p 3100" },
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "next build",
+    "start": "next start -p 3100"
+  },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.79.0",
     "@sandbox/brand": "*",
     "@sandbox/ui": "*",
     "lucide-react": "^0.468.0",
@@ -11,5 +17,10 @@
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
-  "devDependencies": { "@types/node": "^24.3.0", "@types/react": "^19.2.0", "@types/react-dom": "^19.2.0", "typescript": "~5.9.3" }
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "~5.9.3"
+  }
 }

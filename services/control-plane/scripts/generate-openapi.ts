@@ -11,7 +11,7 @@ const dependencies = {
   email: { sendInvitation: unavailable },
   packageStorage: { createUpload: unavailable, createDownload: unavailable, inspect: unavailable },
   packageScanner: { scan: unavailable },
-  webBaseUrl: "https://app.sandbox.example"
+  webBaseUrl: "https://app.sndbox.app"
 } as unknown as ApiDependencies;
 
 const server = await createServer(dependencies);

@@ -39,6 +39,7 @@ describe("v0.7 beta release compatibility", () => {
       expect(read(file), file).toMatch(/^version = "0\.7\.0-beta\.1"$/m);
     }
     expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(betaVersion);
+    expect(JSON.parse(read("src-tauri/tauri.conf.json")).bundle.targets).toEqual(["nsis"]);
   });
 
   it("keeps runtime constants and protocol boundaries aligned", () => {

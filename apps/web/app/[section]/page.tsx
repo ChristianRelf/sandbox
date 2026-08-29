@@ -26,8 +26,8 @@ export default async function Page({ params }: { params: Params }) {
     <header className="page-head"><div><p>ACCOUNT</p><h1>{page.title}</h1><span>{page.description}</span></div>{section === "downloads" && <button disabled className="portal-primary"><Download size={14}/>No eligible build</button>}</header>
     {!page.available && <section className="blocked-notice"><CircleAlert/><div><strong>Dedicated service contract required</strong><p>{page.reason}</p></div></section>}
     <section className="section-list"><header><h2>{page.available ? "Implemented capabilities" : "Required capabilities"}</h2><span>{page.available ? "Backed by the merged v0.5 control plane" : "Deliberately unavailable until its contract exists"}</span></header>{page.items.map((item,index) => <article key={item}><span>{String(index+1).padStart(2,"0")}</span><strong>{item}</strong>{page.available ? <ShieldCheck/> : <CircleAlert/>}</article>)}</section>
-    {section === "releases" && <a className="cross-link" href="https://sandbox.com/changelog">Open public changelog <ArrowRight/></a>}
-    {section === "support" && <p className="support-fallback">Use <a href="https://docs.sandbox.com/troubleshooting">Sandbox troubleshooting</a> before opening a case with the configured provider. Never send credentials or an unreviewed diagnostic bundle.</p>}
+    {section === "releases" && <a className="cross-link" href="https://sndbox.app/changelog">Open public changelog <ArrowRight/></a>}
+    {section === "support" && <p className="support-fallback">Use <a href="https://docs.sndbox.app/troubleshooting">Sandbox troubleshooting</a> before opening a case with the configured provider. Never send credentials or an unreviewed diagnostic bundle.</p>}
     {section === "purchases" && <Link className="cross-link" href="/marketplace">Browse marketplace <ArrowRight/></Link>}
   </main>;
 }

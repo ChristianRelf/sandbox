@@ -25,6 +25,7 @@ export async function generateMetadata({ params }: { params: Params }) {
   const articleMetadata = {
     title: page.title,
     description: page.description,
+    alternates: { canonical: `/${page.slug}` },
   };
 
   return slug?.length

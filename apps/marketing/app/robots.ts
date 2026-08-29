@@ -1,1 +1,1 @@
-import type { MetadataRoute } from "next";export default function robots():MetadataRoute.Robots{return{rules:{userAgent:"*",allow:"/",disallow:["/api/"]},sitemap:"https://sandbox.com/sitemap.xml"}}
+import type { MetadataRoute } from "next";import { brand } from "@sandbox/brand";export default function robots():MetadataRoute.Robots{return{rules:{userAgent:"*",allow:"/",disallow:["/api/"]},sitemap:`${brand.domains.marketing}/sitemap.xml`,host:brand.domains.marketing}}

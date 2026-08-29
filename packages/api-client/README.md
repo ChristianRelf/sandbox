@@ -7,7 +7,7 @@ transport contract.
 import { SandboxApiClient } from "@sandbox/api-client";
 
 const api = new SandboxApiClient({
-  baseUrl: "https://api.sandbox.example",
+  baseUrl: "https://api.sndbox.app",
   accessToken: () => process.env.SANDBOX_ACCESS_TOKEN ?? null
 });
 

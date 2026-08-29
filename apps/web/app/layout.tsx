@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { brand } from "@sandbox/brand";
 import {
   Bell, Box, CreditCard, Download, Gauge, KeyRound, LifeBuoy,
   Package, ReceiptText, Settings, ShieldCheck, User, Users,
@@ -7,6 +8,7 @@ import {
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(brand.domains.app),
   title: { default: "Sandbox account", template: "%s · Sandbox" },
   description: "Manage Sandbox releases, licences, purchases, usage, organisations and support.",
 };
@@ -24,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return <html lang="en"><body>
     <header className="portal-header">
       <Link href="/" className="wordmark"><span><Box size={17}/></span>Sandbox</Link><i>Account</i>
-      <a className="product-link" href="https://sandbox.com">Back to product</a>
+      <a className="product-link" href={brand.domains.marketing}>Back to product</a>
       <button aria-label="Notifications"><Bell size={16}/></button>
       <div className="account-chip" aria-label="Unauthenticated account"><User size={13}/></div>
     </header>

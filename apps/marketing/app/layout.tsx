@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_MARKETING_URL ?? brand.domains.marketing),
   title: { default: `${brand.name} - Visual automation under your control`, template: `%s - ${brand.name}` },
   description: shareDescription,
-  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: brand.name,

@@ -29,6 +29,7 @@ import styles from "./home.module.css";
 export const metadata: Metadata = {
   title: "Give the busywork back to your computer",
   description: "Give repetitive browser, file and app work back to your computer with visual workflows that run where you choose.",
+  alternates: { canonical: "/" },
 };
 
 export default function HomePage() {
@@ -206,7 +207,7 @@ export default function HomePage() {
 
       <footer className={styles.diagnosticsFooter}>
         <p><span>THE PRINCIPLE</span> If a workflow cannot explain itself, it is not ready to run unattended.</p>
-        <a href="https://docs.sandbox.com/getting-started/understand-executions">Understand executions <ArrowRight size={14}/></a>
+        <a href="https://docs.sndbox.app/getting-started/understand-executions">Understand executions <ArrowRight size={14}/></a>
       </footer>
     </section>
 
@@ -282,7 +283,7 @@ export default function HomePage() {
         <p>Build it on your computer. Watch every step. Keep it local for free, or move it online when the work needs to keep running.</p>
         <div>
           <Link href="/downloads" className={styles.ctaPrimary}>Download Sandbox <ArrowRight size={15}/></Link>
-          <a href="https://docs.sandbox.com/getting-started" className={styles.ctaSecondary}>Read the quickstart</a>
+          <a href="https://docs.sndbox.app/getting-started" className={styles.ctaSecondary}>Read the quickstart</a>
         </div>
         <small><Check size={11}/> Windows available now · no card required</small>
       </div>
