@@ -79,14 +79,22 @@ Use the DigitalOcean web console to run this directly on the Droplet:
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Keep the displayed SHA-256 fingerprint. Then collect the public host key from PowerShell:
+Keep the displayed SHA-256 fingerprint. Then collect the public host key from PowerShell. This block uses absolute paths and stops with a useful error when the host or SSH port is unreachable:
 
 ```powershell
-ssh-keyscan -t ed25519 $DropletIp 2>$null | Set-Content -Encoding ascii .\sandbox_known_hosts
+$DropletIp = "YOUR_ACTUAL_DROPLET_IPV4"
+$KnownHostsPath = Join-Path $env:USERPROFILE "sandbox_known_hosts"
+$HostKeyPath = Join-Path $env:USERPROFILE "sandbox_host_key.pub"
 
-(Get-Content .\sandbox_known_hosts) -replace '^[^ ]+ ', '' | Set-Content -Encoding ascii .\sandbox_host_key.pub
+$scan = ssh-keyscan -T 10 -t ed25519 $DropletIp 2>$null
+if (-not $scan) {
+  throw "No SSH host key returned. Check the IP and that TCP port 22 is open."
+}
 
-ssh-keygen -lf .\sandbox_host_key.pub
+$scan | Set-Content -LiteralPath $KnownHostsPath -Encoding ascii
+$scan -replace '^[^ ]+ ', '' | Set-Content -LiteralPath $HostKeyPath -Encoding ascii
+
+ssh-keygen -lf $HostKeyPath
 ```
 
 The local fingerprint must exactly match the fingerprint from the DigitalOcean console. If it does not match, stop and investigate.
@@ -188,7 +196,7 @@ Get-Content -Raw "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" | Set-Clipboard
 Copy the verified host entry:
 
 ```powershell
-Get-Content -Raw .\sandbox_known_hosts | Set-Clipboard
+Get-Content -Raw "$env:USERPROFILE\sandbox_known_hosts" | Set-Clipboard
 ```
 
 Optional environment variables:
