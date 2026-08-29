@@ -5,6 +5,7 @@ import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
 const betaVersion = "0.7.0-beta.2";
+const escapedBetaVersion = betaVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("v0.7 beta release compatibility", () => {
   it("keeps first-party surfaces and runtime components on one beta version", () => {
@@ -36,7 +37,7 @@ describe("v0.7 beta release compatibility", () => {
       "src-tauri/plugin-runtime/Cargo.toml"
     ];
     for (const file of crates) {
-      expect(read(file), file).toMatch(/^version = "0\.7\.0-beta\.1"$/m);
+      expect(read(file), file).toMatch(new RegExp(`^version = "${escapedBetaVersion}"$`, "m"));
     }
     expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(betaVersion);
     expect(JSON.parse(read("src-tauri/tauri.conf.json")).bundle.targets).toEqual(["nsis"]);
