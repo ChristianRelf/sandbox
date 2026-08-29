@@ -79,35 +79,47 @@ Use the DigitalOcean web console to run this directly on the Droplet:
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Keep the displayed SHA-256 fingerprint. Then collect the public host key from PowerShell. This block uses absolute paths and stops with a useful error when the host or SSH port is unreachable:
+Keep the displayed SHA-256 fingerprint. Windows' bundled `ssh-keyscan` can fail against newer Ubuntu SSH servers during hybrid key-exchange negotiation. Use the normal SSH client with a compatible key-exchange algorithm to populate a dedicated file instead:
 
 ```powershell
 $DropletIp = "YOUR_ACTUAL_DROPLET_IPV4"
 $KnownHostsPath = Join-Path $env:USERPROFILE "sandbox_known_hosts"
-$HostKeyPath = Join-Path $env:USERPROFILE "sandbox_host_key.pub"
+$KnownHostsPathForSsh = $KnownHostsPath.Replace('\', '/')
+$DeployKeyPath = Join-Path $env:USERPROFILE ".ssh\sandbox_droplet_deploy"
 
-$scan = ssh-keyscan -T 10 -t ed25519 $DropletIp 2>$null
-if (-not $scan) {
-  throw "No SSH host key returned. Check the IP and that TCP port 22 is open."
+if (Test-Path -LiteralPath $KnownHostsPath) {
+  Remove-Item -LiteralPath $KnownHostsPath
 }
 
-$scan | Set-Content -LiteralPath $KnownHostsPath -Encoding ascii
-$scan -replace '^[^ ]+ ', '' | Set-Content -LiteralPath $HostKeyPath -Encoding ascii
+ssh -4 `
+  -i $DeployKeyPath `
+  -o KexAlgorithms=curve25519-sha256 `
+  -o StrictHostKeyChecking=accept-new `
+  -o "UserKnownHostsFile=$KnownHostsPathForSsh" `
+  -o ConnectTimeout=10 `
+  "root@$DropletIp" exit
 
-ssh-keygen -lf $HostKeyPath
+if (-not (Test-Path -LiteralPath $KnownHostsPath)) {
+  throw "SSH did not save the host key. Check the IP and that TCP port 22 is open."
+}
+
+Get-Content -LiteralPath $KnownHostsPath
+ssh-keygen -lf $KnownHostsPath
 ```
 
-The local fingerprint must exactly match the fingerprint from the DigitalOcean console. If it does not match, stop and investigate.
+The local fingerprint must exactly match the fingerprint from the DigitalOcean console. If it does not match, delete the dedicated `sandbox_known_hosts` file and stop to investigate. An authentication error after the host-key line does not invalidate the saved host key, but fix SSH-key access before continuing to the bootstrap step.
 
 ## 5. Bootstrap the Droplet
 
 From the repository root on your computer, upload the bootstrap script:
 
 ```powershell
-scp -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" `
+scp -O -i "$env:USERPROFILE\.ssh\sandbox_droplet_deploy" `
   .\deploy\digitalocean\bootstrap.sh `
   "root@${DropletIp}:/root/bootstrap.sh"
 ```
+
+The capital `-O` selects the legacy SCP transport because this Droplet profile may not expose an SFTP subsystem. The GitHub deployment workflow uses the same option.
 
 Run it:
 
