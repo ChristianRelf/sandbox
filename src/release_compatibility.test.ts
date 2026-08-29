@@ -51,12 +51,17 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.0-beta.1,<0.8"');
   });
 
-  it("fails release publication closed unless every artifact is signed and attested", () => {
+  it("attests prerelease artifacts while keeping stable Windows releases fail-closed", () => {
     const workflow = read(".github/workflows/release.yml");
     expect(workflow).toContain('tags: ["v*.*.*"]');
     expect(workflow).toContain("vMAJOR.MINOR.PATCH-beta.NUMBER");
     expect(workflow).toContain("WINDOWS_CERTIFICATE_PASSWORD");
     expect(workflow).toContain("Get-AuthenticodeSignature");
+    expect(workflow).toContain('echo "prerelease=true"');
+    expect(workflow).toContain("Stable releases require WINDOWS_CERTIFICATE");
+    expect(workflow).toContain('WINDOWS_INSTALLER_SIGNED=false');
+    expect(workflow).toContain('$signature.Status -ne "NotSigned"');
+    expect(workflow).toContain("UNSIGNED-WINDOWS-BETA.txt");
     expect(workflow).toContain('if ($signature.Status -ne "Valid")');
     expect(workflow.match(/actions\/attest@[a-f0-9]{40}/g)).toHaveLength(3);
     expect(workflow).toContain("cosign verify-blob");
@@ -79,6 +84,10 @@ describe("v0.7 beta release compatibility", () => {
     expect(agentRelease).toContain("test -s SHA256SUMS.sigstore.json");
     expect(read("agents/server/Dockerfile")).toContain("COPY src-tauri/engine src-tauri/engine");
     expect(read("agents/server/Dockerfile")).toContain("USER nonroot:nonroot");
+
+    const downloads = read("apps/marketing/app/downloads/DownloadsClient.tsx");
+    expect(downloads).toContain("Unsigned test build · SHA-256 + GitHub provenance");
+    expect(downloads).toContain("SmartScreen may show an unknown publisher warning");
   });
 
   it("keeps release container builds cacheable and independently scoped", () => {

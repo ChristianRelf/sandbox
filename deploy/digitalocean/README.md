@@ -1,5 +1,7 @@
 # DigitalOcean beta deployment
 
+For the complete first-time walkthrough, follow [DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md).
+
 This deployment is sized for an Ubuntu 24.04 Droplet with 2 GB RAM and 1 vCPU. It caps the public Sandbox website at 384 MB, Caddy at 128 MB, and an optional headless self-hosted runner at 512 MB, leaving headroom for Docker, system services, updates, and short-lived spikes. Do not co-host PostgreSQL, the control plane, or the Chromium browser worker on this machine.
 
 The Windows desktop application runs on a tester's PC. The Droplet runner is the always-on execution agent; it does not provide a remote desktop UI.
@@ -39,7 +41,7 @@ The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` defa
 
 For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.0-beta.1`), and select `website`.
 
-To deploy automatically after every successful signed release, create the repository variable `DEPLOY_DIGITALOCEAN=true`. Automatic deployments intentionally select the website-only profile; observability and the runner remain manual choices.
+To deploy automatically after every successful release, create the repository variable `DEPLOY_DIGITALOCEAN=true`. Automatic deployments intentionally select the website-only profile; observability and the runner remain manual choices.
 
 Caddy runs in Compose, obtains and renews TLS certificates automatically, redirects `www` to the apex domain, and only starts after the website is healthy. Verify the result with:
 

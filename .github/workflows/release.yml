@@ -1,4 +1,4 @@
-name: Signed release
+name: Release
 
 on:
   push:
@@ -15,6 +15,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - id: version
@@ -34,6 +35,11 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
   desktop-windows:
     needs: verify-release
@@ -47,6 +53,7 @@ jobs:
       WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+      RELEASE_IS_PRERELEASE: ${{ needs.verify-release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -58,12 +65,18 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
-      - name: Import and validate Windows code-signing identity
+      - name: Configure Windows signing policy
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $isPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true"
+          if ($isPrerelease) {
+            "WINDOWS_INSTALLER_SIGNED=false" >> $env:GITHUB_ENV
+            Write-Warning "This invite-only prerelease will publish an unsigned Windows installer. Windows SmartScreen warnings are expected."
+            return
+          }
           if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD -or -not $env:WINDOWS_TIMESTAMP_URL) {
-            throw "WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD and WINDOWS_TIMESTAMP_URL are required."
+            throw "Stable releases require WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD and WINDOWS_TIMESTAMP_URL."
           }
           $pfxPath = Join-Path $env:RUNNER_TEMP "sandbox-release.pfx"
           [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
@@ -79,27 +92,49 @@ jobs:
           $overlay | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $overlayPath -Encoding utf8
           "TAURI_RELEASE_CONFIG=$overlayPath" >> $env:GITHUB_ENV
           "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
-      - name: Build signed desktop installers
+          "WINDOWS_INSTALLER_SIGNED=true" >> $env:GITHUB_ENV
+      - name: Build desktop installer
         shell: pwsh
-        run: npm.cmd run desktop:build -- --config $env:TAURI_RELEASE_CONFIG
-      - name: Verify Authenticode and stage installers
+        run: |
+          if ($env:WINDOWS_INSTALLER_SIGNED -eq "true") {
+            npm.cmd run desktop:build -- --config $env:TAURI_RELEASE_CONFIG
+          } else {
+            npm.cmd run desktop:build
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify signing policy and stage installers
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $isSigned = $env:WINDOWS_INSTALLER_SIGNED -eq "true"
           $output = Join-Path $PWD "release\desktop"
           New-Item -ItemType Directory -Path $output -Force | Out-Null
           $installers = Get-ChildItem -LiteralPath "src-tauri\target\release\bundle" -Recurse -File | Where-Object { $_.Extension -in ".exe", ".msi" }
           if (-not $installers) { throw "No Windows installers were produced." }
           foreach ($installer in $installers) {
             $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
-            if ($signature.Status -ne "Valid") { throw "$($installer.Name) has invalid Authenticode status: $($signature.Status)." }
-            if ($signature.SignerCertificate.Thumbprint -ne $env:WINDOWS_CERTIFICATE_THUMBPRINT) { throw "$($installer.Name) was signed by an unexpected certificate." }
+            if ($isSigned) {
+              if ($signature.Status -ne "Valid") { throw "$($installer.Name) has invalid Authenticode status: $($signature.Status)." }
+              if ($signature.SignerCertificate.Thumbprint -ne $env:WINDOWS_CERTIFICATE_THUMBPRINT) { throw "$($installer.Name) was signed by an unexpected certificate." }
+            } elseif ($signature.Status -ne "NotSigned") {
+              throw "Unsigned prerelease $($installer.Name) has unexpected Authenticode status: $($signature.Status)."
+            }
             Copy-Item -LiteralPath $installer.FullName -Destination $output
           }
           Get-ChildItem -LiteralPath $output -File | Sort-Object Name | ForEach-Object {
             $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
             "$digest  $($_.Name)"
           } | Set-Content -LiteralPath (Join-Path $output "SHA256SUMS-desktop-windows") -Encoding ascii
+          if (-not $isSigned) {
+            @(
+              "UNSIGNED WINDOWS TEST BUILD",
+              "",
+              "This installer is an invite-only Sandbox prerelease and is not Authenticode signed.",
+              "Windows SmartScreen may display an unknown publisher warning. Verify the SHA-256",
+              "checksum and GitHub build provenance before installing it. Do not redistribute it",
+              "as a production release."
+            ) | Set-Content -LiteralPath (Join-Path $output "UNSIGNED-WINDOWS-BETA.txt") -Encoding ascii
+          }
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: release/desktop/**
@@ -263,7 +298,9 @@ jobs:
         run: |
           set -euo pipefail
           release_flags=(--verify-tag --generate-notes --title "Sandbox $GITHUB_REF_NAME")
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then release_flags+=(--prerelease); fi
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_flags+=(--prerelease --notes $'> [!WARNING]\n> The Windows installer in this invite-only prerelease is not Authenticode signed. Windows may show an unknown publisher or SmartScreen warning. Verify its SHA-256 checksum and GitHub provenance before installation.')
+          fi
           gh release create "$GITHUB_REF_NAME" "${release_flags[@]}"
           find release -type f -print0 | sort -z | xargs -0 gh release upload "$GITHUB_REF_NAME" --clobber
 

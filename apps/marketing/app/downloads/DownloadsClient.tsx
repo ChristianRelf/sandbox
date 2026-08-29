@@ -21,6 +21,7 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
   const platform = platforms.find(item => item.id === selected)!;
   const artifact = findArtifact(manifest, selected);
   const available = Boolean(artifact);
+  const unsignedWindowsBeta = selected === "windows" && manifest?.channel === "beta";
   return <div className="download-picker">
     <nav aria-label="Platforms">{platforms.map(item => <button key={item.id} onClick={() => setSelected(item.id)} className={selected === item.id ? "active" : ""}>{item.name}</button>)}</nav>
     <section><div>
@@ -32,8 +33,9 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
         <div><dt>Release</dt><dd>{manifest ? `${manifest.version} ${manifest.channel}` : "0.7.0-beta.1 pending publication"}</dd></div>
         <div><dt>Artifact</dt><dd>{artifact?.name ?? "No published artifact for this platform"}</dd></div>
         <div><dt>Checksum</dt><dd className="download-digest">{artifact?.sha256 ?? "Generated and validated during release"}</dd></div>
-        <div><dt>Verification</dt><dd>{selected === "windows" ? "Authenticode signature + GitHub provenance" : "Sigstore bundle + GitHub provenance"}</dd></div>
+        <div><dt>Verification</dt><dd>{selected === "windows" ? unsignedWindowsBeta ? "Unsigned test build · SHA-256 + GitHub provenance" : manifest ? "Authenticode signature + GitHub provenance" : "Declared in the published release" : "Sigstore bundle + GitHub provenance"}</dd></div>
       </dl>
+      {unsignedWindowsBeta && <p className="download-beta-note"><strong>Unsigned Windows test build.</strong> SmartScreen may show an unknown publisher warning. Only install a checksum-verified copy shared through this release.</p>}
       {artifact
         ? <a className="sb-button sb-button--primary" href={artifact.downloadUrl}><Download size={14}/>Download · {formatBytes(artifact.bytes)}</a>
         : <a className="sb-button" href="https://github.com/ChristianRelf/sandbox/releases"><ExternalLink size={14}/>View release status</a>}
