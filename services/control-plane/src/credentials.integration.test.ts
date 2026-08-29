@@ -95,7 +95,7 @@ integration("service accounts and access tokens",()=>{
     const service=await credentials.createOrganisationServiceAccount(actor,{organisationId,name:"Fleet deployer",description:"Cross-workspace deployment",assignments,expiryPolicyDays:14},randomUUID());
     expect(service).toMatchObject({organisationId,assignments,ownerAccountIds:[accountId],status:"active"});
     expect((await credentials.listServiceAccounts(actor,secondWorkspaceId)).some(item=>item.id===service.id&&item.workspaceId===null&&item.environmentIds.includes(secondEnvironmentId))).toBe(true);
-    const issued=await credentials.issueServiceAccountToken(actor,service.id,{name:"Fleet credential",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId,secondWorkspaceId],environmentIds:[environmentId,secondEnvironmentId],expiresAt:new Date(Date.now()+7*86_400_000)},randomUUID());
+    const issued=await credentials.issueServiceAccountToken(actor,service.id,{name:"Fleet credential",scopes:["workflows.run"],organisationId,workspaceIds:[workspaceId,secondWorkspaceId],environmentIds:[environmentId,secondEnvironmentId],expiresAt:new Date(Date.now()+8*86_400_000)},randomUUID());
     expect(await credentials.verify(issued.token)).toMatchObject({principalType:"service_account",workspaceRestrictions:expect.arrayContaining([workspaceId,secondWorkspaceId]),environmentRestrictions:expect.arrayContaining([environmentId,secondEnvironmentId])});
     expect(Number((await pool.query<{count:string}>(`SELECT count(*)::text count FROM service_account_role_assignments WHERE service_account_id=$1`,[service.id])).rows[0].count)).toBe(2);
   });
@@ -114,7 +114,7 @@ integration("service accounts and access tokens",()=>{
   it("keeps credential metadata hidden from a different tenant at the RLS boundary",async()=>{
     const outsiderId=randomUUID();await pool.query(`INSERT INTO accounts(id,identity_subject,primary_email,email_verified,display_name) VALUES($1,$2,$3,true,'Outsider')`,[outsiderId,`outsider:${outsiderId}`,`${outsiderId}@example.invalid`]);
     await pool.query(`DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='sandbox_v050_rls_test') THEN CREATE ROLE sandbox_v050_rls_test NOLOGIN; END IF; END $$`);
-    await pool.query(`GRANT SELECT ON service_accounts,access_tokens,service_account_owners TO sandbox_v050_rls_test`);
+    await pool.query(`GRANT SELECT ON service_accounts,access_tokens,service_account_owners,service_account_role_assignments TO sandbox_v050_rls_test`);
     const client=await pool.connect();
     try{
       await client.query('BEGIN');await client.query(`SET LOCAL ROLE sandbox_v050_rls_test`);await client.query(`SELECT set_config('app.account_id',$1,true)`,[outsiderId]);
