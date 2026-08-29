@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,8 +14,13 @@ let profilePath: string;
 
 beforeEach(async () => {
   profilePath = await mkdtemp(path.join(tmpdir(), "sandbox-browser-test-"));
+  const localBrowsersPath = path.resolve("browsers");
+  const configuredBrowsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH
+    ?? (existsSync(localBrowsersPath) ? localBrowsersPath : undefined);
+  const env: NodeJS.ProcessEnv = { ...process.env, SANDBOX_IPC_TOKEN: token };
+  if (configuredBrowsersPath) env.PLAYWRIGHT_BROWSERS_PATH = configuredBrowsersPath;
   child = spawn(process.execPath, [path.resolve("dist/server.js")], {
-    env: { ...process.env, SANDBOX_IPC_TOKEN: token, PLAYWRIGHT_BROWSERS_PATH: path.resolve("browsers") }, stdio: ["pipe", "pipe", "pipe"],
+    env, stdio: ["pipe", "pipe", "pipe"],
   });
   lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 });
@@ -39,15 +45,20 @@ async function request(operation: string, payload: Record<string, unknown> = {},
   return response;
 }
 
+function successfulResult(response: any) {
+  expect(response.ok, JSON.stringify(response.error ?? {})).toBe(true);
+  return response.result;
+}
+
 describe("authenticated protocol", () => {
   it("rejects the wrong token and negotiates versions", async () => {
     expect((await request("hello", {}, "wrong-token-value-different")).error.code).toBe("unauthorized");
     const hello = await request("hello");
-    expect(hello.ok).toBe(true);
-    expect(hello.result.protocolVersion).toBe(1);
-    expect(hello.result.sidecarVersion).toBe("0.2.0");
-    expect(hello.result.browserName).toBe("chromium");
-    expect(hello.result.browserVersion).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
+    const result = successfulResult(hello);
+    expect(result.protocolVersion).toBe(1);
+    expect(result.sidecarVersion).toBe("0.2.0");
+    expect(result.browserName).toBe("chromium");
+    expect(result.browserVersion).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
   }, 30_000);
 });
 
@@ -62,7 +73,7 @@ describe("managed browser workflow", () => {
     const url = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`;
     try {
       const opened = await request("open_browser", { profileId: "test", profilePath, persistent: false, headed: false });
-      const sessionId = opened.result.browserSession.sessionId;
+      const sessionId = successfulResult(opened).browserSession.sessionId;
       expect((await request("navigate", { sessionId, url, waitCondition: "dom_ready" })).ok).toBe(true);
       const field = { primary: { kind: "label", value: "Email", exact: true }, alternatives: [], tag: "input", recordingUrl: url };
       expect((await request("fill_field", { sessionId, locator: field, value: "alice@example.com", sensitive: true })).ok).toBe(true);
