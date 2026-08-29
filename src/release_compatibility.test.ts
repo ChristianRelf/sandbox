@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const betaVersion = "0.7.0-beta.1";
+const betaVersion = "0.7.0-beta.2";
 
 describe("v0.7 beta release compatibility", () => {
   it("keeps first-party surfaces and runtime components on one beta version", () => {
@@ -48,7 +48,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${betaVersion}";`);
     expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${betaVersion}";`);
     expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${betaVersion}";`);
-    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.0-beta.1,<0.8"');
+    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.0-beta.2,<0.8"');
   });
 
   it("attests prerelease artifacts while keeping stable Windows releases fail-closed", () => {

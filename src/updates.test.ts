@@ -3,7 +3,7 @@ import { compareVersions, isNewerVersion } from "./updates";
 
 describe("desktop update version comparison", () => {
   it("orders beta increments and stable releases correctly", () => {
-    expect(isNewerVersion("0.7.0-beta.1", "0.7.0-beta.2")).toBe(true);
+    expect(isNewerVersion("0.7.0-beta.2", "0.7.0-beta.3")).toBe(true);
     expect(isNewerVersion("0.7.0-beta.2", "0.7.0")).toBe(true);
     expect(isNewerVersion("0.7.0", "0.7.0-beta.3")).toBe(false);
   });

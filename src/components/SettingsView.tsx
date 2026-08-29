@@ -107,7 +107,7 @@ export function SettingsView() {
         {section==="beta"&&<PreferencePanel title="Beta & updates" description="Control prerelease discovery for this device. Beta updates may change workflow behaviour.">
           <PreferenceToggle label="Check for desktop updates" description="Check the signed GitHub release feed when Sandbox starts." checked={preferences.checkForUpdates} onChange={checkForUpdates=>preferences.update({checkForUpdates})}/>
           <SelectPreference disabled={!preferences.checkForUpdates} label="Update channel" description="Stable ignores prerelease builds; Beta includes newer beta and release-candidate builds." value={preferences.updateChannel} onChange={value=>preferences.update({updateChannel:value as "beta"|"stable"})}><option value="beta">Beta</option><option value="stable">Stable</option></SelectPreference>
-          <div className="settings-release-card"><span>Installed version</span><strong>Sandbox 0.7.0-beta.1</strong><small>Desktop installers and Linux runners are verified against the same immutable release tag.</small></div>
+          <div className="settings-release-card"><span>Installed version</span><strong>Sandbox 0.7.0-beta.2</strong><small>Desktop installers and Linux runners are verified against the same immutable release tag.</small></div>
         </PreferencePanel>}
       </div>
     </div>
