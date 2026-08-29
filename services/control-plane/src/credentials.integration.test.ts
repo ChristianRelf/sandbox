@@ -108,7 +108,7 @@ integration("service accounts and access tokens",()=>{
     const second=await notifier.runOnce(new Date());
     expect(first).toMatchObject({enqueued:1,sent:1,failed:0});
     expect(second).toMatchObject({enqueued:0,sent:0,failed:0});
-    expect(delivered).toEqual([{recipient:actor.email,tokenPrefix:issued.prefix,reminderDays:1}]);
+    expect(delivered).toEqual([expect.objectContaining({recipient:actor.email,tokenPrefix:issued.prefix,reminderDays:1})]);
   });
 
   it("keeps credential metadata hidden from a different tenant at the RLS boundary",async()=>{

@@ -26,7 +26,7 @@ export class PostgresServiceAccountAccessReviews implements ServiceAccountAccess
       const snapshot={serviceAccountName:service.name,assignments:assignments.rows.map(row=>({workspaceId:row.workspace_id,roleId:row.role_id,environmentIds:row.environment_ids})),ownerAccountIds:owners.rows.map(row=>row.account_id),credentials:credentials.rows.map(row=>({id:row.id,prefix:row.token_prefix,scopes:row.scopes,workspaceIds:row.workspace_restrictions,environmentIds:row.environment_restrictions,expiresAt:row.expires_at.toISOString(),lastUsedAt:row.last_used_at?.toISOString()??null}))};
       const dueAt=new Date(now.getTime()+14*86_400_000);
       const inserted=await client.query(`INSERT INTO service_account_access_reviews(id,service_account_id,organisation_id,opened_at,due_at,access_snapshot) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[randomUUID(),service.id,service.organisation_id,now,dueAt,snapshot]);
-      if(inserted.rowCount){opened++;await client.query(`UPDATE service_accounts SET next_access_review_at=$2+(access_review_interval_days||' days')::interval WHERE id=$1`,[service.id,now]);}
+      if(inserted.rowCount){opened++;await client.query(`UPDATE service_accounts SET next_access_review_at=$2::timestamptz+(access_review_interval_days||' days')::interval WHERE id=$1`,[service.id,now]);}
     }
     const overdue=await client.query<{id:string;service_account_id:string}>(`UPDATE service_account_access_reviews review SET status='overdue' WHERE id IN(SELECT id FROM service_account_access_reviews WHERE status='pending' AND due_at<=$1 ORDER BY due_at FOR UPDATE SKIP LOCKED LIMIT $2) RETURNING id,service_account_id`,[now,Math.min(Math.max(limit,1),1000)]);
     let revokedCredentials=0;
