@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { CommandPalette } from "./components/CommandPalette";
-import { Dashboard } from "./components/Dashboard";
 import { Sidebar } from "./components/Sidebar";
 import { api } from "./api";
 import type { PendingApproval, PluginPackageInspection } from "./types";
@@ -13,6 +12,11 @@ import { useToast } from "./components/ui/Toast";
 import { ConfirmDialog } from "./components/ui/Dialog";
 import "./plugins.css";
 
+const Dashboard = lazy(() =>
+  import("./components/Dashboard").then((module) => ({
+    default: module.Dashboard,
+  })),
+);
 const HistoryView = lazy(() =>
   import("./components/HistoryView").then((module) => ({
     default: module.HistoryView,
