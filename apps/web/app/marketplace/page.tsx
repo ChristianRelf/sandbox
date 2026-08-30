@@ -1,5 +1,16 @@
 import Link from "next/link";
-import { BadgeCheck, Box, Download, Search, Star } from "lucide-react";
+import { officialIntegrations } from "@sandbox/content";
+import {
+  BadgeCheck,
+  Box,
+  Download,
+  Hash,
+  Mail,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+  Star,
+} from "lucide-react";
 import { marketplace } from "../../lib/control-plane";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +40,23 @@ export default async function MarketplacePage({
   });
   if (text) query.set("search", text);
   const result = await marketplace(query);
+  const normalizedSearch = text.trim().toLowerCase();
+  const matchingOfficialIntegrations = officialIntegrations.filter(
+    (integration) =>
+      pricing !== "paid" &&
+      (!normalizedSearch ||
+        [
+          integration.name,
+          integration.summary,
+          integration.connection,
+          ...integration.capabilities,
+          "Sandbox Official",
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch)),
+  );
+  const resultCount = matchingOfficialIntegrations.length + result.items.length;
   return (
     <main>
       <section className="market-hero">
@@ -76,13 +104,47 @@ export default async function MarketplacePage({
           <div>
             <h2>Compatible with Sandbox 0.3</h2>
             <p>
-              {result.items.length} signed version
-              {result.items.length === 1 ? "" : "s"} in this page
+              {resultCount} signed integration
+              {resultCount === 1 ? "" : "s"} in this page
             </p>
           </div>
         </header>
-        {result.items.length ? (
+        {resultCount ? (
           <div className="listing-grid">
+            {matchingOfficialIntegrations.map((integration) => (
+              <article className="listing-card" key={`official-${integration.id}`}>
+                <div className="card-top">
+                  <span className="listing-icon">
+                    {integration.id === "gmail" ? (
+                      <Mail size={20} />
+                    ) : integration.id === "slack" ? (
+                      <Hash size={20} />
+                    ) : (
+                      <MessageCircle size={20} />
+                    )}
+                  </span>
+                  <span className="version">Included</span>
+                </div>
+                <h3>{integration.name}</h3>
+                <div className="publisher official-mark">
+                  <BadgeCheck size={13} aria-hidden="true" />
+                  <span>Official</span>
+                </div>
+                <p>{integration.summary}</p>
+                <div className="chips">
+                  {integration.capabilities.map((capability) => (
+                    <span key={capability}>{capability}</span>
+                  ))}
+                </div>
+                <footer>
+                  <span>
+                    <ShieldCheck size={13} />
+                    {integration.connection}
+                  </span>
+                  <b>Free</b>
+                </footer>
+              </article>
+            ))}
             {result.items.map((plugin) => (
               <Link
                 className="listing-card"
@@ -125,7 +187,7 @@ export default async function MarketplacePage({
         ) : (
           <div className="empty">
             <Box size={28} />
-            <h3>No compatible plugins</h3>
+            <h3>No compatible integrations</h3>
             <p>
               Adjust the search or pricing filters. Incompatible and suspended
               versions are hidden.

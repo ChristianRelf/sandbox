@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { legalPages, productPages, transactionalEmails, useCases } from "./index";
+import {
+  legalPages,
+  officialIntegrations,
+  productPages,
+  transactionalEmails,
+  useCases,
+} from "./index";
 
 describe("v0.6 public content", () => {
   it("uses unique public routes", () => {
@@ -28,6 +34,19 @@ describe("v0.6 public content", () => {
     for (const template of transactionalEmails) {
       expect(template.html({})).toContain("<!doctype html>");
       expect(template.text({})).toContain("SANDBOX");
+    }
+  });
+
+  it("publishes the supported built-in integrations as an official collection", () => {
+    expect(officialIntegrations.map((integration) => integration.id)).toEqual([
+      "gmail",
+      "slack",
+      "discord",
+    ]);
+    for (const integration of officialIntegrations) {
+      expect(integration.summary.length).toBeGreaterThan(40);
+      expect(integration.capabilities.length).toBeGreaterThanOrEqual(3);
+      expect(integration.connection).toBeTruthy();
     }
   });
 });

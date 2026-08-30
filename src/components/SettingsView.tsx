@@ -61,7 +61,13 @@ const settingsSections: Array<{
 
 export function SettingsView() {
   const preferences = usePreferences();
-  const [section, setSection] = useState<SettingsSectionId>("general");
+  const [section, setSection] = useState<SettingsSectionId>(() => {
+    const requested = window.sessionStorage.getItem("sandbox:settings-section");
+    window.sessionStorage.removeItem("sandbox:settings-section");
+    return settingsSections.some((item) => item.id === requested)
+      ? (requested as SettingsSectionId)
+      : "general";
+  });
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [engine, setEngine] = useState<BrowserEngineStatus>();
   const [editing, setEditing] = useState<BrowserProfile | "new">();

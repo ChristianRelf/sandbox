@@ -5,6 +5,41 @@ export type ProductPage = {
   related: string[];
 };
 
+export type OfficialIntegration = {
+  id: "gmail" | "slack" | "discord";
+  name: string;
+  summary: string;
+  capabilities: string[];
+  connection: string;
+};
+
+export const officialIntegrations: OfficialIntegration[] = [
+  {
+    id: "gmail",
+    name: "Gmail",
+    summary:
+      "Watch messages, create drafts, send email, and organise threads with labels through a scoped OAuth connection.",
+    capabilities: ["Email", "Drafts", "Labels"],
+    connection: "OAuth 2.0 + PKCE",
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    summary:
+      "Send focused channel alerts through an incoming webhook kept in the operating-system credential store.",
+    capabilities: ["Messages", "Webhooks", "Alerts"],
+    connection: "Incoming webhook",
+  },
+  {
+    id: "discord",
+    name: "Discord",
+    summary:
+      "Post messages and rich embeds for workflow results, incidents, and scheduled status updates.",
+    capabilities: ["Messages", "Embeds", "Webhooks"],
+    connection: "Incoming webhook",
+  },
+];
+
 export const productPages: ProductPage[] = [
   { slug:"visual-workflow-builder", eyebrow:"Visual workflow builder", title:"Build the logic. See the consequences.", summary:"Connect typed nodes for triggers, browser actions, files, APIs, conditions and notifications. Test each step before the workflow becomes operational.", proof:"The desktop editor validates connection types, permissions and cycles before a run can start.", benefits:[{title:"Make branching explicit",body:"True and false paths stay visible, with skipped branches explained in execution history."},{title:"Map structured data",body:"Reference earlier node outputs without hiding transformations in a black box."},{title:"Publish with intent",body:"Keep drafts separate from approved versions and return to an earlier revision when needed."}], details:[{label:"Editor",value:"Desktop application"},{label:"Connections",value:"Typed and validated"},{label:"Testing",value:"Manual node and workflow runs"},{label:"History",value:"Versioned revisions"}], related:["workflows/editor","workflows/data-mapping","workflows/versions"] },
   { slug:"local-automation", eyebrow:"Local automation", title:"Automate the machine in front of you.", summary:"Move files, run approved commands, call private APIs and respond to local schedules without sending the workflow or its data through a hosted task service.", proof:"Filesystem paths are restricted to approved roots, command execution uses explicit executables and argument arrays, and sensitive values are redacted from logs.", benefits:[{title:"Reach what cloud tools cannot",body:"Use LAN services, local folders and applications that are unavailable from the public internet."},{title:"Keep control local",body:"Credentials stay in the operating-system vault and workflows can run without an account."},{title:"No local task tax",body:"Workflows executed entirely on your machines are not charged per task."}], details:[{label:"Files",value:"Approved roots only"},{label:"Commands",value:"Explicit approval required"},{label:"Private APIs",value:"Domain-restricted HTTP"},{label:"Schedules",value:"Durable local schedules"}], related:["getting-started/run-locally","nodes/system","connections/credential-security"] },

@@ -2,12 +2,19 @@ import {
   BadgeCheck,
   Box,
   Download,
+  Hash,
+  Mail,
+  MessageCircle,
   RefreshCcw,
   Search,
   ShieldCheck,
   Star,
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import {
+  officialIntegrations,
+  type OfficialIntegration,
+} from "@sandbox/content";
 import { api } from "../api";
 import { useAppStore } from "../store";
 import type {
@@ -90,6 +97,23 @@ export function MarketplaceView() {
       setBusy(false);
     }
   };
+  const normalizedSearch = search.trim().toLowerCase();
+  const matchingOfficialIntegrations = officialIntegrations.filter(
+    (integration) =>
+      pricing !== "paid" &&
+      (!normalizedSearch ||
+        [
+          integration.name,
+          integration.summary,
+          integration.connection,
+          ...integration.capabilities,
+          "Sandbox Official",
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch)),
+  );
+  const resultCount = matchingOfficialIntegrations.length + items.length;
   return (
     <main className="content desktop-marketplace">
       <header className="page-header">
@@ -168,12 +192,53 @@ export function MarketplaceView() {
       )}
       <div className="market-result-head">
         <span>
-          {items.length} compatible plugin{items.length === 1 ? "" : "s"}
+          {resultCount} compatible integration{resultCount === 1 ? "" : "s"}
         </span>
         <small>Revenue is not the sole ranking signal.</small>
       </div>
-      {items.length ? (
+      {resultCount ? (
         <section className="market-card-grid">
+          {matchingOfficialIntegrations.map((integration) => (
+            <article className="market-card" key={`official-${integration.id}`}>
+              <header>
+                <span>
+                  <IntegrationIcon integration={integration} />
+                </span>
+                <em>Included</em>
+              </header>
+              <h2>{integration.name}</h2>
+              <div className="market-publisher official-mark">
+                <BadgeCheck size={13} aria-hidden="true" />
+                <span>Official</span>
+              </div>
+              <p>{integration.summary}</p>
+              <div className="chips">
+                {integration.capabilities.map((capability) => (
+                  <span key={capability}>{capability}</span>
+                ))}
+              </div>
+              <footer>
+                <div>
+                  <span>
+                    <ShieldCheck size={12} />
+                    {integration.connection}
+                  </span>
+                </div>
+                <button
+                  className="button"
+                  onClick={() => {
+                    window.sessionStorage.setItem(
+                      "sandbox:settings-section",
+                      "connections",
+                    );
+                    setView("settings");
+                  }}
+                >
+                  Configure
+                </button>
+              </footer>
+            </article>
+          ))}
           {items.map((plugin) => {
             const installedVersion = installed.find(
               (item) => item.pluginId === plugin.pluginId,
@@ -259,8 +324,8 @@ export function MarketplaceView() {
             <Box size={23} />
             <h3>
               {search || pricing !== "all" || verifiedOnly
-                ? "No matching plugins"
-                : "Plugin catalogue is empty"}
+                ? "No matching integrations"
+                : "Integration catalogue is empty"}
             </h3>
             <p>Try broadening the search or pricing filters.</p>
           </div>
@@ -330,4 +395,14 @@ export function MarketplaceView() {
 }
 function compact(value: number) {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
+}
+
+function IntegrationIcon({
+  integration,
+}: {
+  integration: OfficialIntegration;
+}) {
+  if (integration.id === "gmail") return <Mail size={18} />;
+  if (integration.id === "slack") return <Hash size={18} />;
+  return <MessageCircle size={18} />;
 }
