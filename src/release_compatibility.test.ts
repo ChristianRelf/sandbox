@@ -94,8 +94,12 @@ describe("v0.7 beta release compatibility", () => {
 
   it("keeps release container builds cacheable and independently scoped", () => {
     const workflow = read(".github/workflows/release.yml");
-    expect(workflow).toContain("cache-from: type=gha,scope=container-${{ matrix.name }}");
-    expect(workflow).toContain("cache-to: type=gha,mode=max,scope=container-${{ matrix.name }}");
+    expect(workflow).toContain("type=registry,ref=${{ steps.image.outputs.name }}:buildcache");
+    expect(workflow).toContain("type=gha,scope=container-${{ matrix.name }}");
+    expect(workflow).toContain("cache-to: type=registry,ref=${{ steps.image.outputs.name }}:buildcache,mode=max");
+    expect(workflow).toContain("timeout-minutes: ${{ needs.verify-release.outputs.prerelease == 'true' && 60 || 180 }}");
+    expect(workflow).toContain("platforms: ${{ needs.verify-release.outputs.prerelease == 'true' && 'linux/amd64' || matrix.platforms }}");
+    expect(workflow).toContain("if: needs.verify-release.outputs.prerelease != 'true'");
     expect(workflow).not.toContain("Build browser worker distribution");
 
     const dockerfiles = [
@@ -111,6 +115,7 @@ describe("v0.7 beta release compatibility", () => {
     }
 
     expect(read("apps/marketing/Dockerfile")).not.toContain("COPY . .");
+    expect(read("apps/marketing/Dockerfile")).toContain("FROM deps AS api-client-build");
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
   });
 
