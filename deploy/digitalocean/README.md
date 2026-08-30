@@ -39,7 +39,7 @@ Create a GitHub environment named `digitalocean-beta` and add these secrets:
 
 The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` default to `root` and `/opt/sandbox`. The workflow validates the host key, uploads only this deployment bundle, authenticates to GHCR with its short-lived GitHub token, pulls the selected immutable version, and waits for the website health check. Existing `.env`, `runner.toml`, data, automation files, and Docker volumes are not overwritten.
 
-For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.0-beta.3`), and select `website`.
+For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.1-beta.1`), and select `website`.
 
 To deploy automatically after every successful release, create the repository variable `DEPLOY_DIGITALOCEAN=true`. Automatic deployments intentionally select the website-only profile; observability and the runner remain manual choices.
 
@@ -55,7 +55,7 @@ curl --fail https://sndbox.app/
 For a manual deployment without Actions, copy this directory to `/opt/sandbox`, copy `.env.example` to `.env`, authenticate Docker to GHCR if the package is private, and run:
 
 ```bash
-./deploy.sh 0.7.0-beta.3 website
+./deploy.sh 0.7.1-beta.1 website
 ```
 
 ## Grafana Application Observability

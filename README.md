@@ -1,4 +1,4 @@
-# Sandbox v0.7.0 beta
+# Sandbox v0.7.1 beta
 
 Sandbox is a local-first visual desktop automation platform. The v0.7 beta aligns the Windows desktop app, workflow engine, plugin runtime, public web surfaces, and Linux runners on one prerelease version.
 
@@ -85,7 +85,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Workflows are DAGs only; loops and arbitrary expression execution remain intentionally unsupported.
 - The small-Droplet profile is for the marketing site and one headless runner. Run PostgreSQL, the control plane, and browser workers elsewhere.
 - PostgreSQL integration tests require `TEST_DATABASE_URL` and are skipped when it is not provided.
-- Publication still requires the protected GitHub release environment and an immutable `v0.7.0-beta.3` tag. A valid Windows signing certificate remains mandatory for stable releases, but not this invite-only prerelease.
+- Publication still requires the protected GitHub release environment and an immutable `v0.7.1-beta.1` tag. A valid Windows signing certificate remains mandatory for stable releases, but not this invite-only prerelease.
 
 ## GA candidate documentation
 
