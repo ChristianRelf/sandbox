@@ -374,6 +374,7 @@ mod tests {
             position: Position { x: 0.0, y: 0.0 },
             configuration: serde_json::json!({}),
             disabled: false,
+            input_bindings: Default::default(),
             plugin: None,
         };
         let action = WorkflowNode {
@@ -388,6 +389,7 @@ mod tests {
                 serde_json::json!({})
             },
             disabled: false,
+            input_bindings: Default::default(),
             plugin: None,
         };
         Workflow {
@@ -405,6 +407,9 @@ mod tests {
                 source_handle: "output".into(),
                 target_node_id: "action".into(),
                 target_handle: "input".into(),
+                kind: "control".into(),
+                source_port: Some("output".into()),
+                target_port: Some("input".into()),
             }],
             settings: WorkflowSettings {
                 default_node_timeout_ms: 5_000,
