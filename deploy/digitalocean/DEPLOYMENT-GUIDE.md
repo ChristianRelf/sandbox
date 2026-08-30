@@ -3,6 +3,7 @@
 This guide deploys the supported v0.7 beta server surface:
 
 - `https://sndbox.app` and `https://www.sndbox.app`
+- `https://docs.sndbox.app`
 - Automatic HTTPS through Caddy
 - Optional Grafana Alloy observability
 - Optional headless Sandbox runner
@@ -19,7 +20,7 @@ You need:
 - Administrator access to the Sandbox GitHub repository
 - A local clone of this repository with the deployment changes pushed to `main`
 
-The website, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. The supplied limits also support the smaller 2 GB staging configuration.
+The website, docs service, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. The supplied limits also support the smaller 2 GB staging configuration.
 
 ## 2. Configure DNS
 
@@ -29,17 +30,19 @@ Open the DNS management page for `sndbox.app` and create:
 | --- | --- | --- | --- |
 | `A` | `@` | `YOUR_DROPLET_IPV4` | `300` or automatic |
 | `CNAME` | `www` | `sndbox.app` | `300` or automatic |
+| `CNAME` | `docs` | `sndbox.app` | `300` or automatic |
 
-Do not create `A` records for `app`, `api`, `docs`, `identity`, or `internal` yet. Do not add an `AAAA` record unless IPv6 is configured on the Droplet.
+Do not create records for `app`, `api`, `identity`, or `internal` yet. Do not add an `AAAA` record unless IPv6 is configured on the Droplet.
 
 From PowerShell, check propagation:
 
 ```powershell
 Resolve-DnsName sndbox.app
 Resolve-DnsName www.sndbox.app
+Resolve-DnsName docs.sndbox.app
 ```
 
-Both names must eventually resolve to the Droplet.
+All three names must eventually resolve to the Droplet.
 
 ## 3. Create a dedicated deployment SSH key
 
@@ -162,7 +165,7 @@ In **DigitalOcean > Networking > Firewalls**, attach a firewall to the Droplet w
 | TCP | `443` | All IPv4 and IPv6 |
 | UDP | `443` | All IPv4 and IPv6; optional HTTP/3 support |
 
-Allow normal outbound traffic. Do not expose ports `3100`, `12345`, `2375`, `2376`, or PostgreSQL.
+Allow normal outbound traffic. Do not expose ports `3100`, `3200`, `12345`, `2375`, `2376`, or PostgreSQL.
 
 If restricting SSH to fixed source addresses, remember that ordinary GitHub-hosted runners do not use one small permanent IP range. For this beta, allow SSH broadly and rely on key-only authentication, or use a self-hosted runner/VPN later.
 
@@ -174,7 +177,7 @@ In GitHub, open:
 
 Create `production-release`. You do not need to add a code-signing certificate for an `alpha`, `beta`, or `rc` test release.
 
-The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.1-beta.2`. It still publishes a SHA-256 checksum and retains the GitHub Actions release record. GitHub artifact attestations are added when the repository visibility and account support them; they are unavailable for a private repository owned by a personal account. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
+The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.1-beta.3`. It still publishes a SHA-256 checksum and retains the GitHub Actions release record. GitHub artifact attestations are added when the repository visibility and account support them; they are unavailable for a private repository owned by a personal account. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
 
 You can optionally require manual approval on this environment before GitHub publishes a release.
 
@@ -235,9 +238,9 @@ The deployment action signs in to GitHub Container Registry using its short-live
 
 After the first container build, open each Sandbox package under your GitHub account or organisation. Under **Package settings > Manage Actions access**, ensure this repository has read access. Making the packages public is another option for a public beta.
 
-## 10. Publish `v0.7.1-beta.2`
+## 10. Publish `v0.7.1-beta.3`
 
-Before tagging, ensure all deployment changes are committed and pushed, the working tree is clean, and these files all contain version `0.7.1-beta.2`:
+Before tagging, ensure all deployment changes are committed and pushed, the working tree is clean, and these files all contain version `0.7.1-beta.3`:
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
@@ -249,15 +252,15 @@ Then run:
 git switch main
 git pull --ff-only origin main
 git status --short
-git tag -a v0.7.1-beta.2 -m "Sandbox v0.7.1 beta 2"
-git push origin v0.7.1-beta.2
+git tag -a v0.7.1-beta.3 -m "Sandbox v0.7.1 beta 3"
+git push origin v0.7.1-beta.3
 ```
 
 Open **GitHub > Actions > Release**. Wait for every job to succeed. The workflow produces:
 
 - An explicitly unsigned Windows NSIS test installer for this prerelease
 - Linux runner archives
-- Multi-architecture website and runner containers
+- Multi-architecture website, docs, and runner containers
 - Checksums, Sigstore signatures, `release-manifest.json`, and GitHub artifact attestations when the repository supports them
 - A published GitHub prerelease
 
@@ -274,7 +277,7 @@ Enter:
 | Input | Value |
 | --- | --- |
 | Branch | `main` |
-| Version | `0.7.1-beta.2` — do not include `v` |
+| Version | `0.7.1-beta.3` — do not include `v` |
 | Deployment | `website` |
 
 Select **Run workflow** and approve the `digitalocean-beta` environment if prompted.
@@ -286,10 +289,10 @@ The workflow will:
 3. Upload only `deploy/digitalocean`.
 4. Preserve the existing `.env`, `runner.toml`, runner data, and Docker volumes.
 5. Authenticate to GHCR with a temporary token.
-6. Pull the immutable website version and the pinned Caddy release.
-7. Start both services and wait for their health checks.
-8. Test the website over the Droplet's loopback interface.
-9. Restore the previous website version if deployment fails.
+6. Pull the immutable website and docs versions and the pinned Caddy release.
+7. Start all three services and wait for their health checks.
+8. Test both public services over the Droplet's loopback interface.
+9. Restore the previous website and docs versions if deployment fails.
 10. Remove the temporary GHCR and SSH credentials from the Actions runner.
 
 ## 12. Verify the deployment
@@ -305,18 +308,21 @@ Run:
 ```bash
 cd /opt/sandbox
 docker compose ps
-docker compose logs --tail=100 website caddy
+docker compose logs --tail=100 website docs caddy
 curl --fail http://127.0.0.1:3100/
+curl --fail http://127.0.0.1:3200/
 curl --fail --head https://sndbox.app/
 curl --fail --head https://www.sndbox.app/
+curl --fail --head https://docs.sndbox.app/
 ```
 
 Expected results:
 
-- `website` and `caddy` are running and healthy.
-- The loopback request succeeds.
+- `website`, `docs`, and `caddy` are running and healthy.
+- Both loopback requests succeed.
 - `https://sndbox.app` returns a successful response.
 - `https://www.sndbox.app` redirects to `https://sndbox.app`.
+- `https://docs.sndbox.app` returns the documentation site.
 - The downloads page displays the published beta installer from `release-manifest.json`.
 
 Also install the downloaded NSIS package on a clean Windows test machine and verify the browser engine, update notice, settings, and one harmless local workflow.
@@ -333,7 +339,7 @@ Create this repository variable:
 DEPLOY_DIGITALOCEAN=true
 ```
 
-Future successful releases will automatically deploy the website. Observability and the runner remain manual profile choices.
+Future successful releases will automatically deploy the website and docs. Observability and the runner remain manual profile choices.
 
 ## 14. Enable optional observability
 
@@ -396,7 +402,7 @@ Never deploy mutable tags such as `latest`.
 
 ## 17. Roll back
 
-Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls that immutable image and restarts the website.
+Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls those immutable images and restarts the website and docs.
 
 The deployment script also attempts this rollback automatically when a new image fails its health checks.
 
@@ -418,7 +424,7 @@ The deployment script also attempts this rollback automatically when a new image
 
 ### Caddy cannot obtain a certificate
 
-- Confirm both DNS records point to this Droplet.
+- Confirm the apex, `www`, and `docs` DNS records point to this Droplet.
 - Confirm TCP ports `80` and `443` are open.
 - Check `docker compose logs --tail=200 caddy`.
 - Remove incorrect `AAAA` records when the Droplet has no working IPv6 route.
@@ -432,9 +438,18 @@ docker compose logs --tail=200 website
 curl -v http://127.0.0.1:3100/
 ```
 
+### Docs is unhealthy
+
+```bash
+cd /opt/sandbox
+docker compose ps
+docker compose logs --tail=200 docs
+curl -v http://127.0.0.1:3200/
+```
+
 ### The release workflow rejects the tag
 
-The Git tag, root package version, and Tauri version must match exactly. Supported prerelease tags use forms such as `v0.7.1-beta.2`, not `v0.7-beta` or `v0.7.0-beta2`.
+The Git tag, root package version, and Tauri version must match exactly. Supported prerelease tags use forms such as `v0.7.1-beta.3`, not `v0.7-beta` or `v0.7.0-beta2`.
 
 ## 19. Files and data to back up
 

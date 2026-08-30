@@ -35,7 +35,7 @@ release_manifest_url() {
   printf 'https://github.com/ChristianRelf/sandbox/releases/download/v%s/release-manifest.json' "$1"
 }
 compose=(docker compose --env-file .env -f compose.yml)
-services=(website caddy)
+services=(website docs caddy)
 
 if [[ "$deployment" == "website+observability" || "$deployment" == "all" ]]; then
   for variable in GRAFANA_CLOUD_OTLP_ENDPOINT GRAFANA_CLOUD_INSTANCE_ID GRAFANA_CLOUD_API_KEY; do
@@ -68,12 +68,19 @@ fi
 rollback() {
   local exit_code=$?
   trap - ERR
-  echo "Deployment failed; restoring the previous website version." >&2
+  echo "Deployment failed; restoring the previous public-site version." >&2
   if [[ "$previous_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
-    SANDBOX_VERSION="$previous_version" SANDBOX_RELEASE_MANIFEST_URL="$(release_manifest_url "$previous_version")" "${compose[@]}" up -d website caddy || true
+    previous_manifest_url="$(release_manifest_url "$previous_version")"
+    if SANDBOX_VERSION="$previous_version" SANDBOX_RELEASE_MANIFEST_URL="$previous_manifest_url" "${compose[@]}" pull docs >/dev/null 2>&1; then
+      SANDBOX_VERSION="$previous_version" SANDBOX_RELEASE_MANIFEST_URL="$previous_manifest_url" "${compose[@]}" up -d website docs caddy || true
+    else
+      SANDBOX_VERSION="$previous_version" SANDBOX_RELEASE_MANIFEST_URL="$previous_manifest_url" "${compose[@]}" up -d website || true
+      "${compose[@]}" stop docs || true
+      "${compose[@]}" up -d --no-deps caddy || true
+    fi
   fi
   "${compose[@]}" ps || true
-  "${compose[@]}" logs --tail=100 website caddy || true
+  "${compose[@]}" logs --tail=100 website docs caddy || true
   exit "$exit_code"
 }
 trap rollback ERR
@@ -84,6 +91,7 @@ export SANDBOX_RELEASE_MANIFEST_URL="$(release_manifest_url "$version")"
 "${compose[@]}" pull "${services[@]}"
 "${compose[@]}" up -d --wait --wait-timeout 180 "${services[@]}"
 curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused http://127.0.0.1:3100/ >/dev/null
+curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-connrefused http://127.0.0.1:3200/ >/dev/null
 
 if grep -q '^SANDBOX_VERSION=' .env; then
   sed -i "s/^SANDBOX_VERSION=.*/SANDBOX_VERSION=$version/" .env
@@ -98,4 +106,4 @@ fi
 
 trap - ERR
 "${compose[@]}" ps
-echo "Sandbox $version is healthy. Caddy will serve https://${SANDBOX_DOMAIN:-sndbox.app}."
+echo "Sandbox $version is healthy. Caddy will serve https://${SANDBOX_DOMAIN:-sndbox.app} and https://${SANDBOX_DOCS_DOMAIN:-docs.sndbox.app}."

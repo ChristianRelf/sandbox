@@ -528,7 +528,7 @@ export function SettingsView() {
               </SelectPreference>
               <div className="settings-release-card">
                 <span>Installed version</span>
-                <strong>Sandbox 0.7.1-beta.2</strong>
+                <strong>Sandbox 0.7.1-beta.3</strong>
                 <small>
                   Desktop installers and Linux runners are verified against the
                   same immutable release tag.

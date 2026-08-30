@@ -700,11 +700,11 @@ pub(crate) mod tests {
         manifest.maximum_host_version = Some(VersionReq::parse("<0.8.0").unwrap());
         assert!(
             manifest
-                .validate(&Version::parse("0.7.1-beta.2").unwrap(), true)
+                .validate(&Version::parse("0.7.1-beta.3").unwrap(), true)
                 .valid
         );
 
-        manifest.minimum_host_version = VersionReq::parse(">=0.7.1-beta.2").unwrap();
+        manifest.minimum_host_version = VersionReq::parse(">=0.7.1-beta.3").unwrap();
         assert!(
             !manifest
                 .validate(&Version::parse("0.7.0-beta.2").unwrap(), true)
@@ -715,7 +715,7 @@ pub(crate) mod tests {
         manifest.maximum_host_version = Some(VersionReq::parse("<0.7.0").unwrap());
         assert!(
             !manifest
-                .validate(&Version::parse("0.7.1-beta.2").unwrap(), true)
+                .validate(&Version::parse("0.7.1-beta.3").unwrap(), true)
                 .valid
         );
     }

@@ -12,3 +12,14 @@
 www.{$SANDBOX_DOMAIN:sndbox.app} {
 	redir https://{$SANDBOX_DOMAIN:sndbox.app}{uri} permanent
 }
+
+{$SANDBOX_DOCS_DOMAIN:docs.sndbox.app} {
+	encode zstd gzip
+	reverse_proxy docs:3200
+
+	header {
+		-Server
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+	}
+}

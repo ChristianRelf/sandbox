@@ -1,4 +1,5 @@
 import { expandedDocs } from "./expanded-content";
+import { groupBy } from "./group-by";
 
 export type DocConcept = { title: string; body: string };
 export type DocPage = {
@@ -102,6 +103,7 @@ export const docs = allDocs.sort(
     sectionOrder.indexOf(left.section) - sectionOrder.indexOf(right.section),
 );
 
-export const nav = Object.entries(Object.groupBy(docs, (page) => page.section)).map(
-  ([section, pages]) => ({ section, pages: pages ?? [] }),
-);
+export const nav = Array.from(groupBy(docs, (page) => page.section), ([section, pages]) => ({
+  section,
+  pages,
+}));
