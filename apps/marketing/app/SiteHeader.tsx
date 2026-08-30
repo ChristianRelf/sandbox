@@ -285,6 +285,7 @@ export function SiteHeader() {
                 className={styles.navGroup}
                 data-open={isOpen ? "true" : "false"}
                 key={group.id}
+                onMouseEnter={() => setOpenMenu(group.id)}
                 onBlur={(event) => {
                   if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenMenu(null);
                 }}
@@ -339,6 +340,7 @@ export function SiteHeader() {
             data-active={isPathActive(pathname, "/pricing") ? "true" : undefined}
             aria-current={isPathActive(pathname, "/pricing") ? "page" : undefined}
             href="/pricing"
+            onMouseEnter={() => setOpenMenu(null)}
           >
             Pricing
           </Link>
