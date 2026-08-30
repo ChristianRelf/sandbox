@@ -88,6 +88,7 @@ struct Configuration {
     token_url: String,
     api_base_url: String,
     client_id: String,
+    audience: String,
 }
 
 pub fn configured() -> Result<(), String> {
@@ -111,20 +112,13 @@ pub fn start(
     let verifier = URL_SAFE_NO_PAD.encode(verifier_bytes);
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let created_at = Utc::now();
-    let mut url = Url::parse(&configuration.authorization_url)
-        .map_err(|error| format!("Account authorization URL is invalid: {error}"))?;
-    url.query_pairs_mut()
-        .append_pair("client_id", &configuration.client_id)
-        .append_pair("redirect_uri", &redirect_uri)
-        .append_pair("response_type", "code")
-        .append_pair("scope", "openid email offline_access")
-        .append_pair("state", &state)
-        .append_pair("code_challenge", &challenge)
-        .append_pair("code_challenge_method", "S256")
-        .append_pair(
-            "screen_hint",
-            if create_account { "signup" } else { "login" },
-        );
+    let url = authorization_url(
+        &configuration,
+        &redirect_uri,
+        create_account,
+        &state,
+        &challenge,
+    )?;
     Ok((
         AccountAuthAttempt {
             state,
@@ -140,6 +134,31 @@ pub fn start(
             expires_at: created_at + Duration::minutes(5),
         },
     ))
+}
+
+fn authorization_url(
+    configuration: &Configuration,
+    redirect_uri: &str,
+    create_account: bool,
+    state: &str,
+    challenge: &str,
+) -> Result<Url, String> {
+    let mut url = Url::parse(&configuration.authorization_url)
+        .map_err(|error| format!("Account authorization URL is invalid: {error}"))?;
+    url.query_pairs_mut()
+        .append_pair("client_id", &configuration.client_id)
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("scope", "openid email offline_access")
+        .append_pair("audience", &configuration.audience)
+        .append_pair("state", state)
+        .append_pair("code_challenge", challenge)
+        .append_pair("code_challenge_method", "S256")
+        .append_pair(
+            "screen_hint",
+            if create_account { "signup" } else { "login" },
+        );
+    Ok(url)
 }
 
 impl AccountAuthAttempt {
@@ -292,22 +311,44 @@ pub async fn refresh(client: &Client, current: &AccountSecret) -> Result<Account
 }
 
 fn configuration() -> Result<Configuration, String> {
-    let value = |name: &str| {
+    let value = |name: &str, compiled: Option<&str>| {
         std::env::var(name)
             .ok()
             .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                compiled
+                    .filter(|value| !value.trim().is_empty())
+                    .map(str::to_owned)
+            })
             .ok_or_else(|| format!("{name} is not configured in this build."))
     };
     let configuration = Configuration {
-        authorization_url: value("SANDBOX_ACCOUNT_AUTH_URL")?,
-        token_url: value("SANDBOX_ACCOUNT_TOKEN_URL")?,
-        api_base_url: value("SANDBOX_CONTROL_PLANE_URL")?,
-        client_id: value("SANDBOX_ACCOUNT_CLIENT_ID")?,
+        authorization_url: value(
+            "SANDBOX_ACCOUNT_AUTH_URL",
+            option_env!("SANDBOX_ACCOUNT_AUTH_URL"),
+        )?,
+        token_url: value(
+            "SANDBOX_ACCOUNT_TOKEN_URL",
+            option_env!("SANDBOX_ACCOUNT_TOKEN_URL"),
+        )?,
+        api_base_url: value(
+            "SANDBOX_CONTROL_PLANE_URL",
+            option_env!("SANDBOX_CONTROL_PLANE_URL"),
+        )?,
+        client_id: value(
+            "SANDBOX_ACCOUNT_CLIENT_ID",
+            option_env!("SANDBOX_ACCOUNT_CLIENT_ID"),
+        )?,
+        audience: value(
+            "SANDBOX_ACCOUNT_AUDIENCE",
+            option_env!("SANDBOX_ACCOUNT_AUDIENCE"),
+        )?,
     };
     for (name, url) in [
         ("SANDBOX_ACCOUNT_AUTH_URL", &configuration.authorization_url),
         ("SANDBOX_ACCOUNT_TOKEN_URL", &configuration.token_url),
         ("SANDBOX_CONTROL_PLANE_URL", &configuration.api_base_url),
+        ("SANDBOX_ACCOUNT_AUDIENCE", &configuration.audience),
     ] {
         if !Url::parse(url)
             .is_ok_and(|value| value.scheme() == "https" && value.host_str().is_some())
@@ -330,6 +371,39 @@ fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authorization_request_targets_the_configured_api() {
+        let configuration = Configuration {
+            authorization_url: "https://identity.example.com/authorize".into(),
+            token_url: "https://identity.example.com/oauth/token".into(),
+            api_base_url: "https://api.example.com".into(),
+            client_id: "desktop".into(),
+            audience: "https://api.example.com".into(),
+        };
+        let url = authorization_url(
+            &configuration,
+            "http://127.0.0.1:53682/account/callback",
+            false,
+            "state",
+            "challenge",
+        )
+        .unwrap();
+        let query = url
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            query.get("audience").map(|value| value.as_ref()),
+            Some("https://api.example.com")
+        );
+        assert_eq!(
+            query
+                .get("code_challenge_method")
+                .map(|value| value.as_ref()),
+            Some("S256")
+        );
+    }
+
     #[test]
     fn callback_state_is_required_and_checked() {
         let attempt = AccountAuthAttempt {

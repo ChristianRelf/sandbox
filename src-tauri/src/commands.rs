@@ -24,6 +24,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, String>;
+const ACCOUNT_AUTH_CALLBACK_PORT: u16 = 53_682;
+
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
@@ -1893,13 +1895,15 @@ pub async fn start_account_auth(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<account_auth::AccountAuthStart> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", ACCOUNT_AUTH_CALLBACK_PORT))
         .await
         .map_err(|error| {
-            format!("Sandbox could not open a local account callback port: {error}")
+            format!(
+                "Sandbox could not open its local account callback on port {ACCOUNT_AUTH_CALLBACK_PORT}: {error}"
+            )
         })?;
     let address = listener.local_addr().map_err(err)?;
-    let redirect_uri = format!("http://127.0.0.1:{}/account/callback", address.port());
+    let redirect_uri = format!("http://127.0.0.1:{ACCOUNT_AUTH_CALLBACK_PORT}/account/callback");
     let (attempt, start) = account_auth::start(redirect_uri, create_account)?;
     app.opener()
         .open_url(&start.authorization_url, None::<&str>)

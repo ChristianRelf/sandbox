@@ -54,6 +54,11 @@ jobs:
       WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
       WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
       RELEASE_IS_PRERELEASE: ${{ needs.verify-release.outputs.prerelease }}
+      SANDBOX_ACCOUNT_AUTH_URL: ${{ vars.SANDBOX_ACCOUNT_AUTH_URL }}
+      SANDBOX_ACCOUNT_TOKEN_URL: ${{ vars.SANDBOX_ACCOUNT_TOKEN_URL }}
+      SANDBOX_ACCOUNT_AUDIENCE: ${{ vars.SANDBOX_ACCOUNT_AUDIENCE }}
+      SANDBOX_ACCOUNT_CLIENT_ID: ${{ vars.SANDBOX_NATIVE_CLIENT_ID }}
+      SANDBOX_CONTROL_PLANE_URL: ${{ vars.SANDBOX_CONTROL_PLANE_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -65,6 +70,21 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      - name: Verify desktop account configuration
+        shell: pwsh
+        run: |
+          $required = @(
+            "SANDBOX_ACCOUNT_AUTH_URL",
+            "SANDBOX_ACCOUNT_TOKEN_URL",
+            "SANDBOX_ACCOUNT_AUDIENCE",
+            "SANDBOX_ACCOUNT_CLIENT_ID",
+            "SANDBOX_CONTROL_PLANE_URL"
+          )
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name must be configured as a production-release environment variable."
+            }
+          }
       - name: Configure Windows signing policy
         shell: pwsh
         run: |

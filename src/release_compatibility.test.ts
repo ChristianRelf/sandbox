@@ -57,6 +57,13 @@ describe("v0.7 beta release compatibility", () => {
     expect(workflow).toContain('tags: ["v*.*.*"]');
     expect(workflow).toContain("vMAJOR.MINOR.PATCH-beta.NUMBER");
     expect(workflow).toContain("WINDOWS_CERTIFICATE_PASSWORD");
+    expect(workflow).toContain("SANDBOX_ACCOUNT_AUTH_URL: ${{ vars.SANDBOX_ACCOUNT_AUTH_URL }}");
+    expect(workflow).toContain("SANDBOX_ACCOUNT_TOKEN_URL: ${{ vars.SANDBOX_ACCOUNT_TOKEN_URL }}");
+    expect(workflow).toContain("SANDBOX_ACCOUNT_AUDIENCE: ${{ vars.SANDBOX_ACCOUNT_AUDIENCE }}");
+    expect(workflow).toContain("SANDBOX_ACCOUNT_CLIENT_ID: ${{ vars.SANDBOX_NATIVE_CLIENT_ID }}");
+    expect(workflow).toContain("SANDBOX_CONTROL_PLANE_URL: ${{ vars.SANDBOX_CONTROL_PLANE_URL }}");
+    expect(read("src-tauri/src/commands.rs")).toContain("ACCOUNT_AUTH_CALLBACK_PORT: u16 = 53_682");
+    expect(read("src-tauri/src/account_auth.rs")).toContain('.append_pair("audience", &configuration.audience)');
     expect(workflow).toContain("Get-AuthenticodeSignature");
     expect(workflow).toContain('echo "prerelease=true"');
     expect(workflow).toContain("Stable releases require WINDOWS_CERTIFICATE");
