@@ -14,15 +14,16 @@ RUN --mount=type=cache,id=sandbox-marketing-npm,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --prefer-offline \
       --workspace @sandbox/marketing --include-workspace-root=false
 
-FROM deps AS build
-ARG TARGETARCH
-COPY apps/marketing apps/marketing
+FROM deps AS api-client-build
 COPY packages/api-client packages/api-client
+RUN npm run build --workspace @sandbox/api-client
+
+FROM api-client-build AS build
+COPY apps/marketing apps/marketing
 COPY packages/brand packages/brand
 COPY packages/content packages/content
 COPY packages/ui packages/ui
-RUN npm run build --workspace @sandbox/api-client
-RUN --mount=type=cache,id=sandbox-marketing-next-${TARGETARCH},target=/workspace/apps/marketing/.next/cache \
+RUN --mount=type=cache,id=sandbox-marketing-next,target=/workspace/apps/marketing/.next/cache \
     npm run build --workspace @sandbox/marketing
 
 FROM node:20-alpine AS runtime
