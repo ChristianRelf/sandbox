@@ -1,300 +1,238 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  ArrowDown,
   ArrowRight,
-  BadgeCheck,
-  Box,
-  Camera,
+  ArrowUpRight,
   Check,
+  CircleDot,
   Cloud,
   Code2,
-  Cpu,
-  FileDown,
-  FolderOpen,
+  FileCheck2,
+  GitBranch,
   Globe2,
   HardDrive,
-  KeyRound,
+  ListChecks,
   MousePointer2,
-  Network,
   Play,
-  PlugZap,
-  RotateCcw,
-  Server,
   ShieldCheck,
-  Users,
 } from "lucide-react";
-import { WorkflowDemo } from "./WorkflowDemo";
+import { brand } from "@sandbox/brand";
+import { HeroExperience } from "./HeroExperience";
 import styles from "./home.module.css";
 
 export const metadata: Metadata = {
-  title: "Give the busywork back to your computer",
-  description: "Give repetitive browser, file and app work back to your computer with visual workflows that run where you choose.",
+  title: "Make the work move. Keep the control.",
+  description: "Build visible workflows for browsers, files and APIs, then run them on your computer or infrastructure you choose.",
   alternates: { canonical: "/" },
 };
 
+const methodSteps = [
+  {
+    number: "01",
+    label: "CAPTURE",
+    title: "Start with the job as it happens.",
+    body: "Record the browser routine or connect typed steps for files, APIs, decisions and notifications.",
+    detail: "Editable from the first step",
+    icon: MousePointer2,
+  },
+  {
+    number: "02",
+    label: "ROUTE",
+    title: "Make the logic visible.",
+    body: "Inputs, branches and permissions stay on the canvas, so the route can be reviewed before it runs.",
+    detail: "No hidden branch logic",
+    icon: GitBranch,
+  },
+  {
+    number: "03",
+    label: "PROVE",
+    title: "Read what happened.",
+    body: "Each run records outputs, skips, retries and bounded failure evidence without turning into a black box.",
+    detail: "Evidence attached to the run",
+    icon: ListChecks,
+  },
+] as const;
+
+const examples = [
+  {
+    number: "01",
+    category: "BROWSER WORK",
+    title: "Collect a report before anyone has to ask for it.",
+    body: "Sign in, download the report, confirm it contains data and notify the team.",
+    href: "/solutions/report-collection",
+    flow: ["Schedule", "Browser", "Check file", "Notify"],
+    icon: Globe2,
+  },
+  {
+    number: "02",
+    category: "LOCAL WORK",
+    title: "Keep an incoming folder organised on the machine it belongs to.",
+    body: "Watch an approved folder, validate new files and move them without uploading their contents.",
+    href: "/solutions/file-folder-automation",
+    flow: ["File watch", "Condition", "Rename", "Archive"],
+    icon: FileCheck2,
+  },
+  {
+    number: "03",
+    category: "DEVELOPER WORK",
+    title: "Turn a fragile script chain into a run the whole team can read.",
+    body: "Join commands, private APIs and decisions with explicit inputs and useful failure evidence.",
+    href: "/solutions/developer-workflows",
+    flow: ["Command", "API", "Branch", "Evidence"],
+    icon: Code2,
+  },
+] as const;
+
 export default function HomePage() {
-  return <main id="content">
-    <section className={styles.hero}>
-      <div className={styles.heroTexture} aria-hidden="true"><i/><i/><i/></div>
-      <div className={styles.heroCopy}>
-        <p className={styles.kicker}><span /> Visual automation for work that has to get done</p>
-        <h1 className={styles.headline}>Give the busywork back to <em>your computer.</em></h1>
-        <p className={styles.lede}>Build a clear sequence that clicks through browsers, moves files, calls APIs and tells your team when it is done. Run it on your machine or a runner you choose.</p>
-        <div className={styles.heroActions}>
-          <Link className="sb-button sb-button--primary" href="/downloads">Download for Windows <ArrowRight size={15}/></Link>
-          <a className={styles.secondaryAction} href="#how-it-works"><Play size={12} fill="currentColor"/> See how it works</a>
-        </div>
-        <div className={styles.assurances} aria-label="Product assurances">
-          <span><Check size={11}/> Free local runs</span>
-          <span><Check size={11}/> Every step inspectable</span>
-          <span><Check size={11}/> Move to the cloud when you choose</span>
-        </div>
-        <p className={styles.platforms}>Windows available now <span>/</span> macOS and Linux status on downloads</p>
-      </div>
-
-      <div className={styles.heroVisual} id="hero-demo">
-        <WorkflowDemo />
-        <div className={styles.visualCaption}>
-          <span>01 / A REAL RUN</span>
-          <p><strong>No magic.</strong> Just a sequence you can see, edit, approve and replay.</p>
-        </div>
-      </div>
-
-      <a className={styles.scrollCue} href="#product"><span /> SCROLL TO EXPLORE</a>
-    </section>
-
-    <div className={styles.capabilityRail} aria-label="Work Sandbox can automate">
-      <span>ONE CANVAS FOR</span>
-      <div><b>Browser actions</b><i/>Files and folders<i/>APIs<i/>Private apps<i/>Team handoffs</div>
-    </div>
-
-    <section className={styles.principles} id="product" aria-labelledby="principles-title">
-      <header className={styles.principlesHeader}>
-        <div><span>01</span><small>THE SANDBOX MODEL</small></div>
-        <h2 id="principles-title">Automation should be powerful enough for the messy work and clear enough that you still trust it tomorrow.</h2>
-      </header>
-      <div className={styles.principleGrid}>
-        <article><span>01</span><i/><h2>Draw the work.</h2><p>Turn the real sequence into typed nodes, branches and visible data mapping.</p></article>
-        <article><span>02</span><i/><h2>Keep it close.</h2><p>Reach files, apps and private services without sending the job somewhere else.</p></article>
-        <article><span>03</span><i/><h2>Know what happened.</h2><p>Inspect inputs, outputs, skips, retries and failures instead of guessing.</p></article>
-        <article><span>04</span><i/><h2>Move when ready.</h2><p>Start on desktop. Add hosted or self-managed runners only when the work needs them.</p></article>
-      </div>
-    </section>
-
-    <section className={`${styles.storySection} ${styles.boundarySection}`} id="how-it-works" aria-labelledby="boundary-title">
-      <div className={styles.sectionIndex}><span>02</span><small>EXECUTION<br/>BOUNDARY</small></div>
-      <div className={styles.storyCopy}>
-        <p className={styles.sectionTag}><span/> Choose where the work runs</p>
-        <h2 id="boundary-title">Automation that knows where the line is.</h2>
-        <p>Sensitive files and private services can stay exactly where they are. Pick a runner for each deployment, then move to always-on infrastructure only when the job actually needs it.</p>
-        <ul className={styles.storyPoints}>
-          <li><Check size={12}/> Local runs are not metered per task</li>
-          <li><Check size={12}/> Permissions are explicit before the first run</li>
-          <li><Check size={12}/> The same workflow can move between runners</li>
-        </ul>
-        <Link className={styles.inlineLink} href="/product/local-automation">Explore local automation <ArrowRight size={14}/></Link>
-      </div>
-
-      <div className={styles.runnerPanel} aria-label="Example workflow runner selection">
-        <header>
-          <div><span>WORKFLOW</span><strong>Collect morning report</strong></div>
-          <small>RUNNER TARGET</small>
-        </header>
-        <div className={styles.machineBoundary}>
-          <div className={styles.boundaryTitle}><span><i/> YOUR MACHINE</span><small>ONLINE / 4 MS</small></div>
-          <article className={styles.selectedRunner}>
-            <span><Cpu size={19}/></span>
-            <div><small>SELECTED RUNNER</small><strong>This computer</strong><p>Windows 11 · approved folders</p></div>
-            <i><Check size={12}/></i>
-          </article>
-          <div className={styles.localRoute} aria-hidden="true"><span/><i/><span/></div>
-          <div className={styles.localPermissions}>
-            <span><FolderOpen size={12}/> Reports</span>
-            <span><Globe2 size={12}/> portal.example</span>
-            <span><ShieldCheck size={12}/> 2 grants</span>
-          </div>
-        </div>
-        <div className={styles.runnerAlternatives}>
-          <article><Cloud size={16}/><div><strong>Managed cloud</strong><small>Always on · optional</small></div></article>
-          <article><Server size={16}/><div><strong>Your server</strong><small>Self-hosted runner</small></div></article>
-          <article><HardDrive size={16}/><div><strong>NAS or Pi</strong><small>ARM64 agent</small></div></article>
-        </div>
-        <footer><span><i/> READY</span><small>Nothing leaves this boundary until a step says so.</small></footer>
-      </div>
-    </section>
-
-    <section className={`${styles.storySection} ${styles.browserSection}`} aria-labelledby="browser-title">
-      <div className={styles.sectionIndex}><span>03</span><small>BROWSER<br/>CAPTURE</small></div>
-      <div className={styles.browserVisual} aria-label="Browser recorder capturing a monthly report download">
-        <header>
-          <span><i/><i/><i/></span>
-          <div><Globe2 size={11}/> portal.example/reports/monthly</div>
-        </header>
-        <div className={styles.browserBody}>
-          <div className={styles.fakePage}>
-            <nav><b>Northstar</b><span>Dashboard&nbsp;&nbsp; Reports&nbsp;&nbsp; Settings</span></nav>
-            <div className={styles.fakePageContent}>
-              <span>FINANCE / REPORTS</span>
-              <h3>Monthly report</h3>
-              <p>August 2026 · 12 reconciled entries</p>
-              <div className={styles.downloadTarget}>
-                <b className={styles.downloadButton}><FileDown size={13}/> Download CSV</b>
-                <MousePointer2 className={styles.captureCursor} size={18} fill="currentColor" aria-hidden="true"/>
-                <i className={styles.clickRing} aria-hidden="true"/>
+  return (
+    <main id="content" className={styles.page}>
+      <section className={styles.hero} aria-labelledby="hero-title">
+        <div className={styles.heroFrame}>
+          <div className={styles.heroCopy}>
+            <div className={styles.heroIndex}>
+              <span>SB / 0.7 BETA</span>
+              <span>LOCAL-FIRST VISUAL AUTOMATION</span>
+            </div>
+            <h1 id="hero-title">
+              <span>Make the work</span>
+              <strong>move.</strong>
+              <em>Keep the control.</em>
+            </h1>
+            <div className={styles.heroSummary}>
+              <p>Build a visible route through browsers, files, APIs and decisions. Run it on your computer first, then move it only when the job needs to stay awake.</p>
+              <div className={styles.heroActions}>
+                <Link className={styles.primaryButton} href="/downloads">Download for Windows <ArrowRight aria-hidden="true" size={15} /></Link>
+                <a className={styles.secondaryButton} href={brand.domains.docs + "/getting-started"}><Play aria-hidden="true" size={11} fill="currentColor" /> See the 5-minute quickstart</a>
               </div>
+              <p className={styles.heroAssurance}><ShieldCheck aria-hidden="true" size={12} /> Free local runs. Every step inspectable.</p>
             </div>
           </div>
-          <ol className={styles.captureSteps}>
-            <li><span><Globe2 size={13}/></span><div><small>01 / NAVIGATE</small><strong>Open monthly reports</strong><p>/reports/monthly</p></div><Check size={12}/></li>
-            <li><span><MousePointer2 size={13}/></span><div><small>02 / CLICK</small><strong>Download CSV</strong><p>role=button</p></div><Check size={12}/></li>
-            <li><span><Camera size={13}/></span><div><small>03 / SAFETY</small><strong>Capture on failure</strong><p>Screenshot + page state</p></div><i>3</i></li>
-          </ol>
+          <HeroExperience />
         </div>
-        <footer><span>3 actions became 3 editable nodes</span><small>Locator strategy saved</small></footer>
-      </div>
 
-      <div className={styles.storyCopy}>
-        <p className={styles.sectionTag}><span/> Browser automation</p>
-        <h2 id="browser-title">Teach it once. Own every step.</h2>
-        <p>Capture the routine in a real browser, then edit the nodes, locator strategy, extracted data and failure behaviour. The recording is a starting point—not a black box.</p>
-        <div className={styles.microProof}>
-          <span><b>REAL SESSION</b> Uses an isolated managed profile</span>
-          <span><b>FAILURE PROOF</b> Saves the state that explains what broke</span>
+        <div className={styles.heroFooter}>
+          <div><span>01</span><strong>Build visually</strong><small>Typed steps, explicit branches.</small></div>
+          <div><span>02</span><strong>Run in your boundary</strong><small>Local, hosted or self-managed.</small></div>
+          <div><span>03</span><strong>Inspect the evidence</strong><small>Outputs, skips, retries, failures.</small></div>
+          <a href="#method">
+            <span>DISCOVER</span>
+            <small>Follow the route</small>
+            <ArrowDown aria-hidden="true" size={14} />
+          </a>
         </div>
-        <Link className={styles.inlineLink} href="/product/browser-automation">Explore browser automation <ArrowRight size={14}/></Link>
-      </div>
-    </section>
+      </section>
 
-    <section className={styles.diagnosticsSection} aria-labelledby="diagnostics-title">
-      <header className={styles.diagnosticsHeader}>
-        <div><span>04</span><small>EXECUTION DIAGNOSTICS</small></div>
-        <h2 id="diagnostics-title">Nothing disappears into a <em>black box.</em></h2>
-        <p>Open any step and see what entered, what came out, why a branch was skipped and whether a retry is safe.</p>
-      </header>
+      <ol className={styles.handoff} aria-label="A Sandbox workflow progresses from input to evidence">
+        <li><span>01</span><strong>INPUT</strong></li>
+        <li aria-hidden="true"><i /></li>
+        <li><span>02</span><strong>VISIBLE ROUTE</strong></li>
+        <li aria-hidden="true"><i /></li>
+        <li><span>03</span><strong>CHOSEN RUNNER</strong></li>
+        <li aria-hidden="true"><i /></li>
+        <li><span>04</span><strong>EVIDENCE</strong></li>
+      </ol>
 
-      <div className={styles.inspectorShell}>
-        <nav>
-          <div><i/><b>RUN 2408</b><span>Collect morning report</span></div>
-          <p><strong><Check size={11}/> COMPLETED</strong><span>4.8 s</span></p>
-        </nav>
-        <div className={styles.inspectorBody}>
-          <aside className={styles.runSteps}>
-            <header>NODES <span>4 / 4</span></header>
-            <ol>
-              <li><i><Check size={9}/></i><span><strong>Schedule</strong><small>12 ms</small></span></li>
-              <li><i><Check size={9}/></i><span><strong>Open browser</strong><small>1.2 s</small></span></li>
-              <li><i><Check size={9}/></i><span><strong>Download report</strong><small>2.9 s</small></span></li>
-              <li className={styles.inspectedStep}><i><Check size={9}/></i><span><strong>Check result</strong><small>84 ms</small></span></li>
-            </ol>
-          </aside>
-          <article className={styles.nodeInspector}>
-            <header><div><small>NODE 04 / CONDITION</small><strong>Check result</strong></div><span><Check size={11}/> Succeeded</span></header>
-            <dl>
-              <div><dt>Input</dt><dd><code>{`{ file: "report.csv", rows: 12 }`}</code></dd></div>
-              <div><dt>Condition</dt><dd><code>rows &gt; 0</code></dd></div>
-              <div><dt>Output</dt><dd><code>{`{ branch: "true" }`}</code></dd></div>
-              <div><dt>Retry</dt><dd>Not required</dd></div>
-            </dl>
-          </article>
-          <aside className={styles.runEvidence}>
-            <header>EVIDENCE</header>
-            <div><span><Camera size={13}/></span><strong>Final page</strong><small>1280 × 720 PNG</small></div>
-            <div><span><FileDown size={13}/></span><strong>report.csv</strong><small>42 KB · 12 rows</small></div>
-            <p><ShieldCheck size={12}/> No secrets in logs</p>
-          </aside>
-        </div>
-      </div>
+      <section id="method" className={styles.method} aria-labelledby="method-title">
+        <div className={styles.methodInner}>
+          <header className={styles.sectionHeader}>
+            <div className={styles.discoverLabel}><span>DISCOVER</span><small>02 / TRACE THE RUN</small></div>
+            <h2 id="method-title">A route you can read<br />before it becomes real.</h2>
+            <p>Sandbox keeps the sequence, execution boundary and result in the same mental model. Nothing important disappears between building and running.</p>
+          </header>
 
-      <footer className={styles.diagnosticsFooter}>
-        <p><span>THE PRINCIPLE</span> If a workflow cannot explain itself, it is not ready to run unattended.</p>
-        <a href="https://docs.sndbox.app/getting-started/understand-executions">Understand executions <ArrowRight size={14}/></a>
-      </footer>
-    </section>
-
-    <section className={styles.ecosystemSection} aria-labelledby="ecosystem-title">
-      <header>
-        <div><p className={styles.sectionTag}><span/> Plugin ecosystem</p><h2 id="ecosystem-title">Add capability.<br/>Keep the boundary visible.</h2></div>
-        <p>Every package declares its nodes, network domains and host capabilities before it runs. Workflows pin the exact signed version you reviewed.</p>
-      </header>
-      <div className={styles.ecosystemCards}>
-        <article>
-          <div className={styles.cardNumber}>01</div>
-          <span className={styles.pluginIcon}><Box size={19}/></span>
-          <small>FIRST-PARTY</small>
-          <h3>Core nodes</h3>
-          <p>Files, HTTP, browser, Gmail, Slack and Discord arrive in the desktop catalogue.</p>
-          <div className={styles.capabilityTape}><Code2 size={12}/> 18 NODES INCLUDED</div>
-          <footer><BadgeCheck size={12}/> Built by Sandbox</footer>
-        </article>
-        <article className={styles.featuredPlugin}>
-          <div className={styles.cardNumber}>02</div>
-          <span className={styles.pluginIcon}><ShieldCheck size={19}/></span>
-          <small>CONTROLLED RUNTIME</small>
-          <h3>Sandboxed plugins</h3>
-          <p>Capability-controlled WebAssembly with a manifest you can read before install.</p>
-          <div className={styles.permissionManifest}>
-            <span><Network size={11}/> api.example.com</span>
-            <span><FolderOpen size={11}/> No file access</span>
+          <div className={styles.methodRail}>
+            {methodSteps.map(({ number, label, title, body, detail, icon: Icon }) => (
+              <article key={number}>
+                <header><span>{number}</span><small>{label}</small><Icon aria-hidden="true" size={18} /></header>
+                <h3>{title}</h3>
+                <p>{body}</p>
+                <footer><CircleDot aria-hidden="true" size={10} /> {detail}</footer>
+              </article>
+            ))}
           </div>
-          <footer><ShieldCheck size={12}/> Signed packages</footer>
-        </article>
-        <article>
-          <div className={styles.cardNumber}>03</div>
-          <span className={styles.pluginIcon}><Users size={19}/></span>
-          <small>YOUR ORGANISATION</small>
-          <h3>Private capabilities</h3>
-          <p>Share internal nodes with your workspace without publishing them to a public marketplace.</p>
-          <div className={styles.capabilityTape}><KeyRound size={12}/> WORKSPACE ONLY</div>
-          <footer><PlugZap size={12}/> Version pinned</footer>
-        </article>
-      </div>
-      <div className={styles.ecosystemFooter}><span>Review once. Run the exact version you approved.</span><Link className={styles.inlineLink} href="/integrations">Browse integrations <ArrowRight size={14}/></Link></div>
-    </section>
 
-    <section className={styles.teamSection} aria-labelledby="team-title">
-      <div className={styles.teamCopy}>
-        <p className={styles.sectionTag}><span/> Teams and governance</p>
-        <h2 id="team-title">Ship the workflow. Keep the passwords out of it.</h2>
-        <p>Publish reviewed versions, deploy shared connections by environment, approve sensitive changes and manage the runners that keep the work online.</p>
-        <div className={styles.teamFacts}>
-          <article><strong>2 / 2</strong><span>required approvals</span></article>
-          <article><strong>v12</strong><span>immutable revision</span></article>
-          <article><strong>0</strong><span>shared passwords</span></article>
+          <div className={styles.runLedger} aria-label="Example execution evidence">
+            <div className={styles.ledgerLead}>
+              <small>EXECUTION / 01842</small>
+              <strong>Morning report</strong>
+              <span><i /> COMPLETED IN 4.8S</span>
+            </div>
+            <ol>
+              <li><span>08:00:00</span><Check aria-hidden="true" size={11} /><strong>Trigger received</strong><small>weekday_schedule</small></li>
+              <li><span>08:00:02</span><Check aria-hidden="true" size={11} /><strong>Portal opened</strong><small>managed_profile</small></li>
+              <li><span>08:00:04</span><Check aria-hidden="true" size={11} /><strong>Report verified</strong><small>12 rows / 42 KB</small></li>
+            </ol>
+            <Link href="/product/visual-workflow-builder">Open the workflow builder <ArrowUpRight aria-hidden="true" size={13} /></Link>
+          </div>
         </div>
-        <Link className={styles.inlineLink} href="/product/teams-governance">Explore teams and governance <ArrowRight size={14}/></Link>
-      </div>
+      </section>
 
-      <div className={styles.publicationLedger} aria-label="Example workflow publication timeline">
-        <header><div><span>WORKFLOW PUBLICATION</span><strong>Report collection</strong></div><p><i/> PRODUCTION</p></header>
-        <div className={styles.ledgerBody}>
-          <article><span><Check size={11}/></span><div><small>14:32 / DRAFT</small><strong>Revision v12 prepared</strong><p>Changed browser locator and retry policy</p></div><em>Christian</em></article>
-          <article><span><Check size={11}/></span><div><small>14:41 / APPROVAL</small><strong>2 of 2 approved</strong><p>Operations and Security</p></div><em>9 min</em></article>
-          <article className={styles.publishedRow}><span><Check size={11}/></span><div><small>14:42 / PUBLISHED</small><strong>Revision v12 is live</strong><p>Audit event recorded · runners updated</p></div><em>Current</em></article>
+      <section className={styles.boundary} aria-labelledby="boundary-title">
+        <div className={styles.boundaryCopy}>
+          <p>THE RUNNER IS PART OF THE ROUTE</p>
+          <h2 id="boundary-title">Keep private work close. Move only when it helps.</h2>
+          <p>Local execution is the full product, not a limited preview. Publish the same visible workflow to an always-on runner when a schedule, team or environment calls for it.</p>
+          <div>
+            <Link href="/security"><span>DISCOVER</span> Review the security model <ArrowRight aria-hidden="true" size={14} /></Link>
+            <Link href="/product/always-on-execution">Explore always-on execution <ArrowRight aria-hidden="true" size={14} /></Link>
+          </div>
         </div>
-        <footer><RotateCcw size={13}/><span>Previous published revision remains available</span><b>ROLLBACK READY</b></footer>
-      </div>
-    </section>
 
-    <section className={styles.finalCta} aria-labelledby="cta-title">
-      <div className={styles.ctaTexture} aria-hidden="true"><i/><i/><i/></div>
-      <div className={styles.ctaCopy}>
-        <p><span/> READY WHEN YOU ARE</p>
-        <h2 id="cta-title">Start with one<br/><em>boring task.</em></h2>
-        <p>Build it on your computer. Watch every step. Keep it local for free, or move it online when the work needs to keep running.</p>
+        <div className={styles.runnerMap} aria-label="Available execution targets">
+          <header><span>EXECUTION TARGET</span><strong>Choose per workflow</strong></header>
+          <article className={styles.runnerSelected}>
+            <span><HardDrive aria-hidden="true" size={18} /></span>
+            <div><small>START HERE</small><strong>This computer</strong><p>Local files, private apps and free local runs.</p></div>
+            <b><Check aria-hidden="true" size={11} /> SELECTED</b>
+          </article>
+          <article>
+            <span><Cloud aria-hidden="true" size={18} /></span>
+            <div><small>WHEN NEEDED</small><strong>Hosted runner</strong><p>Durable schedules on managed infrastructure.</p></div>
+            <b>AVAILABLE</b>
+          </article>
+          <article>
+            <span><Code2 aria-hidden="true" size={18} /></span>
+            <div><small>YOUR BOUNDARY</small><strong>Self-hosted runner</strong><p>Linux x64 or ARM64 inside your network.</p></div>
+            <b>AVAILABLE</b>
+          </article>
+          <footer><ShieldCheck aria-hidden="true" size={12} /> Permissions stay explicit at every target.</footer>
+        </div>
+      </section>
+
+      <section className={styles.examples} aria-labelledby="examples-title">
+        <header className={styles.examplesHeader}>
+          <div className={styles.discoverLabel}><span>DISCOVER</span><small>03 / START WITH THE JOB</small></div>
+          <h2 id="examples-title">Real work makes<br />the clearest demo.</h2>
+          <div><p>Choose a familiar routine and see the entire route—trigger, permissions, execution and result.</p><Link href="/solutions">View all solutions <ArrowRight aria-hidden="true" size={14} /></Link></div>
+        </header>
+
+        <div className={styles.exampleGrid}>
+          {examples.map(({ number, category, title, body, href, flow, icon: Icon }) => (
+            <Link href={href} key={href}>
+              <header><span>{number}</span><small>{category}</small><Icon aria-hidden="true" size={18} /></header>
+              <h3>{title}</h3>
+              <p>{body}</p>
+              <ol aria-label="Workflow route">
+                {flow.map((step, index) => <li key={step}>{step}{index < flow.length - 1 && <i aria-hidden="true" />}</li>)}
+              </ol>
+              <footer><span>DISCOVER</span><small>Explore this solution</small><ArrowUpRight aria-hidden="true" size={14} /></footer>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className={styles.system} aria-labelledby="system-title">
+        <header>
+          <p>SAME ROUTE / MORE REACH</p>
+          <h2 id="system-title">Extend the system<br />without losing the boundary.</h2>
+        </header>
         <div>
-          <Link href="/downloads" className={styles.ctaPrimary}>Download Sandbox <ArrowRight size={15}/></Link>
-          <a href="https://docs.sndbox.app/getting-started" className={styles.ctaSecondary}>Read the quickstart</a>
+          <Link href="/marketplace"><span>01</span><strong>Marketplace</strong><small>Review capabilities and permissions before install.</small><ArrowUpRight aria-hidden="true" size={15} /></Link>
+          <Link href="/developers"><span>02</span><strong>Developer platform</strong><small>Build typed nodes and versioned workflow packages.</small><ArrowUpRight aria-hidden="true" size={15} /></Link>
+          <Link href="/product/teams-governance"><span>03</span><strong>Teams & governance</strong><small>Publish, approve and operate without widening access.</small><ArrowUpRight aria-hidden="true" size={15} /></Link>
         </div>
-        <small><Check size={11}/> Windows available now · no card required</small>
-      </div>
-      <div className={styles.ctaRoute} aria-label="Example workflow from browser to file to team notification">
-        <article><span><Globe2 size={16}/></span><div><small>01</small><strong>Open browser</strong></div></article>
-        <i><ArrowRight size={14}/></i>
-        <article><span><FileDown size={16}/></span><div><small>02</small><strong>Save report</strong></div></article>
-        <i><ArrowRight size={14}/></i>
-        <article><span><Users size={16}/></span><div><small>03</small><strong>Tell the team</strong></div></article>
-        <b><Check size={12}/> DONE IN 4.8 S</b>
-      </div>
-    </section>
-  </main>;
+      </section>
+    </main>
+  );
 }

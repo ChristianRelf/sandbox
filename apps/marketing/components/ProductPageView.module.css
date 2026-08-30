@@ -1,0 +1,6 @@
+.page {
+  max-width: none;
+  padding: 0;
+  overflow: clip;
+  background: #08090a;
+}

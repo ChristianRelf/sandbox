@@ -1,1 +1,35 @@
-import type { MetadataRoute } from "next";import { brand } from "@sandbox/brand";import { productPages,useCases,legalPages } from "@sandbox/content";export default function sitemap():MetadataRoute.Sitemap{const base=brand.domains.marketing,now=new Date();const staticRoutes=["","/solutions","/integrations","/marketplace","/pricing","/downloads","/changelog","/security","/enterprise","/support","/contact","/legal"];return[...staticRoutes.map(url=>({url:`${base}${url}`,lastModified:now})),...productPages.map(p=>({url:`${base}/product/${p.slug}`,lastModified:now})),...useCases.flatMap(p=>[{url:`${base}/solutions/${p.slug}`,lastModified:now},{url:`${base}/templates/${p.slug}`,lastModified:now}]),...legalPages.map(p=>({url:`${base}/legal/${p}`,lastModified:now}))]}
+import type { MetadataRoute } from "next";
+import { brand } from "@sandbox/brand";
+import { legalPages, productPages, useCases } from "@sandbox/content";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const base = brand.domains.marketing;
+  const lastModified = new Date();
+  const staticRoutes = [
+    "",
+    "/solutions",
+    "/integrations",
+    "/marketplace",
+    "/pricing",
+    "/downloads",
+    "/changelog",
+    "/security",
+    "/enterprise",
+    "/support",
+    "/contact",
+    "/legal",
+  ];
+
+  return [
+    ...staticRoutes.map((path) => ({ url: `${base}${path}`, lastModified })),
+    ...productPages.map((page) => ({
+      url: `${base}${page.slug === "developers" ? "/developers" : `/product/${page.slug}`}`,
+      lastModified,
+    })),
+    ...useCases.flatMap((page) => [
+      { url: `${base}/solutions/${page.slug}`, lastModified },
+      { url: `${base}/templates/${page.slug}`, lastModified },
+    ]),
+    ...legalPages.map((page) => ({ url: `${base}/legal/${page}`, lastModified })),
+  ];
+}
