@@ -1,17 +1,26 @@
 import { launchRelease } from "@sandbox/content";
-import { ArrowRight, CheckCircle2, CircleAlert, Download, KeyRound, LifeBuoy, Package, ShieldCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2, Download, KeyRound, LifeBuoy, Package, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
+import { authenticatedClient } from "../lib/auth";
 
-export default function Home() {
+export const dynamic="force-dynamic";
+
+export default async function Home() {
+  const api=await authenticatedClient();
+  const [profile,organisations,commerce]=api?await Promise.allSettled([api.getAccountProfile(),api.listAccountOrganisations(),api.getProductAccount()]):[];
+  const account=profile?.status==="fulfilled"?profile.value.data:null;
+  const organisationItems=organisations?.status==="fulfilled"?organisations.value.data.items:[];
+  const product=commerce?.status==="fulfilled"?commerce.value.data:null;
+  const subscription=product?.subscriptions[0];
   return <main className="portal-page">
-    <header className="page-head"><div><p>ACCOUNT OVERVIEW</p><h1>Account and operations.</h1><span>The v0.5 GA identity, organisation, marketplace, security and runner services are connected to this portal boundary.</span></div><Link href="/downloads" className="portal-primary"><Download size={14}/>Downloads</Link></header>
-    <section className="plan-banner"><div><small>CURRENT PLAN</small><strong>Product plan not configured</strong><span>Marketplace entitlements exist; product subscription and seat contracts remain a separate launch requirement.</span></div><Link href="/billing">Billing details <ArrowRight size={13}/></Link></section>
+    <header className="page-head"><div><p>ACCOUNT OVERVIEW</p><h1>{account?`Welcome, ${account.displayName}.`:"Account and operations."}</h1><span>Identity, organisations, governed workflows, security and runners in one live account boundary.</span></div><Link href="/downloads" className="portal-primary"><Download size={14}/>Downloads</Link></header>
+    <section className="plan-banner"><div><small>CURRENT PLAN</small><strong>{subscription?.planName??"Local"}</strong><span>{subscription?`${subscription.status}${subscription.currentPeriodEndsAt?` · renews ${new Date(subscription.currentPeriodEndsAt).toLocaleDateString("en-GB")}`:""}`:"Local execution remains available without a product subscription."}</span></div><Link href="/billing">Billing details <ArrowRight size={13}/></Link></section>
     <section className="overview-grid">
       <article><header><Package/><span>Recent release</span></header><strong>Sandbox {launchRelease.version}</strong><p>{launchRelease.summary}</p><Link href="/releases">View release notes <ArrowRight/></Link></article>
+      <article><header><Users/><span>Team workspaces</span></header><strong>{organisationItems.length} organisation{organisationItems.length===1?"":"s"}</strong><p>{organisationItems.flatMap(item=>item.workspaces).length} accessible workspaces with enforced roles and governance.</p><Link href="/organisations">Open operations <ArrowRight/></Link></article>
       <article><header><KeyRound/><span>Developer access</span></header><strong>Stable v1 API</strong><p>Personal tokens, service accounts and client assertions use the validated public contract.</p><Link href="/security">Review access <ArrowRight/></Link></article>
       <article><header><LifeBuoy/><span>Support access</span></header><strong>Approval protected</strong><p>Temporary diagnostic access is time-boxed, auditable, revocable and automatically expires.</p><Link href="/support">Support options <ArrowRight/></Link></article>
-      <article><header><ShieldCheck/><span>Security</span></header><strong>GA controls available</strong><p>OIDC sessions, privacy controls, retention and audit routes are implemented.</p><Link href="/security">Review security <ArrowRight/></Link></article>
     </section>
-    <section className="account-status"><h2>Service readiness</h2><p><CheckCircle2/>GA API, runner, workspace, privacy and guarded support-access contracts are present.</p><p><CheckCircle2/>Signed desktop, agent and container release workflow is present.</p><p className="warn"><CircleAlert/>Product-plan licences, customer support cases and a published release manifest still need dedicated contracts; those controls remain disabled.</p></section>
+    <section className="account-status"><h2>Service readiness</h2><p><CheckCircle2/>Account data above is loaded from the authenticated control plane.</p><p><CheckCircle2/>Encrypted sync, publication approvals, deployment preflight and runner pools are available.</p><p><ShieldCheck/>Credentials stay server-side and every workspace operation is authorised again at the API.</p></section>
   </main>;
 }

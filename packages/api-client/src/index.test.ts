@@ -56,4 +56,26 @@ describe("SandboxApiClient v1 compatibility",()=>{
     expect(String(fetch.mock.calls[0][0])).toBe("https://api.sandbox.test/v1/account/organisations");
     expect(String(fetch.mock.calls[1][0])).toBe("https://api.sandbox.test/v1/workspaces/workspace%20id/sync/workflows");
   });
+
+  it("exposes deployment creation and lifecycle transitions",async()=>{
+    const fetch=vi.fn(async()=>json({deployment:{deploymentId:"deployment-1",status:"active"}}));
+    const client=new SandboxApiClient({baseUrl:"https://api.sandbox.test",fetch});
+    await client.createDeployment("workspace id",{workflowId:"workflow-1",preflight:{valid:true}});
+    await client.transitionDeployment("workspace id","deployment/id",{status:"paused",reason:"Maintenance window"});
+    expect(String(fetch.mock.calls[0][0])).toBe("https://api.sandbox.test/v1/workspaces/workspace%20id/deployments");
+    expect(fetch.mock.calls[0][1]?.method).toBe("POST");
+    expect(String(fetch.mock.calls[1][0])).toBe("https://api.sandbox.test/v1/workspaces/workspace%20id/deployments/deployment%2Fid/transition");
+    expect(fetch.mock.calls[1][1]?.method).toBe("POST");
+  });
+
+  it("exposes the documented workflow run endpoints",async()=>{
+    const fetch=vi.fn(async()=>json({run:{runId:"run-1",status:"queued"}}));
+    const client=new SandboxApiClient({baseUrl:"https://api.sandbox.test",fetch});
+    await client.startWorkflowRun("workflow/id",{workspaceId:"workspace-1",deploymentId:"deployment-1",encryptedPayloadReference:"object://encrypted/revision"});
+    await client.getWorkflowRun("run/id");
+    expect(String(fetch.mock.calls[0][0])).toBe("https://api.sandbox.test/v1/workflows/workflow%2Fid/runs");
+    expect(fetch.mock.calls[0][1]?.method).toBe("POST");
+    expect(String(fetch.mock.calls[1][0])).toBe("https://api.sandbox.test/v1/runs/run%2Fid");
+    expect(fetch.mock.calls[1][1]?.method).toBe("GET");
+  });
 });

@@ -48,7 +48,8 @@ function dependencies(permissions: string[]) {
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), listWorkflowApprovals: vi.fn(async()=>[]), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
-    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(async()=>[]), listRunnerPools:vi.fn(async()=>[]), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(async()=>[]), createDeployment:vi.fn(), transitionDeployment:vi.fn(), listRunnerPools:vi.fn(async()=>[]), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
+    listOrganisationRoles:vi.fn(async()=>[]),createOrganisationRole:vi.fn(),updateOrganisationRole:vi.fn(),deleteOrganisationRole:vi.fn(),listSsoConnections:vi.fn(async()=>[]),createSsoConnection:vi.fn(),updateSsoConnection:vi.fn(),deleteSsoConnection:vi.fn(),listScimTokens:vi.fn(async()=>[]),createScimToken:vi.fn(),revokeScimToken:vi.fn(),authenticateScimToken:vi.fn(),listScimUsers:vi.fn(),getScimUser:vi.fn(),upsertScimUser:vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
     getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
     createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn(),
@@ -486,6 +487,83 @@ describe("control-plane API", () => {
     expect(response.body).not.toContain("top-secret");
     const call = vi.mocked(deps.repository.upsertProtectedVariable).mock.calls[0];
     expect(call[6]).toBeInstanceOf(Buffer); expect(call[7]).toBeNull(); expect(call[6]?.toString()).not.toContain("top-secret");
+    await server.close();
+  });
+
+  it("creates a deployment only from a successful exact preflight", async () => {
+    const workflowId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",revisionId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",environmentId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",runnerId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",deploymentId="ffffffff-ffff-4fff-8fff-ffffffffffff",permissionSnapshotId="99999999-9999-4999-8999-999999999999",now=new Date().toISOString();
+    const deps=dependencies(["deployments.manage"]);
+    vi.mocked(deps.repository.createDeployment).mockResolvedValue({deploymentId,workspaceId,workflowId,workflowRevisionId:revisionId,environmentId,environment:"production",target:"managed_cloud_runner",targetRunnerId:null,runnerPoolId:null,region:"eu-west-2",requiredConnectionIds:[],requiredPlugins:[],permissionSnapshotId,status:"active",validation:{valid:true},usageEstimate:{periodDays:30,expectedExecutions:1,hostedExecutionSeconds:30,browserWorkerSeconds:0,expectedConcurrentExecutions:1,retryMultiplier:1,confidence:"low",basis:["manual run"],disclaimer:"Estimate only; actual usage and cost may differ."},createdBy:session.accountId,createdAt:now,activatedAt:now,supersedesDeploymentId:null});
+    const preflight={target:"managed_cloud_runner",region:"eu-west-2",requirements:{protocolVersion:2,engineVersion:"0.7.0-beta.3",pluginRuntimeVersion:"0.7.0-beta.3",runnerTypes:["hosted"],architectures:["x86_64"],workspaceId,environmentId,region:"eu-west-2",requiredTags:[],capabilities:[{nodeType:"manual",nodeVersions:[1],constraints:{}}],plugins:[],connectionIds:[],minimumAvailableConcurrency:1},nodes:[{nodeId:"trigger",nodeType:"manual",nodeVersion:1,plugin:null,requiresBrowser:false,requiresLocalFile:false,localFileLabel:null,requiredConnectionIds:[],requiredEnvironmentVariables:[],networkTargets:[],approvalRequired:false}],graphIssues:[],availableRunners:[{runnerId,keyId:"hosted-1",runnerType:"hosted",protocolVersion:2,engineVersion:"0.7.0-beta.3",pluginRuntimeVersion:"0.7.0-beta.3",architecture:"x86_64",operatingSystem:"linux",workspaceId,environmentId,region:"eu-west-2",tags:[],concurrencyLimit:10,maintenanceState:"active",nodeCapabilities:[{nodeType:"manual",nodeVersions:[1],constraints:{}}],plugins:[],connections:[]}],availableConnectionIds:[],availableEnvironmentVariables:[],approvedNetworkTargets:[],approvedPluginPackages:[],approvalSnapshotPresent:true,concurrencyLimit:1,retentionDays:30,estimatedUsage:{periodDays:30,expectedExecutions:1,hostedExecutionSeconds:30,browserWorkerSeconds:0,expectedConcurrentExecutions:1,retryMultiplier:1,confidence:"low",basis:["manual run"],disclaimer:"Estimate only; actual usage and cost may differ."}};
+    const server=await createServer(deps),response=await server.inject({method:"POST",url:`/v1/workspaces/${workspaceId}/deployments`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()},payload:{workflowId,workflowRevisionId:revisionId,environmentId,targetRunnerId:null,runnerPoolId:null,preflight}});
+    expect(response.statusCode,response.body).toBe(201);expect(response.json().deployment).toMatchObject({deploymentId,status:"active"});expect(deps.repository.createDeployment).toHaveBeenCalledWith(session,workspaceId,expect.objectContaining({workflowId,workflowRevisionId:revisionId,target:"managed_cloud_runner",validation:expect.objectContaining({valid:true})}),expect.any(String));await server.close();
+  });
+
+  it("starts and reads a versioned run through the public API",async()=>{
+    const workflowId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",revisionId="cccccccc-cccc-4ccc-8ccc-cccccccccccc",environmentId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",deploymentId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",permissionSnapshotId="ffffffff-ffff-4fff-8fff-ffffffffffff",runId="99999999-9999-4999-8999-999999999999",now=new Date().toISOString();
+    const requirements={protocolVersion:2 as const,engineVersion:"0.7.0-beta.3",pluginRuntimeVersion:"0.7.0-beta.3",runnerTypes:["hosted" as const],architectures:["x86_64" as const],workspaceId,environmentId,region:"eu-west-2",requiredTags:[],capabilities:[],plugins:[],connectionIds:[],minimumAvailableConcurrency:1};
+    const run={runId,workspaceId,environmentId,deploymentId,workflowId,workflowRevisionId:revisionId,status:"queued" as const,outcomeCertainty:"certain" as const,assignedRunnerId:null,trigger:"api",queuedAt:now,startedAt:null,completedAt:null,timeoutAt:new Date(Date.now()+60_000).toISOString(),evidence:[]};
+    const executionCoordinator={resolvePublicRunDeployment:vi.fn(async()=>({workspaceId,environmentId,deploymentId,workflowId,workflowRevisionId:revisionId,runnerPoolId:null,permissionSnapshotId,pluginVersions:[],connectionReferences:[],requirements})),enqueue:vi.fn(async()=>({executionId:runId,created:true})),getPublicRun:vi.fn(async()=>run)};
+    const server=await createServer({...dependencies(["workflows.run","executions.view_detail"]),executionCoordinator});
+    const started=await server.inject({method:"POST",url:`/v1/workflows/${workflowId}/runs`,headers:{authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString(),"idempotency-key":"public-run-request-0001"},payload:{workspaceId,deploymentId,encryptedPayloadReference:"object://encrypted/revision"}});
+    expect(started.statusCode,started.body).toBe(202);expect(started.headers.location).toBe(`/v1/runs/${runId}`);expect(started.json().run).toMatchObject({runId,status:"queued",workflowRevisionId:revisionId});expect(executionCoordinator.enqueue).toHaveBeenCalledWith(expect.objectContaining({workflowId,workflowRevisionId:revisionId,idempotencyKey:"public-run-request-0001"}),true);
+    const read=await server.inject({method:"GET",url:`/v1/runs/${runId}`,headers:{authorization:"Bearer token"}});expect(read.statusCode,read.body).toBe(200);expect(read.json().run).toMatchObject({runId,evidence:[]});await server.close();
+  });
+
+  it("limits organisation security administration to owners", async () => {
+    const organisationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const roleId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const deps = dependencies([]);
+    vi.mocked(deps.repository.listAccountOrganisations).mockResolvedValue([{ id: organisationId, name: "Acme", slug: "acme", role: "owner", createdAt: new Date().toISOString(), workspaces: [] }]);
+    vi.mocked(deps.repository.createOrganisationRole).mockResolvedValue({ id: roleId, organisationId, key: "auditor", displayName: "Auditor", builtIn: false, permissions: ["audit.view"] });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: `/v1/organisations/${organisationId}/roles`, headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { key: "auditor", displayName: "Auditor", permissions: ["audit.view"] } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().role).toMatchObject({ id: roleId, key: "auditor", builtIn: false });
+    expect(deps.repository.createOrganisationRole).toHaveBeenCalledWith(session, organisationId, "auditor", "Auditor", ["audit.view"], expect.any(String));
+    await server.close();
+
+    const deniedDeps = dependencies([]);
+    vi.mocked(deniedDeps.repository.listAccountOrganisations).mockResolvedValue([{ id: organisationId, name: "Acme", slug: "acme", role: "administrator", createdAt: new Date().toISOString(), workspaces: [] }]);
+    const deniedServer = await createServer(deniedDeps);
+    const denied = await deniedServer.inject({ method: "GET", url: `/v1/organisations/${organisationId}/roles`, headers: { authorization: "Bearer token" } });
+    expect(denied.statusCode).toBe(403);
+    expect(deniedDeps.repository.listOrganisationRoles).not.toHaveBeenCalled();
+    await deniedServer.close();
+  });
+
+  it("provisions SCIM users with a scoped bearer credential", async () => {
+    const organisationId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const tokenId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const provisioningAccountId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const userId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const token = `sbx_scim_0123456789ab.${"A".repeat(43)}`;
+    const deps = dependencies([]);
+    vi.mocked(deps.repository.authenticateScimToken).mockResolvedValue({ organisationId, tokenId, provisioningAccountId });
+    vi.mocked(deps.repository.upsertScimUser).mockResolvedValue({ id: userId, organisationId, accountId: "ffffffff-ffff-4fff-8fff-ffffffffffff", externalId: "idp-123", userName: "analyst@example.com", displayName: "Example Analyst", active: true, role: "developer", workspaceIds: [workspaceId], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "POST", url: "/scim/v2/Users", headers: { authorization: `Bearer ${token}` }, payload: { schemas: ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:sandbox:params:scim:schemas:extension:1.0:User"], externalId: "idp-123", userName: "analyst@example.com", displayName: "Example Analyst", active: true, "urn:sandbox:params:scim:schemas:extension:1.0:User": { role: "developer", workspaceIds: [workspaceId] } } });
+    expect(response.statusCode, response.body).toBe(201);
+    expect(response.headers.location).toBe(`/scim/v2/Users/${userId}`);
+    expect(response.json()).toMatchObject({ id: userId, userName: "analyst@example.com", active: true, "urn:sandbox:params:scim:schemas:extension:1.0:User": { role: "developer", workspaceIds: [workspaceId] } });
+    expect(deps.repository.authenticateScimToken).toHaveBeenCalledWith(expect.any(Buffer));
+    expect(deps.repository.upsertScimUser).toHaveBeenCalledWith(organisationId, provisioningAccountId, null, { externalId: "idp-123", userName: "analyst@example.com", displayName: "Example Analyst", active: true, role: "developer", workspaceIds: [workspaceId] });
+    expect(deps.sessions.verify).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("streams bounded audit events as newline-delimited JSON", async () => {
+    const deps = dependencies(["audit.view"]);
+    const eventId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const correlationId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    vi.mocked(deps.repository.listAuditEvents).mockResolvedValue({ items: [{ eventId, timestamp: new Date().toISOString(), actorAccountId: session.accountId, workspaceId, action: "organisation.role.created", resourceType: "organisation_role", resourceId: "auditor", beforeSummary: null, afterSummary: { permissions: ["audit.view"] }, sourceDeviceId: null, correlationId }], nextCursor: eventId });
+    const server = await createServer(deps);
+    const response = await server.inject({ method: "GET", url: `/v1/workspaces/${workspaceId}/audit/stream?limit=1`, headers: { authorization: "Bearer token" } });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/x-ndjson");
+    expect(response.headers["x-next-cursor"]).toBe(eventId);
+    expect(response.body.trim().split("\n")).toHaveLength(1);
+    expect(JSON.parse(response.body)).toMatchObject({ eventId, action: "organisation.role.created" });
     await server.close();
   });
 });

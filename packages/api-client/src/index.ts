@@ -106,6 +106,10 @@ export interface AccountProfile {accountId:string;email:string;displayName:strin
 export interface AccountSession {id:string;deviceName:string;createdAt:string;lastSeenAt:string;expiresAt:string;current:boolean}
 export interface WorkspaceMember {accountId:string;email:string;displayName:string;role:BuiltInRole;joinedAt:string}
 export interface WorkspaceEnvironment {environmentId:string;environment:"development"|"staging"|"production"}
+export interface OrganisationRole {id:string;organisationId:string;key:string;displayName:string;builtIn:boolean;permissions:string[]}
+export interface SsoConnection {id:string;organisationId:string;connectionType:"oidc"|"saml";displayName:string;issuerUrl:string;clientIdentifier:string;verifiedDomains:string[];enabled:boolean;createdAt:string;updatedAt:string}
+export interface SsoConnectionInput {connectionType:"oidc"|"saml";displayName:string;issuerUrl:string;clientIdentifier:string;verifiedDomains?:string[];enabled?:boolean}
+export interface ScimToken {id:string;organisationId:string;name:string;prefix:string;createdAt:string;expiresAt:string;lastUsedAt:string|null;revokedAt:string|null}
 export interface SyncedWorkflow { workflowId:string;name:string;currentDraftRevisionId:string|null;currentPublishedRevisionId:string|null;createdAt:string;updatedAt:string|null }
 export interface EncryptedWorkflowRevision {
   workflowId:string;revisionId:string;parentRevisionId:string|null;schemaVersion:number;contentHash:string;editorDeviceId:string;updatedAt:string;
@@ -115,6 +119,8 @@ export interface EncryptedWorkflowRevision {
 export interface WorkflowApproval {approvalId:string;workflowId:string;revisionId:string;status:"pending"|"approved"|"rejected"|"expired";requiredApprovals:number;approvalCount:number;createdAt:string}
 export interface RunnerPool {id:string;workspaceId:string;environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";memberCount:number;createdAt:string;updatedAt:string}
 export interface RunnerPoolInput {environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region?:string|null;requiredTags?:string[];maximumConcurrency:number;status?:"active"|"paused"|"draining";members?:Array<{runnerId:string;priority?:number}>}
+export interface PublicRun {runId:string;workspaceId:string;environmentId:string;deploymentId:string;workflowId:string;workflowRevisionId:string;status:string;outcomeCertainty:"certain"|"uncertain";assignedRunnerId:string|null;trigger:string;queuedAt:string;startedAt:string|null;completedAt:string|null;timeoutAt:string;evidence:Array<{checkpointId:string;nodeId:string;nodeVersion:number;attempt:number;status:"completed"|"failed";inputHash:string;outputReference:string|null;sideEffect:string;completedAt:string}>}
+export interface StartWorkflowRunInput {workspaceId:string;deploymentId:string;encryptedPayloadReference:string;triggerReference?:string|null;timeoutSeconds?:number}
 
 export interface PersonalAccessTokenInput {
   name: string;
@@ -207,6 +213,18 @@ export class SandboxApiClient {
     return this.request({method:"POST",path:"/v1/organisations",body:input,parse});
   }
 
+  listOrganisationRoles<T = {items:OrganisationRole[]}>(organisationId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({path:`/v1/organisations/${encodeURIComponent(organisationId)}/roles`,parse});}
+  createOrganisationRole<T = {role:OrganisationRole}>(organisationId:string,input:{key:string;displayName:string;permissions:string[]},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"POST",path:`/v1/organisations/${encodeURIComponent(organisationId)}/roles`,body:input,parse});}
+  updateOrganisationRole<T = {role:OrganisationRole}>(organisationId:string,roleId:string,input:{displayName:string;permissions:string[]},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"PUT",path:`/v1/organisations/${encodeURIComponent(organisationId)}/roles/${encodeURIComponent(roleId)}`,body:input,parse});}
+  deleteOrganisationRole<T = {deleted:true}>(organisationId:string,roleId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"DELETE",path:`/v1/organisations/${encodeURIComponent(organisationId)}/roles/${encodeURIComponent(roleId)}`,body:{},parse});}
+  listSsoConnections<T = {items:SsoConnection[]}>(organisationId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({path:`/v1/organisations/${encodeURIComponent(organisationId)}/sso-connections`,parse});}
+  createSsoConnection<T = {connection:SsoConnection}>(organisationId:string,input:SsoConnectionInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"POST",path:`/v1/organisations/${encodeURIComponent(organisationId)}/sso-connections`,body:input,parse});}
+  updateSsoConnection<T = {connection:SsoConnection}>(organisationId:string,connectionId:string,input:SsoConnectionInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"PUT",path:`/v1/organisations/${encodeURIComponent(organisationId)}/sso-connections/${encodeURIComponent(connectionId)}`,body:input,parse});}
+  deleteSsoConnection<T = {deleted:true}>(organisationId:string,connectionId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"DELETE",path:`/v1/organisations/${encodeURIComponent(organisationId)}/sso-connections/${encodeURIComponent(connectionId)}`,body:{},parse});}
+  listScimTokens<T = {items:ScimToken[]}>(organisationId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({path:`/v1/organisations/${encodeURIComponent(organisationId)}/scim-tokens`,parse});}
+  createScimToken<T = {credential:ScimToken&{token:string}}>(organisationId:string,input:{name:string;expiresInDays?:number},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"POST",path:`/v1/organisations/${encodeURIComponent(organisationId)}/scim-tokens`,body:input,parse});}
+  revokeScimToken<T = {revoked:true}>(organisationId:string,tokenId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {return this.request({method:"DELETE",path:`/v1/organisations/${encodeURIComponent(organisationId)}/scim-tokens/${encodeURIComponent(tokenId)}`,body:{},parse});}
+
   listSyncedWorkflows<T = {items:SyncedWorkflow[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/sync/workflows`,parse});
   }
@@ -241,6 +259,22 @@ export class SandboxApiClient {
 
   listDeployments<T = {items:unknown[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments`,parse});
+  }
+
+  createDeployment<T = {deployment:Record<string,unknown>}>(workspaceId:string,input:unknown,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments`,body:input,parse});
+  }
+
+  transitionDeployment<T = {deployment:{deploymentId:string;status:string}}>(workspaceId:string,deploymentId:string,input:{status:"active"|"paused"|"rolled_back";reason:string},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments/${encodeURIComponent(deploymentId)}/transition`,body:input,parse});
+  }
+
+  startWorkflowRun<T = {run:PublicRun;idempotencyReplayed:boolean}>(workflowId:string,input:StartWorkflowRunInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workflows/${encodeURIComponent(workflowId)}/runs`,body:input,parse});
+  }
+
+  getWorkflowRun<T = {run:PublicRun}>(runId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/runs/${encodeURIComponent(runId)}`,parse});
   }
 
   listWorkspaceMembers<T = {items:WorkspaceMember[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {

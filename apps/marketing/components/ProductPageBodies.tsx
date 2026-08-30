@@ -324,7 +324,7 @@ function DevelopersBody({ page, index }: BodyProps) {
   const surfaces = [
     { method: "POST", path: "/v1/workflows/{id}/runs", label: "Start a versioned run", status: "202" },
     { method: "GET", path: "/v1/runs/{run_id}", label: "Read status and evidence", status: "200" },
-    { method: "POST", path: "/v1/runners/pair", label: "Pair a signed runner", status: "201" },
+    { method: "POST", path: "/v1/runners/pairing/challenges", label: "Begin signed runner pairing", status: "200" },
   ];
 
   return (
@@ -333,7 +333,7 @@ function DevelopersBody({ page, index }: BodyProps) {
         <header><DiscoverTag step="02" label="OPEN A VERSIONED SURFACE" /><h2 id="contract-title">The public contract is part of the product.</h2><p>Clients, schemas, plugins and runners meet through explicit versioned surfaces that can be generated, validated and traced.</p></header>
         <div className={styles.endpointIndex}>
           <header><span>OPENAPI / V1</span><strong><Check aria-hidden="true" size={13} /> SPEC VALID</strong></header>
-          {surfaces.map((surface, surfaceIndex) => <details key={surface.path} open={surfaceIndex === 0}><summary><span>{surface.method}</span><code>{surface.path}</code><strong>{surface.status}</strong><ChevronRight aria-hidden="true" size={14} /></summary><div><p>{surface.label}</p><code>{surfaceIndex === 0 ? '{ "revision": 18, "runner_pool": "production" }' : surfaceIndex === 1 ? '{ "status": "succeeded", "evidence": [...] }' : '{ "runner_id": "runner_linux_02" }'}</code></div></details>)}
+          {surfaces.map((surface, surfaceIndex) => <details key={surface.path} open={surfaceIndex === 0}><summary><span>{surface.method}</span><code>{surface.path}</code><strong>{surface.status}</strong><ChevronRight aria-hidden="true" size={14} /></summary><div><p>{surface.label}</p><code>{surfaceIndex === 0 ? '{ "workspaceId": "...", "deploymentId": "...", "encryptedPayloadReference": "object://..." }' : surfaceIndex === 1 ? '{ "status": "succeeded", "evidence": [...] }' : '{ "devicePublicKeyDerBase64": "...", "capabilities": {} }'}</code></div></details>)}
         </div>
       </section>
 

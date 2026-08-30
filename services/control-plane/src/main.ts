@@ -18,6 +18,7 @@ import { ReadinessService, RecurringTaskMonitor, ServiceMetrics } from "./reliab
 import { PostgresSupportAccess } from "./support_access.js";
 import { PostgresPrivacyService } from "./privacy.js";
 import { PostgresProductCommerce } from "./product_commerce.js";
+import { PostgresExecutionCoordinator } from "./execution_coordinator.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -74,6 +75,7 @@ const server = await createServer({
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   usageLedger: new PostgresUsageLedger(pool),
   usageProducerAuthenticator: new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(required("USAGE_PRODUCER_SECRETS_JSON"))),
+  executionCoordinator: new PostgresExecutionCoordinator(pool),
   readiness,
   metrics,
   metricsBearerToken:required("METRICS_BEARER_TOKEN"),

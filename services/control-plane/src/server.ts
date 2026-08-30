@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { executionTargetSchema, permissions, runnerIdentitySchema, runnerRequirementsSchema, runSummarySchema, usageEstimateSchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
+import { executionTargetSchema, hasPermission, permissions, runnerIdentitySchema, runnerRequirementsSchema, runSummarySchema, usageEstimateSchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -9,7 +9,7 @@ import type { BillingProvider } from "./billing.js";
 import type { EntitlementClaimSigner } from "./entitlement.js";
 import { redactWebhookPayload, verifyWebhookSignature, type WebhookProtector } from "./webhook_crypto.js";
 import type { ImmutablePackageStorage, PackageReviewScanner } from "./package_services.js";
-import type { AuthenticatedSession, ControlPlaneRepository, SessionVerifier } from "./types.js";
+import type { AuthenticatedSession, ControlPlaneRepository, ScimManagedUserRecord, SessionVerifier } from "./types.js";
 import { DomainError } from "./types.js";
 import { buildSignedRunnerCommand, type RunnerCommandSigner } from "./runner_protocol.js";
 import type { CredentialAdministration } from "./credentials.js";
@@ -22,6 +22,7 @@ import type { SupportAccessAdministration } from "./support_access.js";
 import type { PrivacyAdministration } from "./privacy.js";
 import type { ProductCommerceAdministration } from "./product_commerce.js";
 import { validateDeployment } from "./deployment.js";
+import type { PostgresExecutionCoordinator } from "./execution_coordinator.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -119,11 +120,23 @@ const deploymentValidationInput=z.object({
   approvedNetworkTargets:z.array(z.string().min(1).max(253)).max(1000),approvedPluginPackages:z.array(z.object({pluginId:z.string().min(3).max(200),version:z.string().min(1).max(50),packageIntegrity:z.string().regex(/^sha256:[a-f0-9]{64}$/)}).strict()).max(1000),
   approvalSnapshotPresent:z.boolean(),concurrencyLimit:z.number().int(),retentionDays:z.number().int(),estimatedUsage:usageEstimateSchema
 }).strict();
+const deploymentCreateInput=z.object({workflowId:z.string().uuid(),workflowRevisionId:z.string().uuid(),environmentId:z.string().uuid(),targetRunnerId:z.string().uuid().nullable().default(null),runnerPoolId:z.string().uuid().nullable().default(null),supersedesDeploymentId:z.string().uuid().nullable().default(null),preflight:deploymentValidationInput}).strict();
+const deploymentTransitionInput=z.object({status:z.enum(["active","paused","rolled_back"]),reason:z.string().trim().min(1).max(2000)}).strict();
+const publicRunInput=z.object({workspaceId:z.string().uuid(),deploymentId:z.string().uuid(),encryptedPayloadReference:z.string().regex(/^object:\/\/[A-Za-z0-9][A-Za-z0-9/._:-]{0,1990}$/),triggerReference:z.string().trim().min(1).max(500).nullable().default(null),timeoutSeconds:z.number().int().min(30).max(86400).default(3600)}).strict();
 const runnerPoolInput=z.object({
   environmentId:z.string().uuid(),name:z.string().trim().min(1).max(100),strategy:z.enum(["least_loaded","round_robin","priority_failover"]),region:z.string().trim().min(1).max(80).nullable().default(null),
   requiredTags:z.array(z.string().trim().min(1).max(50)).max(50).default([]),maximumConcurrency:z.number().int().min(1).max(10000),status:z.enum(["active","paused","draining"]).default("active"),
   members:z.array(z.object({runnerId:z.string().uuid(),priority:z.number().int().min(0).max(10000).default(100)}).strict()).max(5000).default([])
 }).strict();
+const organisationRoleInput=z.object({key:z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),displayName:z.string().trim().min(2).max(100),permissions:z.array(z.enum(permissions)).min(1).max(permissions.length)}).strict();
+const organisationRoleUpdateInput=organisationRoleInput.omit({key:true});
+const ssoConnectionInput=z.object({connectionType:z.enum(["oidc","saml"]),displayName:z.string().trim().min(1).max(120),issuerUrl:z.string().url().startsWith("https://"),clientIdentifier:z.string().trim().min(1).max(500),verifiedDomains:z.array(z.string().regex(/^[a-z0-9.-]+$/).max(253)).max(100).default([]),enabled:z.boolean().default(false)}).strict();
+const scimTokenInput=z.object({name:z.string().trim().min(1).max(120),expiresInDays:z.number().int().min(1).max(365).default(90)}).strict();
+const sandboxScimExtension="urn:sandbox:params:scim:schemas:extension:1.0:User";
+const scimManagedUserInput=z.object({externalId:z.string().min(1).max(500),userName:z.string().email(),displayName:z.string().trim().min(1).max(200),active:z.boolean(),role:z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),workspaceIds:z.array(z.string().uuid()).min(1).max(100)}).strict();
+const scimExtensionInput=z.object({role:z.string().regex(/^[a-z][a-z0-9_]{1,62}$/),workspaceIds:z.array(z.string().uuid()).min(1).max(100)}).strict();
+const scimUserInput=z.object({schemas:z.array(z.string()).max(10).optional(),externalId:z.string().min(1).max(500),userName:z.string().email(),displayName:z.string().trim().min(1).max(200).optional(),name:z.object({formatted:z.string().trim().min(1).max(200).optional(),givenName:z.string().trim().max(100).optional(),familyName:z.string().trim().max(100).optional()}).strict().optional(),active:z.boolean().default(true),role:z.string().regex(/^[a-z][a-z0-9_]{1,62}$/).optional(),workspaceIds:z.array(z.string().uuid()).min(1).max(100).optional(),[sandboxScimExtension]:scimExtensionInput.optional()}).strict().superRefine((value,context)=>{const extension=value[sandboxScimExtension];if(!value.role&&!extension?.role)context.addIssue({code:"custom",message:"A Sandbox organisation role is required."});if(!value.workspaceIds&&!extension?.workspaceIds)context.addIssue({code:"custom",message:"At least one Sandbox workspace is required."});}).transform(value=>{const extension=value[sandboxScimExtension];return{externalId:value.externalId,userName:value.userName,displayName:value.displayName??value.name?.formatted??value.userName,active:value.active,role:(extension?.role??value.role)!,workspaceIds:(extension?.workspaceIds??value.workspaceIds)!};});
+const scimPatchInput=z.object({schemas:z.array(z.string()).max(10).optional(),Operations:z.array(z.object({op:z.enum(["add","replace","remove"]),path:z.string().max(200).optional(),value:z.unknown().optional()}).strict()).min(1).max(50)}).strict();
 
 export interface ApiDependencies {
   repository: ControlPlaneRepository;
@@ -147,6 +160,7 @@ export interface ApiDependencies {
   idempotencyStore?: ApiIdempotencyStore;
   usageLedger?: Pick<PostgresUsageLedger,"record">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
+  executionCoordinator?: Pick<PostgresExecutionCoordinator,"enqueue"|"resolvePublicRunDeployment"|"getPublicRun">;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
@@ -603,6 +617,57 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.createOrganisation(session, organisationInput.parse(request.body), request.id);
   });
 
+  app.get("/v1/organisations/:organisationId/roles",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);
+    await requireOrganisationSecurity(session,organisationId,dependencies.repository);
+    return{items:await dependencies.repository.listOrganisationRoles(session,organisationId)};
+  });
+
+  app.post("/v1/organisations/:organisationId/roles",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);
+    await requireOrganisationSecurity(session,organisationId,dependencies.repository);const input=organisationRoleInput.parse(request.body);
+    return{role:await dependencies.repository.createOrganisationRole(session,organisationId,input.key,input.displayName,input.permissions,request.id)};
+  });
+
+  app.put("/v1/organisations/:organisationId/roles/:roleId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const {organisationId,roleId}=z.object({organisationId:z.string().uuid(),roleId:z.string().uuid()}).parse(request.params);
+    await requireOrganisationSecurity(session,organisationId,dependencies.repository);const input=organisationRoleUpdateInput.parse(request.body),role=await dependencies.repository.updateOrganisationRole(session,organisationId,roleId,input.displayName,input.permissions,request.id);
+    if(!role)throw new DomainError("custom_role_not_found","Custom role was not found. Built-in roles cannot be changed.",404);return{role};
+  });
+
+  app.delete("/v1/organisations/:organisationId/roles/:roleId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);const {organisationId,roleId}=z.object({organisationId:z.string().uuid(),roleId:z.string().uuid()}).parse(request.params);
+    await requireOrganisationSecurity(session,organisationId,dependencies.repository);if(!await dependencies.repository.deleteOrganisationRole(session,organisationId,roleId,request.id))throw new DomainError("custom_role_not_found","Custom role was not found. Built-in roles cannot be deleted.",404);return{deleted:true};
+  });
+
+  app.get("/v1/organisations/:organisationId/sso-connections",async request=>{
+    const session=await authenticate(request,dependencies.sessions);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);return{items:await dependencies.repository.listSsoConnections(session,organisationId)};
+  });
+
+  app.post("/v1/organisations/:organisationId/sso-connections",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);return{connection:await dependencies.repository.createSsoConnection(session,organisationId,ssoConnectionInput.parse(request.body),request.id)};
+  });
+
+  app.put("/v1/organisations/:organisationId/sso-connections/:connectionId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const {organisationId,connectionId}=z.object({organisationId:z.string().uuid(),connectionId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);const connection=await dependencies.repository.updateSsoConnection(session,organisationId,connectionId,ssoConnectionInput.parse(request.body),request.id);if(!connection)throw new DomainError("sso_connection_not_found","SSO connection was not found.",404);return{connection};
+  });
+
+  app.delete("/v1/organisations/:organisationId/sso-connections/:connectionId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const {organisationId,connectionId}=z.object({organisationId:z.string().uuid(),connectionId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);if(!await dependencies.repository.deleteSsoConnection(session,organisationId,connectionId,request.id))throw new DomainError("sso_connection_not_found","SSO connection was not found.",404);return{deleted:true};
+  });
+
+  app.get("/v1/organisations/:organisationId/scim-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);return{items:await dependencies.repository.listScimTokens(session,organisationId)};
+  });
+
+  app.post("/v1/organisations/:organisationId/scim-tokens",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const {organisationId}=z.object({organisationId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);const input=scimTokenInput.parse(request.body),prefix=`sbx_scim_${randomBytes(6).toString("hex")}`,token=`${prefix}.${randomBytes(32).toString("base64url")}`,tokenHash=createHash("sha256").update(token,"utf8").digest(),expiresAt=new Date(Date.now()+input.expiresInDays*86_400_000);const summary=await dependencies.repository.createScimToken(session,organisationId,input.name,prefix,tokenHash,expiresAt,request.id);return{credential:{...summary,token}};
+  });
+
+  app.delete("/v1/organisations/:organisationId/scim-tokens/:tokenId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireHumanPrincipal(session);requireFreshRequest(request);requireRecentStepUp(session);const {organisationId,tokenId}=z.object({organisationId:z.string().uuid(),tokenId:z.string().uuid()}).parse(request.params);await requireOrganisationSecurity(session,organisationId,dependencies.repository);if(!await dependencies.repository.revokeScimToken(session,organisationId,tokenId,request.id))throw new DomainError("scim_token_not_found","SCIM token was not found or already revoked.",404);return{revoked:true};
+  });
+
   app.post("/v1/workspaces/:workspaceId/invitations", async request => {
     const session = await authenticate(request, dependencies.sessions);
     requireFreshRequest(request);
@@ -884,6 +949,32 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.listWorkspaceActivity(session, workspaceId, limit);
   });
 
+  app.post("/v1/workflows/:workflowId/runs",async(request,reply)=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);
+    if(!dependencies.executionCoordinator)throw new DomainError("hosted_execution_unavailable","Hosted execution coordination is not configured.",503);
+    const {workflowId}=z.object({workflowId:z.string().uuid()}).parse(request.params),input=publicRunInput.parse(request.body);
+    await authorizer.require(session,input.workspaceId,"workflows.run");
+    const context=await dependencies.executionCoordinator.resolvePublicRunDeployment(workflowId,input.deploymentId);
+    if(!context||context.workspaceId!==input.workspaceId)throw new DomainError("deployment_not_found","An active deployment was not found for this workflow in the selected workspace.",404);
+    await authorizer.require(session,{workspaceId:context.workspaceId,environmentId:context.environmentId,permission:"workflows.run",resourceType:"workflow_deployment",resourceId:context.deploymentId});
+    const idempotencyKey=request.headers["idempotency-key"];
+    if(typeof idempotencyKey!=="string"||!/^[A-Za-z0-9._:-]{16,200}$/.test(idempotencyKey))throw new DomainError("idempotency_key_required","Idempotency-Key with 16 to 200 safe ASCII characters is required to start a run.",400);
+    const queuedAt=new Date(),queued=await dependencies.executionCoordinator.enqueue({executionId:randomUUID(),workspaceId:context.workspaceId,environmentId:context.environmentId,deploymentId:context.deploymentId,workflowId:context.workflowId,workflowRevisionId:context.workflowRevisionId,triggerType:"api",triggerReference:input.triggerReference,queueEventId:null,idempotencyKey,permissionSnapshotId:context.permissionSnapshotId,pluginVersions:context.pluginVersions,connectionReferences:context.connectionReferences,requirements:context.requirements,encryptedPayloadReference:input.encryptedPayloadReference,correlationId:request.id,queuedAt,timeoutAt:new Date(queuedAt.getTime()+input.timeoutSeconds*1000),runnerPoolId:context.runnerPoolId},true);
+    const run=await dependencies.executionCoordinator.getPublicRun(queued.executionId);
+    if(!run)throw new DomainError("execution_enqueue_failed","The queued run could not be read back.",500);
+    reply.header("location",`/v1/runs/${run.runId}`);
+    return reply.status(202).send({run:{...run,evidence:[]},idempotencyReplayed:!queued.created});
+  });
+
+  app.get("/v1/runs/:runId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);
+    if(!dependencies.executionCoordinator)throw new DomainError("hosted_execution_unavailable","Hosted execution coordination is not configured.",503);
+    const {runId}=z.object({runId:z.string().uuid()}).parse(request.params),run=await dependencies.executionCoordinator.getPublicRun(runId);
+    if(!run)throw new DomainError("run_not_found","Run was not found.",404);
+    await authorizer.require(session,{workspaceId:run.workspaceId,environmentId:run.environmentId,permission:"executions.view_detail",resourceType:"workflow_run",resourceId:run.runId});
+    return{run};
+  });
+
   app.get("/v1/workspaces/:workspaceId/deployments",async request=>{
     const session=await authenticate(request,dependencies.sessions);
     const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
@@ -898,6 +989,20 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const input=deploymentValidationInput.parse(request.body);
     if(input.requirements.workspaceId!==workspaceId)throw new DomainError("deployment_workspace_mismatch","Runner requirements must target the requested workspace.",400);
     return {validation:validateDeployment(input)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/deployments",async(request,reply)=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);const input=deploymentCreateInput.parse(request.body);
+    await authorizer.require(session,{workspaceId,environmentId:input.environmentId,permission:"deployments.manage",resourceType:"workflow_revision",resourceId:input.workflowRevisionId});
+    if(input.preflight.requirements.workspaceId!==workspaceId||input.preflight.requirements.environmentId!==input.environmentId)throw new DomainError("deployment_workspace_mismatch","Preflight requirements must match the selected workspace and environment.",400);
+    const validation=validateDeployment(input.preflight);if(!validation.valid)throw new DomainError("deployment_validation_failed",`Deployment preflight contains blocking issues: ${validation.issues.filter(issue=>issue.severity==="error").map(issue=>issue.message).join("; ")}`,409);
+    const requiredConnectionIds=[...new Set(input.preflight.nodes.flatMap(node=>node.requiredConnectionIds))],protectedVariableNames=[...new Set(input.preflight.nodes.flatMap(node=>node.requiredEnvironmentVariables))],networkTargets=[...new Set(input.preflight.nodes.flatMap(node=>node.networkTargets))];
+    const pluginMap=new Map<string,{pluginId:string;version:string;packageIntegrity:string;nodeVersions:Record<string,number[]>}>();for(const node of input.preflight.nodes){if(!node.plugin)continue;const key=`${node.plugin.pluginId}\u0000${node.plugin.version}\u0000${node.plugin.packageIntegrity}`,current=pluginMap.get(key)??{...node.plugin,nodeVersions:{}};current.nodeVersions[node.nodeType]=[...new Set([...(current.nodeVersions[node.nodeType]??[]),node.nodeVersion])].sort((left,right)=>left-right);pluginMap.set(key,current);}const requiredPlugins=[...pluginMap.values()];
+    const deployment=await dependencies.repository.createDeployment(session,workspaceId,{workflowId:input.workflowId,workflowRevisionId:input.workflowRevisionId,environmentId:input.environmentId,target:input.preflight.target,targetRunnerId:input.targetRunnerId,runnerPoolId:input.runnerPoolId,region:input.preflight.region,requiredConnectionIds,requiredPlugins,requiredCapabilities:input.preflight.requirements.capabilities,protectedVariableNames,networkTargets,requirements:input.preflight.requirements,validation:{...validation},usageEstimate:input.preflight.estimatedUsage,retentionDays:input.preflight.retentionDays,concurrencyLimit:input.preflight.concurrencyLimit,supersedesDeploymentId:input.supersedesDeploymentId},request.id);return reply.status(201).send({deployment});
+  });
+
+  app.post("/v1/workspaces/:workspaceId/deployments/:deploymentId/transition",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);const {workspaceId,deploymentId}=z.object({workspaceId:z.string().uuid(),deploymentId:z.string().uuid()}).parse(request.params),input=deploymentTransitionInput.parse(request.body);await authorizer.require(session,workspaceId,"deployments.manage");const deployment=await dependencies.repository.transitionDeployment(session,workspaceId,deploymentId,input.status,input.reason,request.id);if(!deployment)throw new DomainError("deployment_not_found","Deployment was not found in this workspace.",404);return{deployment};
   });
 
   app.get("/v1/workspaces/:workspaceId/runner-pools",async request=>{
@@ -1120,6 +1225,10 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.listAuditEvents(session, workspaceId, cursor, limit);
   });
 
+  app.get("/v1/workspaces/:workspaceId/audit/stream",async(request,reply)=>{
+    const session=await authenticate(request,dependencies.sessions);const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);const {cursor,limit}=z.object({cursor:z.string().uuid().nullable().default(null),limit:z.coerce.number().int().min(1).max(100).default(100)}).parse(request.query);await authorizer.require(session,workspaceId,"audit.view");const page=await dependencies.repository.listAuditEvents(session,workspaceId,cursor,limit);reply.type("application/x-ndjson; charset=utf-8").header("x-next-cursor",page.nextCursor??"");return page.items.map(item=>JSON.stringify(item)).join("\n")+(page.items.length?"\n":"");
+  });
+
   app.get("/v1/workspaces/:workspaceId/webhooks", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -1170,6 +1279,30 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     });
   }, { prefix: "/v1/billing/stripe" });
 
+  app.get("/scim/v2/Users",{config:{rateLimit:{max:120,timeWindow:"1 minute"}}},async request=>{
+    const identity=await authenticateScim(request,dependencies.repository),query=z.object({startIndex:z.coerce.number().int().min(1).default(1),count:z.coerce.number().int().min(1).max(200).default(100),filter:z.string().max(500).optional()}).parse(request.query);let userNameFilter:string|null=null;if(query.filter){const matched=/^userName eq "([^"]+)"$/i.exec(query.filter);if(!matched)throw new DomainError("scim_filter_unsupported","Only an exact userName eq filter is supported.",400);userNameFilter=matched[1];}const page=await dependencies.repository.listScimUsers(identity.organisationId,identity.provisioningAccountId,query.startIndex,query.count,userNameFilter);return{schemas:["urn:ietf:params:scim:api:messages:2.0:ListResponse"],totalResults:page.total,startIndex:query.startIndex,itemsPerPage:page.items.length,Resources:page.items.map(scimUserResource)};
+  });
+
+  app.post("/scim/v2/Users",{config:{rateLimit:{max:60,timeWindow:"1 minute"}}},async(request,reply)=>{
+    const identity=await authenticateScim(request,dependencies.repository),input=scimUserInput.parse(request.body),user=await dependencies.repository.upsertScimUser(identity.organisationId,identity.provisioningAccountId,null,input);reply.status(201).header("location",`/scim/v2/Users/${user.id}`);return scimUserResource(user);
+  });
+
+  app.get("/scim/v2/Users/:userId",async request=>{
+    const identity=await authenticateScim(request,dependencies.repository),{userId}=z.object({userId:z.string().uuid()}).parse(request.params),user=await dependencies.repository.getScimUser(identity.organisationId,identity.provisioningAccountId,userId);if(!user)throw new DomainError("scim_user_not_found","SCIM user was not found.",404);return scimUserResource(user);
+  });
+
+  app.put("/scim/v2/Users/:userId",async request=>{
+    const identity=await authenticateScim(request,dependencies.repository),{userId}=z.object({userId:z.string().uuid()}).parse(request.params),input=scimUserInput.parse(request.body);return scimUserResource(await dependencies.repository.upsertScimUser(identity.organisationId,identity.provisioningAccountId,userId,input));
+  });
+
+  app.patch("/scim/v2/Users/:userId",async request=>{
+    const identity=await authenticateScim(request,dependencies.repository),{userId}=z.object({userId:z.string().uuid()}).parse(request.params),current=await dependencies.repository.getScimUser(identity.organisationId,identity.provisioningAccountId,userId);if(!current)throw new DomainError("scim_user_not_found","SCIM user was not found.",404);const patch=scimPatchInput.parse(request.body),next={externalId:current.externalId,userName:current.userName,displayName:current.displayName,active:current.active,role:current.role,workspaceIds:current.workspaceIds};for(const operation of patch.Operations){if(!operation.path||!(operation.path in next))throw new DomainError("scim_patch_unsupported","SCIM patch path is unsupported.",400);const key=operation.path as keyof typeof next;if(operation.op==="remove"){if(key!=="active")throw new DomainError("scim_patch_unsupported","Only active can be removed.",400);next.active=false;}else (next as Record<string,unknown>)[key]=operation.value;}const input=scimManagedUserInput.parse(next);return scimUserResource(await dependencies.repository.upsertScimUser(identity.organisationId,identity.provisioningAccountId,userId,input));
+  });
+
+  app.delete("/scim/v2/Users/:userId",async(request,reply)=>{
+    const identity=await authenticateScim(request,dependencies.repository),{userId}=z.object({userId:z.string().uuid()}).parse(request.params),current=await dependencies.repository.getScimUser(identity.organisationId,identity.provisioningAccountId,userId);if(!current)throw new DomainError("scim_user_not_found","SCIM user was not found.",404);await dependencies.repository.upsertScimUser(identity.organisationId,identity.provisioningAccountId,userId,{externalId:current.externalId,userName:current.userName,displayName:current.displayName,active:false,role:current.role,workspaceIds:current.workspaceIds});return reply.status(204).send();
+  });
+
   await app.register(async relay => {
     relay.removeContentTypeParser("application/json");
     relay.addContentTypeParser("application/json", { parseAs: "buffer" }, (_request, body, done) => done(null, body));
@@ -1213,6 +1346,18 @@ async function authenticateOptional(request: FastifyRequest, verifier: SessionVe
   if (!authorization.startsWith("Bearer ")) throw new DomainError("authentication_required", "Bearer authentication is malformed.", 401);
   return verifier.verify(authorization.slice("Bearer ".length));
 }
+
+async function requireOrganisationSecurity(session:AuthenticatedSession,organisationId:string,repository:ControlPlaneRepository):Promise<void>{
+  const organisation=(await repository.listAccountOrganisations(session)).find(item=>item.id===organisationId);
+  if(!organisation)throw new DomainError("organisation_not_found","Organisation was not found or is not accessible.",404);
+  if(!hasPermission(organisation.role,"organisation.security.manage"))throw new DomainError("permission_denied","Organisation owner security permission is required.",403);
+}
+
+async function authenticateScim(request:FastifyRequest,repository:ControlPlaneRepository){
+  const authorization=request.headers.authorization;if(!authorization?.startsWith("Bearer "))throw new DomainError("scim_authentication_required","A SCIM bearer token is required.",401);const token=authorization.slice(7);if(!/^sbx_scim_[a-f0-9]{12}\.[A-Za-z0-9_-]{40,60}$/.test(token))throw new DomainError("scim_authentication_invalid","SCIM bearer token is invalid.",401);const identity=await repository.authenticateScimToken(createHash("sha256").update(token,"utf8").digest());if(!identity)throw new DomainError("scim_authentication_invalid","SCIM bearer token is expired, revoked, or invalid.",401);return identity;
+}
+
+function scimUserResource(user:ScimManagedUserRecord){return{schemas:["urn:ietf:params:scim:schemas:core:2.0:User","urn:sandbox:params:scim:schemas:extension:1.0:User"],id:user.id,externalId:user.externalId,userName:user.userName,displayName:user.displayName,active:user.active,meta:{resourceType:"User",created:user.createdAt,lastModified:user.updatedAt,location:`/scim/v2/Users/${user.id}`},"urn:sandbox:params:scim:schemas:extension:1.0:User":{role:user.role,workspaceIds:user.workspaceIds}};}
 
 function requireFreshRequest(request: FastifyRequest): void {
   const value = request.headers["x-sandbox-request-time"];

@@ -455,3 +455,50 @@ fn validate_deep_link(raw: &str) -> Option<String> {
     }
     Some(parsed.to_string())
 }
+
+#[cfg(test)]
+mod deep_link_tests {
+    use super::validate_deep_link;
+
+    #[test]
+    fn accepts_only_supported_marketplace_and_template_routes() {
+        assert_eq!(
+            validate_deep_link(
+                "sandbox://marketplace/install?plugin=com.example.csv&version=2.4.1"
+            )
+            .as_deref(),
+            Some("sandbox://marketplace/install?plugin=com.example.csv&version=2.4.1")
+        );
+        assert!(validate_deep_link(
+            "sandbox://templates/import?template=monthly-report&enabled=false"
+        )
+        .is_some());
+        assert!(validate_deep_link("sandbox://settings/reset").is_none());
+        assert!(validate_deep_link("https://sndbox.app/templates/monthly-report").is_none());
+    }
+
+    #[test]
+    fn rejects_ambiguous_or_oversized_deep_links() {
+        assert!(validate_deep_link(
+            "sandbox://user:secret@marketplace/install?plugin=com.example.csv"
+        )
+        .is_none());
+        assert!(validate_deep_link(
+            "sandbox://marketplace/install?plugin=com.example.csv#unexpected"
+        )
+        .is_none());
+        let excessive_query = format!(
+            "sandbox://templates/import?{}",
+            (0..21)
+                .map(|index| format!("p{index}=x"))
+                .collect::<Vec<_>>()
+                .join("&")
+        );
+        assert!(validate_deep_link(&excessive_query).is_none());
+        assert!(validate_deep_link(&format!(
+            "sandbox://marketplace/install?plugin={}",
+            "a".repeat(4096)
+        ))
+        .is_none());
+    }
+}

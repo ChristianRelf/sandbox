@@ -39,6 +39,47 @@ export interface QueuedExecutionInput {
   runnerPoolId?: string | null;
 }
 
+export interface PublicRunContext {
+  workspaceId: string;
+  environmentId: string;
+  deploymentId: string;
+  workflowId: string;
+  workflowRevisionId: string;
+  runnerPoolId: string | null;
+  permissionSnapshotId: string;
+  pluginVersions: unknown[];
+  connectionReferences: string[];
+  requirements: RunnerRequirements;
+}
+
+export interface PublicRunRecord {
+  runId: string;
+  workspaceId: string;
+  environmentId: string;
+  deploymentId: string;
+  workflowId: string;
+  workflowRevisionId: string;
+  status: ExecutionProjection["state"];
+  outcomeCertainty: "certain" | "uncertain";
+  assignedRunnerId: string | null;
+  trigger: string;
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  timeoutAt: string;
+  evidence: Array<{
+    checkpointId: string;
+    nodeId: string;
+    nodeVersion: number;
+    attempt: number;
+    status: "completed" | "failed";
+    inputHash: string;
+    outputReference: string | null;
+    sideEffect: ExecutionCheckpoint["sideEffect"];
+    completedAt: string;
+  }>;
+}
+
 interface ExecutionRow {
   id: string;
   status: ExecutionProjection["state"];
@@ -61,19 +102,56 @@ interface ExecutionEventRow {
 export class PostgresExecutionCoordinator {
   constructor(private readonly pool: Pool) {}
 
-  async enqueue(input: QueuedExecutionInput): Promise<{ executionId: string; created: boolean }> {
+  async enqueue(input: QueuedExecutionInput, requireActiveDeployment = false): Promise<{ executionId: string; created: boolean }> {
     if (input.timeoutAt <= input.queuedAt) throw new DomainError("execution_timeout_invalid", "Execution timeout must be after queue time.");
     const requirements = runnerRequirementsSchema.parse(input.requirements);
     if (requirements.workspaceId !== input.workspaceId || requirements.environmentId !== input.environmentId) throw new DomainError("execution_routing_scope_invalid", "Routing requirements must match the execution workspace and environment.");
     const result = await this.pool.query<{ id: string }>(
-      `INSERT INTO executions(id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,trigger_type,trigger_reference,queue_event_id,idempotency_key,status,runner_pool_id,permission_snapshot_id,plugin_versions,connection_references,routing_requirements,encrypted_payload_reference,correlation_id,queued_at,timeout_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$15,$16,$17,$18,$19)
-       ON CONFLICT(workspace_id,idempotency_key) DO NOTHING RETURNING id`,
+      requireActiveDeployment
+        ? `INSERT INTO executions(id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,trigger_type,trigger_reference,queue_event_id,idempotency_key,status,runner_pool_id,permission_snapshot_id,plugin_versions,connection_references,routing_requirements,encrypted_payload_reference,correlation_id,queued_at,timeout_at)
+           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$15,$16,$17,$18,$19
+             FROM workflow_deployments deployment
+            WHERE deployment.id=$4 AND deployment.workspace_id=$2 AND deployment.environment_id=$3
+              AND deployment.workflow_id=$5 AND deployment.workflow_revision_id=$6
+              AND deployment.runner_pool_id IS NOT DISTINCT FROM $11 AND deployment.permission_snapshot_id=$12
+              AND deployment.status='active'
+           ON CONFLICT(workspace_id,idempotency_key) DO NOTHING RETURNING id`
+        : `INSERT INTO executions(id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,trigger_type,trigger_reference,queue_event_id,idempotency_key,status,runner_pool_id,permission_snapshot_id,plugin_versions,connection_references,routing_requirements,encrypted_payload_reference,correlation_id,queued_at,timeout_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14,$15,$16,$17,$18,$19)
+           ON CONFLICT(workspace_id,idempotency_key) DO NOTHING RETURNING id`,
       [input.executionId,input.workspaceId,input.environmentId,input.deploymentId,input.workflowId,input.workflowRevisionId,input.triggerType,input.triggerReference,input.queueEventId,input.idempotencyKey,input.runnerPoolId??null,input.permissionSnapshotId,JSON.stringify(input.pluginVersions),JSON.stringify(input.connectionReferences),JSON.stringify(requirements),input.encryptedPayloadReference,input.correlationId,input.queuedAt,input.timeoutAt]
     );
     if (result.rowCount) return { executionId: result.rows[0].id, created: true };
     const existing = await this.pool.query<{ id: string }>(`SELECT id FROM executions WHERE workspace_id=$1 AND idempotency_key=$2`, [input.workspaceId,input.idempotencyKey]);
-    return { executionId: existing.rows[0].id, created: false };
+    if (existing.rowCount) return { executionId: existing.rows[0].id, created: false };
+    throw new DomainError(requireActiveDeployment ? "deployment_not_active" : "execution_enqueue_failed", requireActiveDeployment ? "The deployment is no longer active or no longer matches this run." : "The execution could not be queued.", 409);
+  }
+
+  async resolvePublicRunDeployment(workflowId:string,deploymentId:string):Promise<PublicRunContext|null>{
+    const result=await this.pool.query<{workspace_id:string;environment_id:string;deployment_id:string;workflow_id:string;workflow_revision_id:string;runner_pool_id:string|null;permission_snapshot_id:string;required_plugins:unknown[];required_connection_ids:string[];requirements:unknown}>(
+      `SELECT deployment.workspace_id,deployment.environment_id,deployment.id AS deployment_id,deployment.workflow_id,deployment.workflow_revision_id,
+              deployment.runner_pool_id,deployment.permission_snapshot_id,deployment.required_plugins,deployment.required_connection_ids,
+              deployment.validation_result->'requirements' AS requirements
+         FROM workflow_deployments deployment
+         JOIN workflow_permission_snapshots snapshot ON snapshot.id=deployment.permission_snapshot_id AND snapshot.revoked_at IS NULL
+        WHERE deployment.id=$1 AND deployment.workflow_id=$2 AND deployment.status='active'`,[deploymentId,workflowId]
+    );
+    if(!result.rowCount)return null;
+    const row=result.rows[0];
+    if(!row.requirements)throw new DomainError("deployment_routing_requirements_missing","The deployment predates durable routing requirements and must be redeployed before it can run through the public API.",409);
+    return{workspaceId:row.workspace_id,environmentId:row.environment_id,deploymentId:row.deployment_id,workflowId:row.workflow_id,workflowRevisionId:row.workflow_revision_id,runnerPoolId:row.runner_pool_id,permissionSnapshotId:row.permission_snapshot_id,pluginVersions:row.required_plugins,connectionReferences:row.required_connection_ids,requirements:runnerRequirementsSchema.parse(row.requirements)};
+  }
+
+  async getPublicRun(runId:string):Promise<PublicRunRecord|null>{
+    const result=await this.pool.query<{id:string;workspace_id:string;environment_id:string;deployment_id:string;workflow_id:string;workflow_revision_id:string;status:ExecutionProjection["state"];outcome_certainty:"certain"|"uncertain";assigned_runner_id:string|null;trigger_type:string;queued_at:Date;started_at:Date|null;completed_at:Date|null;timeout_at:Date}>(
+      `SELECT id,workspace_id,environment_id,deployment_id,workflow_id,workflow_revision_id,status,outcome_certainty,assigned_runner_id,trigger_type,queued_at,started_at,completed_at,timeout_at FROM executions WHERE id=$1`,[runId]
+    );
+    if(!result.rowCount)return null;
+    const evidence=await this.pool.query<{id:string;node_id:string;node_version:number;attempt:number;status:"completed"|"failed";input_hash:string;output_reference:string|null;side_effect_classification:ExecutionCheckpoint["sideEffect"];completed_at:Date}>(
+      `SELECT id,node_id,node_version,attempt,status,input_hash,output_reference,side_effect_classification,completed_at FROM execution_checkpoints WHERE execution_id=$1 ORDER BY completed_at,id`,[runId]
+    );
+    const row=result.rows[0];
+    return{runId:row.id,workspaceId:row.workspace_id,environmentId:row.environment_id,deploymentId:row.deployment_id,workflowId:row.workflow_id,workflowRevisionId:row.workflow_revision_id,status:row.status,outcomeCertainty:row.outcome_certainty,assignedRunnerId:row.assigned_runner_id,trigger:row.trigger_type,queuedAt:row.queued_at.toISOString(),startedAt:row.started_at?.toISOString()??null,completedAt:row.completed_at?.toISOString()??null,timeoutAt:row.timeout_at.toISOString(),evidence:evidence.rows.map(item=>({checkpointId:item.id,nodeId:item.node_id,nodeVersion:item.node_version,attempt:item.attempt,status:item.status,inputHash:item.input_hash,outputReference:item.output_reference,sideEffect:item.side_effect_classification,completedAt:item.completed_at.toISOString()}))};
   }
 
   async transition(candidate: unknown): Promise<ExecutionTransition> {

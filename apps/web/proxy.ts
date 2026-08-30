@@ -10,7 +10,7 @@ export function proxy(request: NextRequest) {
   const policy = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
-    `style-src 'self' 'nonce-${nonce}'${development ? " 'unsafe-inline'" : ""}`,
+    `style-src 'self' ${development ? "'unsafe-inline'" : `'nonce-${nonce}'`}`,
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' https:",

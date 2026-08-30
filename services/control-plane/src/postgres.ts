@@ -3,10 +3,11 @@ import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Per
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AccountOrganisationRecord, AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, RunnerPoolInput, RunnerPoolRecord, SharedConnectionRecord, SyncedWorkflowInput, SyncedWorkflowRecord, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
+import type { AccountOrganisationRecord, AuthenticatedSession, ControlPlaneRepository, DeploymentCreationInput, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, OrganisationRoleRecord, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, RunnerPoolInput, RunnerPoolRecord, ScimManagedUserInput, ScimManagedUserRecord, ScimTokenSummary, SharedConnectionRecord, SsoConnectionInput, SsoConnectionRecord, SyncedWorkflowInput, SyncedWorkflowRecord, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 import type { BillingEvent } from "./billing.js";
+import { requireDeploymentTransition } from "./deployment.js";
 
 export class PostgresRepository implements ControlPlaneRepository {
   constructor(private readonly pool: Pool) {}
@@ -701,7 +702,7 @@ export class PostgresRepository implements ControlPlaneRepository {
       const workflow = await client.query<{ current_published_revision_id: string | null; current_draft_revision_id: string | null }>(`SELECT current_published_revision_id,current_draft_revision_id FROM synced_workflows WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [workflowId, workspaceId]);
       if (!workflow.rowCount) throw new DomainError("workflow_not_found", "Workflow not found in this workspace.", 404);
       if (workflow.rows[0].current_draft_revision_id !== revisionId) throw new DomainError("revision_not_current_draft", "Only the current draft can be published.", 409);
-      const revision = await client.query<{ publish_status: string }>(`SELECT publish_status FROM workflow_revisions WHERE id=$1 AND workflow_id=$2`, [revisionId, workflowId]);
+      const revision = await client.query<{ publish_status: string; permission_requirements:string[]; content_hash:string }>(`SELECT publish_status,permission_requirements,content_hash FROM workflow_revisions WHERE id=$1 AND workflow_id=$2`, [revisionId, workflowId]);
       if (!revision.rowCount || revision.rows[0].publish_status !== "approved") throw new DomainError("workflow_approval_required", "The exact draft revision must satisfy workspace approval policy before publication.", 409);
       const missing = await client.query<{ plugin_id: string; version: string }>(
         `SELECT requirement->>'pluginId' AS plugin_id,requirement->>'version' AS version
@@ -712,12 +713,16 @@ export class PostgresRepository implements ControlPlaneRepository {
           )`, [revisionId, workspaceId]
       );
       if (missing.rowCount) throw new DomainError("workflow_plugin_requirements_missing", `Workspace is missing enabled exact plugin versions: ${missing.rows.map(row => `${row.plugin_id}@${row.version}`).join(", ")}.`, 409);
+      const permissionSnapshotId=randomUUID();
+      const permissionRequirements=revision.rows[0].permission_requirements;
+      const networkTargets=permissionRequirements.filter(value=>value.startsWith("network:")).map(value=>value.slice("network:".length));
+      const snapshot=await client.query<{id:string}>(`INSERT INTO workflow_permission_snapshots(id,workspace_id,workflow_id,workflow_revision_id,permissions,network_targets,data_egress_summary,approved_by,approved_at,content_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,now(),$9) ON CONFLICT(workflow_revision_id,content_hash) DO UPDATE SET revoked_at=NULL RETURNING id`,[permissionSnapshotId,workspaceId,workflowId,revisionId,permissionRequirements,networkTargets,networkTargets.length?["Workflow may send data to approved network targets."]:[],actor.accountId,revision.rows[0].content_hash]);
       const previousPublishedRevisionId = workflow.rows[0].current_published_revision_id;
       if (previousPublishedRevisionId) await client.query(`UPDATE workflow_revisions SET publish_status='rolled_back' WHERE id=$1`, [previousPublishedRevisionId]);
       await client.query(`UPDATE workflow_revisions SET publish_status='published',change_summary=$1 WHERE id=$2`, [changeSummary, revisionId]);
       await client.query(`UPDATE synced_workflows SET current_published_revision_id=$1 WHERE id=$2`, [revisionId, workflowId]);
       await appendAudit(client, actor, workspaceId, "workflow.published", "workflow_revision", revisionId, { previousPublishedRevisionId }, { workflowId, changeSummary }, correlationId);
-      return { workflowId, publishedRevisionId: revisionId, previousPublishedRevisionId };
+      return { workflowId, publishedRevisionId: revisionId, previousPublishedRevisionId, permissionSnapshotId:snapshot.rows[0].id };
     });
   }
 
@@ -929,6 +934,51 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async createDeployment(actor:AuthenticatedSession,workspaceId:string,input:DeploymentCreationInput,correlationId:string):Promise<DeploymentRecord>{
+    return this.withAccount(actor.accountId,async client=>{
+      if(input.requirements.workspaceId!==workspaceId||input.requirements.environmentId!==input.environmentId)throw new DomainError("deployment_workspace_mismatch","Deployment routing requirements must match the selected workspace and environment.",400);
+      if(input.requirements.region!==null&&input.requirements.region!==input.region)throw new DomainError("deployment_region_mismatch","Deployment region must match its runner requirements.",400);
+      if(input.validation.valid!==true||Array.isArray(input.validation.issues)&&input.validation.issues.some(issue=>typeof issue==="object"&&issue!==null&&(issue as {severity?:unknown}).severity==="error"))throw new DomainError("deployment_validation_required","A successful deployment preflight is required.",409);
+      const revision=await client.query<{environment:"development"|"staging"|"production";plugin_requirements:DeploymentRecord["requiredPlugins"];permission_snapshot_id:string;network_targets:string[]}>(
+        `SELECT environment.environment_key AS environment,revision.plugin_requirements,snapshot.id AS permission_snapshot_id,snapshot.network_targets
+           FROM synced_workflows workflow
+           JOIN workflow_revisions revision ON revision.id=$3 AND revision.workflow_id=workflow.id
+           JOIN environments environment ON environment.id=$4 AND environment.workspace_id=workflow.workspace_id
+           JOIN LATERAL(SELECT id FROM workflow_permission_snapshots WHERE workflow_revision_id=revision.id AND content_hash=revision.content_hash AND revoked_at IS NULL ORDER BY approved_at DESC LIMIT 1) snapshot ON true
+          WHERE workflow.id=$2 AND workflow.workspace_id=$1 AND workflow.current_published_revision_id=revision.id`,
+        [workspaceId,input.workflowId,input.workflowRevisionId,input.environmentId]
+      );
+      if(!revision.rowCount)throw new DomainError("deployment_revision_invalid","Deployment requires the current published revision, its environment, and an active permission snapshot.",409);
+      if(!samePluginRequirements(revision.rows[0].plugin_requirements,input.requiredPlugins)||!samePluginRequirements(input.requirements.plugins,input.requiredPlugins))throw new DomainError("deployment_plugin_requirements_mismatch","Deployment plugins must exactly match the published revision and runner requirements.",409);
+      if(!sameStringSet(revision.rows[0].network_targets,input.networkTargets))throw new DomainError("deployment_network_requirements_mismatch","Deployment network targets must exactly match the approved permission snapshot.",409);
+      if(!sameStringSet(input.requirements.connectionIds,input.requiredConnectionIds))throw new DomainError("deployment_connection_requirements_mismatch","Deployment connections must exactly match runner requirements.",409);
+      if(input.requiredConnectionIds.length){const connections=await client.query<{count:string}>(`SELECT count(DISTINCT id)::text AS count FROM shared_connections WHERE workspace_id=$1 AND environment_id=$2 AND id=ANY($3::uuid[]) AND health='available' AND (cardinality(permitted_workflow_ids)=0 OR $4=ANY(permitted_workflow_ids))`,[workspaceId,input.environmentId,input.requiredConnectionIds,input.workflowId]);if(Number(connections.rows[0]?.count??0)!==new Set(input.requiredConnectionIds).size)throw new DomainError("deployment_connection_unavailable","Every required connection must be available in the selected environment and permit this workflow.",409);}
+      if(input.protectedVariableNames.length){const variables=await client.query<{count:string}>(`SELECT count(DISTINCT name)::text AS count FROM protected_variables WHERE environment_id=$1 AND name=ANY($2::text[]) AND $3=ANY(allowed_workflow_ids)`,[input.environmentId,input.protectedVariableNames,input.workflowId]);if(Number(variables.rows[0]?.count??0)!==new Set(input.protectedVariableNames).size)throw new DomainError("deployment_variable_unavailable","Every protected variable must exist in the selected environment and permit this workflow.",409);}
+      const directTargets=new Set<DeploymentRecord["target"]>(["this_computer","paired_desktop","self_hosted_server","nas_or_raspberry_pi"]);
+      if(input.target==="runner_pool"){
+        if(!input.runnerPoolId||input.targetRunnerId)throw new DomainError("deployment_target_invalid","Runner-pool deployments require only a runner pool.",400);
+        const pool=await client.query(`SELECT 1 FROM runner_pools WHERE id=$1 AND workspace_id=$2 AND environment_id=$3 AND status='active'`,[input.runnerPoolId,workspaceId,input.environmentId]);if(!pool.rowCount)throw new DomainError("deployment_runner_pool_unavailable","Runner pool is missing, paused, or outside the selected environment.",409);
+        if(input.requiredConnectionIds.length){const eligible=await client.query(`SELECT 1 FROM runner_pool_members member JOIN runners runner ON runner.id=member.runner_id WHERE member.pool_id=$1 AND member.enabled AND runner.status='online' AND runner.revoked_at IS NULL AND (SELECT count(DISTINCT deployment.connection_id) FROM shared_connection_runner_deployments deployment WHERE deployment.runner_id=runner.id AND deployment.connection_id=ANY($2::uuid[]) AND deployment.status='available')=$3 LIMIT 1`,[input.runnerPoolId,input.requiredConnectionIds,new Set(input.requiredConnectionIds).size]);if(!eligible.rowCount)throw new DomainError("deployment_runner_pool_connections_unavailable","No online runner in the pool has every required connection.",409);}
+      }else if(directTargets.has(input.target)){
+        if(!input.targetRunnerId||input.runnerPoolId)throw new DomainError("deployment_target_invalid","This deployment target requires one paired runner.",400);
+        const runner=await client.query(`SELECT 1 FROM runners WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL AND status='online'`,[input.targetRunnerId,workspaceId]);if(!runner.rowCount)throw new DomainError("deployment_runner_unavailable","Target runner is unavailable in this workspace.",409);
+        if(input.requiredConnectionIds.length){const runnerConnections=await client.query<{count:string}>(`SELECT count(DISTINCT connection_id)::text AS count FROM shared_connection_runner_deployments WHERE runner_id=$1 AND connection_id=ANY($2::uuid[]) AND status='available'`,[input.targetRunnerId,input.requiredConnectionIds]);if(Number(runnerConnections.rows[0]?.count??0)!==new Set(input.requiredConnectionIds).size)throw new DomainError("deployment_runner_connection_unavailable","Target runner does not have every required connection.",409);}
+      }else if(input.targetRunnerId||input.runnerPoolId)throw new DomainError("deployment_target_invalid","Managed targets cannot reference a paired runner or runner pool.",400);
+      if(input.supersedesDeploymentId){const previous=await client.query(`SELECT 1 FROM workflow_deployments WHERE id=$1 AND workspace_id=$2 AND workflow_id=$3 AND environment_id=$4 AND status IN ('active','degraded','paused')`,[input.supersedesDeploymentId,workspaceId,input.workflowId,input.environmentId]);if(!previous.rowCount)throw new DomainError("deployment_supersedes_invalid","Only an active deployment of the same workflow and environment can be superseded.",409);}
+      const deploymentId=randomUUID(),now=new Date(),permissionSnapshotId=revision.rows[0].permission_snapshot_id;
+      const persistedValidation={...input.validation,requirements:input.requirements};
+      await client.query(`INSERT INTO workflow_deployments(id,workspace_id,workflow_id,workflow_revision_id,environment_id,target_type,target_runner_id,runner_pool_id,region,status,required_connection_ids,required_plugins,required_capabilities,protected_variable_names,connection_mappings,protected_variable_mappings,permission_snapshot_id,validation_result,usage_estimate,retention_policy,concurrency_policy,supersedes_deployment_id,created_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'draft',$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$23)`,[deploymentId,workspaceId,input.workflowId,input.workflowRevisionId,input.environmentId,input.target,input.targetRunnerId,input.runnerPoolId,input.region,input.requiredConnectionIds,JSON.stringify(input.requiredPlugins),JSON.stringify(input.requiredCapabilities),input.protectedVariableNames,JSON.stringify(Object.fromEntries(input.requiredConnectionIds.map(id=>[id,id]))),JSON.stringify(Object.fromEntries(input.protectedVariableNames.map(name=>[name,name]))),permissionSnapshotId,JSON.stringify(persistedValidation),JSON.stringify(input.usageEstimate),JSON.stringify({executionDetailDays:input.retentionDays}),JSON.stringify({maximumConcurrency:input.concurrencyLimit}),input.supersedesDeploymentId,actor.accountId,now]);
+      for(const [from,to,version,reason] of [["draft","validating",0,"Server-side validation started"],["validating","deploying",1,"All deployment resources validated"],["deploying","active",2,"Deployment activated"]] as const)await client.query(`INSERT INTO deployment_events(id,deployment_id,sequence,from_status,to_status,expected_version,actor_id,reason,metadata,occurred_at,correlation_id) VALUES($1,$2,0,$3,$4,$5,$6,$7,'{}',$8,$9)`,[randomUUID(),deploymentId,from,to,version,actor.accountId,reason,now,correlationId]);
+      if(input.supersedesDeploymentId){const previous=await client.query<{status:DeploymentRecord["status"];status_version:number}>(`SELECT status,status_version FROM workflow_deployments WHERE id=$1 FOR UPDATE`,[input.supersedesDeploymentId]);await client.query(`INSERT INTO deployment_events(id,deployment_id,sequence,from_status,to_status,expected_version,actor_id,reason,metadata,occurred_at,correlation_id) VALUES($1,$2,0,$3,'superseded',$4,$5,'Replacement deployment activated',$6,$7,$8)`,[randomUUID(),input.supersedesDeploymentId,previous.rows[0].status,previous.rows[0].status_version,actor.accountId,JSON.stringify({replacementDeploymentId:deploymentId}),now,correlationId]);}
+      await appendAudit(client,actor,workspaceId,"deployment.created","workflow_deployment",deploymentId,null,{workflowId:input.workflowId,workflowRevisionId:input.workflowRevisionId,environmentId:input.environmentId,target:input.target,runnerPoolId:input.runnerPoolId,targetRunnerId:input.targetRunnerId},correlationId);
+      return{deploymentId,workspaceId,workflowId:input.workflowId,workflowRevisionId:input.workflowRevisionId,environmentId:input.environmentId,environment:revision.rows[0].environment,target:input.target,targetRunnerId:input.targetRunnerId,runnerPoolId:input.runnerPoolId,region:input.region,requiredConnectionIds:input.requiredConnectionIds,requiredPlugins:input.requiredPlugins,permissionSnapshotId,status:"active",validation:persistedValidation,usageEstimate:input.usageEstimate,createdBy:actor.accountId,createdAt:now.toISOString(),activatedAt:now.toISOString(),supersedesDeploymentId:input.supersedesDeploymentId};
+    });
+  }
+
+  async transitionDeployment(actor:AuthenticatedSession,workspaceId:string,deploymentId:string,status:DeploymentRecord["status"],reason:string,correlationId:string){
+    return this.withAccount(actor.accountId,async client=>{const current=await client.query<{status:DeploymentRecord["status"];status_version:number}>(`SELECT status,status_version FROM workflow_deployments WHERE id=$1 AND workspace_id=$2 FOR UPDATE`,[deploymentId,workspaceId]);if(!current.rowCount)return null;requireDeploymentTransition(current.rows[0].status,status);await client.query(`INSERT INTO deployment_events(id,deployment_id,sequence,from_status,to_status,expected_version,actor_id,reason,metadata,occurred_at,correlation_id) VALUES($1,$2,0,$3,$4,$5,$6,$7,'{}',now(),$8)`,[randomUUID(),deploymentId,current.rows[0].status,status,current.rows[0].status_version,actor.accountId,reason,correlationId]);await appendAudit(client,actor,workspaceId,"deployment.status_changed","workflow_deployment",deploymentId,{status:current.rows[0].status},{status,reason},correlationId);return{deploymentId,status};});
+  }
+
   async listRunnerPools(actor: AuthenticatedSession, workspaceId: string) {
     return this.withAccount(actor.accountId, async client => {
       const result=await client.query<{
@@ -975,6 +1025,122 @@ export class PostgresRepository implements ControlPlaneRepository {
       const deleted=await client.query(`DELETE FROM runner_pools WHERE id=$1 AND workspace_id=$2`,[poolId,workspaceId]);
       if(deleted.rowCount)await appendAudit(client,actor,workspaceId,"runner_pool.deleted","runner_pool",poolId,null,{},correlationId);
       return Boolean(deleted.rowCount);
+    });
+  }
+
+  async listOrganisationRoles(actor:AuthenticatedSession,organisationId:string):Promise<OrganisationRoleRecord[]>{
+    return this.withAccount(actor.accountId,async client=>{
+      const result=await client.query<{id:string;organisation_id:string;role_key:string;display_name:string;built_in:boolean;permissions:Permission[]}>(`SELECT role.id,role.organisation_id,role.role_key,role.display_name,role.built_in,COALESCE(array_agg(permission.permission ORDER BY permission.permission) FILTER(WHERE permission.permission IS NOT NULL),'{}') AS permissions FROM roles role LEFT JOIN role_permissions permission ON permission.role_id=role.id WHERE role.organisation_id=$1 GROUP BY role.id ORDER BY role.built_in DESC,role.display_name`,[organisationId]);
+      return result.rows.map(row=>({id:row.id,organisationId:row.organisation_id,key:row.role_key,displayName:row.display_name,builtIn:row.built_in,permissions:row.permissions.filter(permission=>allPermissions.includes(permission))}));
+    });
+  }
+
+  async createOrganisationRole(actor:AuthenticatedSession,organisationId:string,key:string,displayName:string,rolePermissions:Permission[],correlationId:string):Promise<OrganisationRoleRecord>{
+    return this.withAccount(actor.accountId,async client=>{
+      const role=await client.query<{id:string}>(`INSERT INTO roles(organisation_id,role_key,display_name,built_in) VALUES($1,$2,$3,false) RETURNING id`,[organisationId,key,displayName]);
+      for(const permission of [...new Set(rolePermissions)])await client.query(`INSERT INTO role_permissions(role_id,permission) VALUES($1,$2)`,[role.rows[0].id,permission]);
+      await appendOrganisationAudit(client,actor,organisationId,"role.created",role.rows[0].id,{key,displayName,permissions:rolePermissions},correlationId);
+      return {id:role.rows[0].id,organisationId,key,displayName,builtIn:false,permissions:[...new Set(rolePermissions)].sort()};
+    });
+  }
+
+  async updateOrganisationRole(actor:AuthenticatedSession,organisationId:string,roleId:string,displayName:string,rolePermissions:Permission[],correlationId:string):Promise<OrganisationRoleRecord|null>{
+    return this.withAccount(actor.accountId,async client=>{
+      const role=await client.query<{role_key:string}>(`UPDATE roles SET display_name=$1 WHERE id=$2 AND organisation_id=$3 AND NOT built_in RETURNING role_key`,[displayName,roleId,organisationId]);
+      if(!role.rowCount)return null;
+      await client.query(`DELETE FROM role_permissions WHERE role_id=$1`,[roleId]);
+      for(const permission of [...new Set(rolePermissions)])await client.query(`INSERT INTO role_permissions(role_id,permission) VALUES($1,$2)`,[roleId,permission]);
+      await appendOrganisationAudit(client,actor,organisationId,"role.updated",roleId,{displayName,permissions:rolePermissions},correlationId);
+      return {id:roleId,organisationId,key:role.rows[0].role_key,displayName,builtIn:false,permissions:[...new Set(rolePermissions)].sort()};
+    });
+  }
+
+  async deleteOrganisationRole(actor:AuthenticatedSession,organisationId:string,roleId:string,correlationId:string):Promise<boolean>{
+    return this.withAccount(actor.accountId,async client=>{
+      const assigned=await client.query(`SELECT 1 FROM memberships WHERE role_id=$1 UNION ALL SELECT 1 FROM workspace_memberships WHERE role_id=$1 LIMIT 1`,[roleId]);
+      if(assigned.rowCount)throw new DomainError("role_in_use","Move every member off this role before deleting it.",409);
+      const deleted=await client.query(`DELETE FROM roles WHERE id=$1 AND organisation_id=$2 AND NOT built_in`,[roleId,organisationId]);
+      if(deleted.rowCount)await appendOrganisationAudit(client,actor,organisationId,"role.deleted",roleId,{},correlationId);
+      return Boolean(deleted.rowCount);
+    });
+  }
+
+  async listSsoConnections(actor:AuthenticatedSession,organisationId:string):Promise<SsoConnectionRecord[]>{
+    return this.withAccount(actor.accountId,async client=>{
+      const result=await client.query<SsoConnectionRow>(`SELECT id,organisation_id,connection_type,display_name,issuer_url,client_identifier,verified_domains,enabled,created_at,updated_at FROM organisation_sso_connections WHERE organisation_id=$1 ORDER BY display_name,id`,[organisationId]);
+      return result.rows.map(ssoConnectionFromRow);
+    });
+  }
+
+  async createSsoConnection(actor:AuthenticatedSession,organisationId:string,input:SsoConnectionInput,correlationId:string):Promise<SsoConnectionRecord>{
+    return this.withAccount(actor.accountId,async client=>{
+      const id=randomUUID(),result=await client.query<SsoConnectionRow>(`INSERT INTO organisation_sso_connections(id,organisation_id,connection_type,display_name,issuer_url,client_identifier,verified_domains,enabled,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,organisation_id,connection_type,display_name,issuer_url,client_identifier,verified_domains,enabled,created_at,updated_at`,[id,organisationId,input.connectionType,input.displayName,input.issuerUrl,input.clientIdentifier,input.verifiedDomains,input.enabled,actor.accountId]);
+      await appendOrganisationAudit(client,actor,organisationId,"sso_connection.created",id,{connectionType:input.connectionType,displayName:input.displayName,verifiedDomains:input.verifiedDomains,enabled:input.enabled},correlationId);
+      return ssoConnectionFromRow(result.rows[0]);
+    });
+  }
+
+  async updateSsoConnection(actor:AuthenticatedSession,organisationId:string,connectionId:string,input:SsoConnectionInput,correlationId:string):Promise<SsoConnectionRecord|null>{
+    return this.withAccount(actor.accountId,async client=>{
+      const result=await client.query<SsoConnectionRow>(`UPDATE organisation_sso_connections SET connection_type=$1,display_name=$2,issuer_url=$3,client_identifier=$4,verified_domains=$5,enabled=$6,updated_at=now() WHERE id=$7 AND organisation_id=$8 RETURNING id,organisation_id,connection_type,display_name,issuer_url,client_identifier,verified_domains,enabled,created_at,updated_at`,[input.connectionType,input.displayName,input.issuerUrl,input.clientIdentifier,input.verifiedDomains,input.enabled,connectionId,organisationId]);
+      if(!result.rowCount)return null;
+      await appendOrganisationAudit(client,actor,organisationId,"sso_connection.updated",connectionId,{connectionType:input.connectionType,displayName:input.displayName,verifiedDomains:input.verifiedDomains,enabled:input.enabled},correlationId);
+      return ssoConnectionFromRow(result.rows[0]);
+    });
+  }
+
+  async deleteSsoConnection(actor:AuthenticatedSession,organisationId:string,connectionId:string,correlationId:string):Promise<boolean>{
+    return this.withAccount(actor.accountId,async client=>{const deleted=await client.query(`DELETE FROM organisation_sso_connections WHERE id=$1 AND organisation_id=$2`,[connectionId,organisationId]);if(deleted.rowCount)await appendOrganisationAudit(client,actor,organisationId,"sso_connection.deleted",connectionId,{},correlationId);return Boolean(deleted.rowCount);});
+  }
+
+  async listScimTokens(actor:AuthenticatedSession,organisationId:string):Promise<ScimTokenSummary[]>{
+    return this.withAccount(actor.accountId,async client=>{const result=await client.query<ScimTokenRow>(`SELECT id,organisation_id,name,prefix,created_at,expires_at,last_used_at,revoked_at FROM organisation_scim_tokens WHERE organisation_id=$1 ORDER BY created_at DESC`,[organisationId]);return result.rows.map(scimTokenFromRow);});
+  }
+
+  async createScimToken(actor:AuthenticatedSession,organisationId:string,name:string,prefix:string,tokenHash:Buffer,expiresAt:Date,correlationId:string):Promise<ScimTokenSummary>{
+    return this.withAccount(actor.accountId,async client=>{const id=randomUUID(),result=await client.query<ScimTokenRow>(`INSERT INTO organisation_scim_tokens(id,organisation_id,name,prefix,token_hash,created_by,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,organisation_id,name,prefix,created_at,expires_at,last_used_at,revoked_at`,[id,organisationId,name,prefix,tokenHash,actor.accountId,expiresAt]);await appendOrganisationAudit(client,actor,organisationId,"scim_token.created",id,{name,prefix,expiresAt:expiresAt.toISOString()},correlationId);return scimTokenFromRow(result.rows[0]);});
+  }
+
+  async revokeScimToken(actor:AuthenticatedSession,organisationId:string,tokenId:string,correlationId:string):Promise<boolean>{
+    return this.withAccount(actor.accountId,async client=>{const revoked=await client.query(`UPDATE organisation_scim_tokens SET revoked_at=now() WHERE id=$1 AND organisation_id=$2 AND revoked_at IS NULL`,[tokenId,organisationId]);if(revoked.rowCount)await appendOrganisationAudit(client,actor,organisationId,"scim_token.revoked",tokenId,{},correlationId);return Boolean(revoked.rowCount);});
+  }
+
+  async authenticateScimToken(tokenHash:Buffer){
+    const result=await this.pool.query<{id:string;organisation_id:string;created_by:string}>(`UPDATE organisation_scim_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING id,organisation_id,created_by`,[tokenHash]);
+    return result.rowCount?{organisationId:result.rows[0].organisation_id,tokenId:result.rows[0].id,provisioningAccountId:result.rows[0].created_by}:null;
+  }
+
+  async listScimUsers(organisationId:string,provisioningAccountId:string,startIndex:number,count:number,userNameFilter:string|null){
+    return this.withScim(organisationId,provisioningAccountId,async client=>{
+      const where=userNameFilter?"AND lower(user_name)=lower($2)":"";
+      const filterValues=userNameFilter?[organisationId,userNameFilter]:[organisationId];
+      const total=await client.query<{count:string}>(`SELECT count(*)::text AS count FROM scim_managed_users WHERE organisation_id=$1 ${where}`,filterValues);
+      const itemWhere=userNameFilter?"AND lower(user_name)=lower($4)":"";
+      const values=userNameFilter?[organisationId,count,startIndex-1,userNameFilter]:[organisationId,count,startIndex-1];
+      const result=await client.query<ScimUserRow>(`SELECT id,organisation_id,account_id,external_id,user_name,display_name,active,role_key,workspace_ids,created_at,updated_at FROM scim_managed_users WHERE organisation_id=$1 ${itemWhere} ORDER BY user_name,id LIMIT $2 OFFSET $3`,values);
+      return{items:result.rows.map(scimUserFromRow),total:Number(total.rows[0]?.count??0)};
+    });
+  }
+
+  async getScimUser(organisationId:string,provisioningAccountId:string,userId:string){
+    return this.withScim(organisationId,provisioningAccountId,async client=>{const result=await client.query<ScimUserRow>(`SELECT id,organisation_id,account_id,external_id,user_name,display_name,active,role_key,workspace_ids,created_at,updated_at FROM scim_managed_users WHERE organisation_id=$1 AND id=$2`,[organisationId,userId]);return result.rowCount?scimUserFromRow(result.rows[0]):null;});
+  }
+
+  async upsertScimUser(organisationId:string,provisioningAccountId:string,userId:string|null,input:ScimManagedUserInput):Promise<ScimManagedUserRecord>{
+    return this.withScim(organisationId,provisioningAccountId,async client=>{
+      const role=await client.query<{id:string}>(`SELECT id FROM roles WHERE organisation_id=$1 AND role_key=$2`,[organisationId,input.role]);if(!role.rowCount)throw new DomainError("scim_role_invalid","SCIM role does not exist in this organisation.",400);
+      const workspaces=await client.query<{id:string}>(`SELECT id FROM workspaces WHERE organisation_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NULL`,[organisationId,input.workspaceIds]);if(workspaces.rowCount!==new Set(input.workspaceIds).size)throw new DomainError("scim_workspace_invalid","Every SCIM workspace must belong to this organisation.",400);
+      const existing=userId?await client.query<ScimUserRow>(`SELECT * FROM scim_managed_users WHERE organisation_id=$1 AND id=$2 FOR UPDATE`,[organisationId,userId]):await client.query<ScimUserRow>(`SELECT * FROM scim_managed_users WHERE organisation_id=$1 AND external_id=$2 FOR UPDATE`,[organisationId,input.externalId]);
+      if(userId&&!existing.rowCount)throw new DomainError("scim_user_not_found","SCIM user was not found.",404);
+      let accountId=existing.rows[0]?.account_id;
+      if(!accountId){const account=await client.query<{id:string;identity_subject:string}>(`SELECT id,identity_subject FROM accounts WHERE lower(primary_email)=lower($1) AND deleted_at IS NULL`,[input.userName]);if(account.rowCount)accountId=account.rows[0].id;else{const created=await client.query<{id:string}>(`INSERT INTO accounts(identity_subject,primary_email,email_verified,display_name) VALUES($1,lower($2),true,$3) RETURNING id`,[`scim|${organisationId}|${input.externalId}`,input.userName,input.displayName]);accountId=created.rows[0].id;}}
+      await client.query(`UPDATE accounts SET primary_email=lower($1),display_name=$2 WHERE id=$3 AND identity_subject LIKE $4`,[input.userName,input.displayName,accountId,`scim|${organisationId}|%`]);
+      await client.query(`INSERT INTO memberships(organisation_id,account_id,role_id,status) VALUES($1,$2,$3,$4) ON CONFLICT(organisation_id,account_id) DO UPDATE SET role_id=excluded.role_id,status=excluded.status,removed_at=CASE WHEN excluded.status='active' THEN NULL ELSE now() END`,[organisationId,accountId,role.rows[0].id,input.active?"active":"suspended"]);
+      await client.query(`DELETE FROM workspace_memberships membership USING workspaces workspace WHERE membership.workspace_id=workspace.id AND workspace.organisation_id=$1 AND membership.account_id=$2`,[organisationId,accountId]);
+      if(input.active)for(const workspaceId of input.workspaceIds)await client.query(`INSERT INTO workspace_memberships(workspace_id,account_id,role_id) VALUES($1,$2,$3)`,[workspaceId,accountId,role.rows[0].id]);
+      const id=existing.rows[0]?.id??randomUUID();
+      const result=await client.query<ScimUserRow>(`INSERT INTO scim_managed_users(id,organisation_id,external_id,account_id,user_name,display_name,active,role_key,workspace_ids) VALUES($1,$2,$3,$4,lower($5),$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET external_id=excluded.external_id,user_name=excluded.user_name,display_name=excluded.display_name,active=excluded.active,role_key=excluded.role_key,workspace_ids=excluded.workspace_ids,updated_at=now() RETURNING id,organisation_id,account_id,external_id,user_name,display_name,active,role_key,workspace_ids,created_at,updated_at`,[id,organisationId,input.externalId,accountId,input.userName,input.displayName,input.active,input.role,input.workspaceIds]);
+      return scimUserFromRow(result.rows[0]);
     });
   }
 
@@ -1360,6 +1526,11 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  private async withScim<T>(organisationId:string,provisioningAccountId:string,operation:(client:PoolClient)=>Promise<T>):Promise<T>{
+    const client=await this.pool.connect();
+    try{await client.query("BEGIN");await client.query(`SELECT set_config('app.account_id',$1,true),set_config('app.scim_organisation_id',$2,true)`,[provisioningAccountId,organisationId]);const result=await operation(client);await client.query("COMMIT");return result;}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+  }
+
   private async withAccount<T>(accountId: string, operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
@@ -1400,6 +1571,15 @@ async function readRunnerPool(client:PoolClient,workspaceId:string,poolId:string
   return {id:row.id,workspaceId:row.workspace_id,environmentId:row.environment_id,name:row.name,strategy:row.strategy,region:row.region,requiredTags:row.required_tags,maximumConcurrency:row.maximum_concurrency,status:row.status,memberCount:Number(row.member_count),createdAt:row.created_at.toISOString(),updatedAt:row.updated_at.toISOString()};
 }
 
+async function appendOrganisationAudit(client:PoolClient,actor:AuthenticatedSession,organisationId:string,action:string,resourceId:string,after:Record<string,unknown>,correlationId:string):Promise<void>{
+  const workspace=await client.query<{id:string}>(`SELECT id FROM workspaces WHERE organisation_id=$1 AND deleted_at IS NULL ORDER BY created_at,id LIMIT 1`,[organisationId]);
+  if(workspace.rowCount)await appendAudit(client,actor,workspace.rows[0].id,action,"organisation_security",resourceId,null,after,correlationId);
+}
+
+function ssoConnectionFromRow(row:SsoConnectionRow):SsoConnectionRecord{return{id:row.id,organisationId:row.organisation_id,connectionType:row.connection_type,displayName:row.display_name,issuerUrl:row.issuer_url,clientIdentifier:row.client_identifier,verifiedDomains:row.verified_domains,enabled:row.enabled,createdAt:row.created_at.toISOString(),updatedAt:row.updated_at.toISOString()};}
+function scimTokenFromRow(row:ScimTokenRow):ScimTokenSummary{return{id:row.id,organisationId:row.organisation_id,name:row.name,prefix:row.prefix,createdAt:row.created_at.toISOString(),expiresAt:row.expires_at.toISOString(),lastUsedAt:row.last_used_at?.toISOString()??null,revokedAt:row.revoked_at?.toISOString()??null};}
+function scimUserFromRow(row:ScimUserRow):ScimManagedUserRecord{return{id:row.id,organisationId:row.organisation_id,accountId:row.account_id,externalId:row.external_id,userName:row.user_name,displayName:row.display_name,active:row.active,role:row.role_key,workspaceIds:row.workspace_ids,createdAt:row.created_at.toISOString(),updatedAt:row.updated_at.toISOString()};}
+
 interface WorkflowRevisionRow {
   id: string;
   workflow_id: string;
@@ -1420,6 +1600,9 @@ interface WorkflowRevisionRow {
 }
 
 interface RunnerPoolRow {id:string;workspace_id:string;environment_id:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;required_tags:string[];maximum_concurrency:number;status:"active"|"paused"|"draining";member_count:string;created_at:Date;updated_at:Date}
+interface SsoConnectionRow{id:string;organisation_id:string;connection_type:"oidc"|"saml";display_name:string;issuer_url:string;client_identifier:string;verified_domains:string[];enabled:boolean;created_at:Date;updated_at:Date}
+interface ScimTokenRow{id:string;organisation_id:string;name:string;prefix:string;created_at:Date;expires_at:Date;last_used_at:Date|null;revoked_at:Date|null}
+interface ScimUserRow{id:string;organisation_id:string;account_id:string;external_id:string;user_name:string;display_name:string;active:boolean;role_key:string;workspace_ids:string[];created_at:Date;updated_at:Date}
 
 interface RunnerPairingMetadata {
   operatingSystem: string; architecture: string; applicationVersion: string; protocolVersion: number; pluginRuntimeVersion: string;
@@ -1601,6 +1784,9 @@ function redact(value: Record<string, unknown> | null): Record<string, unknown> 
 function isPostgresUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505";
 }
+
+function sameStringSet(left:string[],right:string[]):boolean{return JSON.stringify([...new Set(left)].sort())===JSON.stringify([...new Set(right)].sort());}
+function samePluginRequirements(left:DeploymentRecord["requiredPlugins"],right:DeploymentRecord["requiredPlugins"]):boolean{return JSON.stringify(left.map(item=>`${item.pluginId}\u0000${item.version}\u0000${item.packageIntegrity}`).sort())===JSON.stringify(right.map(item=>`${item.pluginId}\u0000${item.version}\u0000${item.packageIntegrity}`).sort());}
 
 function matchesBillingMode(value: unknown): value is "payment" | "subscription" { return value === "payment" || value === "subscription"; }
 

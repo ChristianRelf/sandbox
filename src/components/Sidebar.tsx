@@ -231,7 +231,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
             >
               {runner.paused ? <Play size={14} /> : <Pause size={14} />}
               {runnerBusy
-                ? "Updatingâ€¦"
+                ? "Updating…"
                 : runner.paused
                   ? "Resume automations"
                   : "Pause automations"}

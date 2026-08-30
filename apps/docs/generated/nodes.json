@@ -188,6 +188,201 @@
       ]
     },
     {
+      "type": "read_file",
+      "name": "Read File",
+      "description": "Read text from an approved file",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "encoding": "utf8",
+        "maximumBytes": 10485760
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "write_file",
+      "name": "Write File",
+      "description": "Write text to an approved file",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "content": "",
+        "overwrite": false,
+        "createParents": false
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "copy_path",
+      "name": "Copy File or Folder",
+      "description": "Copy within approved folders",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "source": "",
+        "destination": "",
+        "overwrite": false
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "delete_path",
+      "name": "Delete File or Folder",
+      "description": "Delete an explicitly approved path",
+      "category": "System",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "recursive": false
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "list_folder",
+      "name": "List Folder",
+      "description": "List files in an approved folder",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "folder": "",
+        "recursive": false,
+        "pattern": "*"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "parse_csv",
+      "name": "Parse CSV",
+      "description": "Parse CSV text or an approved file",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "content": "",
+        "delimiter": ",",
+        "hasHeaders": true,
+        "trim": true
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "parse_json",
+      "name": "Parse JSON",
+      "description": "Parse JSON text or an approved file",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "content": ""
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "parse_text",
+      "name": "Parse Text",
+      "description": "Split text into lines and basic statistics",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "path": "",
+        "content": "",
+        "trim": true,
+        "removeEmptyLines": false
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "get_workflow_state",
+      "name": "Get Workflow State",
+      "description": "Read a value stored by this workflow",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "key": "",
+        "defaultValue": null
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "set_workflow_state",
+      "name": "Set Workflow State",
+      "description": "Store a value after a successful run",
+      "category": "Data",
+      "version": 1,
+      "configurationDefaults": {
+        "key": "",
+        "value": null
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
+      "type": "compare_previous",
+      "name": "Compare With Previous",
+      "description": "Detect a meaningful change and update state after success",
+      "category": "Logic",
+      "version": 1,
+      "configurationDefaults": {
+        "key": "",
+        "value": null,
+        "normalization": "trim"
+      },
+      "risk": "low",
+      "supportedRunners": [
+        "desktop",
+        "hosted",
+        "self-hosted"
+      ]
+    },
+    {
       "type": "run_command",
       "name": "Run Command",
       "description": "Execute an explicitly approved process",

@@ -433,7 +433,7 @@ export function Dashboard() {
               disabled={!name.trim() || creating}
               onClick={() => void submitCreate()}
             >
-              {creating ? "Creatingâ€¦" : "Create workflow"}
+              {creating ? "Creating…" : "Create workflow"}
             </button>
           </>
         }

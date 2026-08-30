@@ -1,4 +1,4 @@
-import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Permission, RunnerAuthorizationContext, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Permission, RunnerAuthorizationContext, RunnerCommand, RunnerRecord, RunnerRequirements, RunSummary, UsageEstimate, WorkflowRevision } from "@sandbox/contracts";
 import type { BillingEvent } from "./billing.js";
 
 export interface AuthenticatedSession {
@@ -31,6 +31,17 @@ export interface AccountOrganisationRecord extends OrganisationRecord { role: Bu
 export interface SyncedWorkflowRecord { workflowId: string; name: string; currentDraftRevisionId: string | null; currentPublishedRevisionId: string | null; createdAt: string; updatedAt: string | null }
 export interface RunnerPoolRecord { id:string;workspaceId:string;environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";memberCount:number;createdAt:string;updatedAt:string }
 export interface RunnerPoolInput {environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";members:Array<{runnerId:string;priority:number}>}
+export interface DeploymentCreationInput {
+  workflowId:string;workflowRevisionId:string;environmentId:string;target:DeploymentRecord["target"];targetRunnerId:string|null;runnerPoolId:string|null;region:string;
+  requiredConnectionIds:string[];requiredPlugins:DeploymentRecord["requiredPlugins"];requiredCapabilities:RunnerRequirements["capabilities"];protectedVariableNames:string[];networkTargets:string[];
+  requirements:RunnerRequirements;validation:Record<string,unknown>;usageEstimate:UsageEstimate;retentionDays:number;concurrencyLimit:number;supersedesDeploymentId:string|null;
+}
+export interface OrganisationRoleRecord {id:string;organisationId:string;key:string;displayName:string;builtIn:boolean;permissions:Permission[]}
+export interface SsoConnectionInput {connectionType:"oidc"|"saml";displayName:string;issuerUrl:string;clientIdentifier:string;verifiedDomains:string[];enabled:boolean}
+export interface SsoConnectionRecord extends SsoConnectionInput {id:string;organisationId:string;createdAt:string;updatedAt:string}
+export interface ScimTokenSummary {id:string;organisationId:string;name:string;prefix:string;createdAt:string;expiresAt:string;lastUsedAt:string|null;revokedAt:string|null}
+export interface ScimManagedUserInput {externalId:string;userName:string;displayName:string;active:boolean;role:string;workspaceIds:string[]}
+export interface ScimManagedUserRecord extends ScimManagedUserInput {id:string;organisationId:string;accountId:string;createdAt:string;updatedAt:string}
 export interface InvitationInput { workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: Date; tokenHash: Buffer }
 export interface InvitationRecord { id: string; organisationId: string; workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: string; status: string }
 export interface SyncWriteResult { revision: WorkflowRevision; conflictRevisionId: string | null }
@@ -140,10 +151,27 @@ export interface ControlPlaneRepository {
   recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void>;
   listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number): Promise<{ runners: RunnerRecord[]; runs: RunSummary[]; pendingApprovalCount: number; webhookFailureCount: number }>;
   listDeployments(actor: AuthenticatedSession, workspaceId: string): Promise<DeploymentRecord[]>;
+  createDeployment(actor:AuthenticatedSession,workspaceId:string,input:DeploymentCreationInput,correlationId:string):Promise<DeploymentRecord>;
+  transitionDeployment(actor:AuthenticatedSession,workspaceId:string,deploymentId:string,status:DeploymentRecord["status"],reason:string,correlationId:string):Promise<{deploymentId:string;status:DeploymentRecord["status"]}|null>;
   listRunnerPools(actor: AuthenticatedSession, workspaceId: string): Promise<RunnerPoolRecord[]>;
   createRunnerPool(actor:AuthenticatedSession,workspaceId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord>;
   updateRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord|null>;
   deleteRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,correlationId:string):Promise<boolean>;
+  listOrganisationRoles(actor:AuthenticatedSession,organisationId:string):Promise<OrganisationRoleRecord[]>;
+  createOrganisationRole(actor:AuthenticatedSession,organisationId:string,key:string,displayName:string,rolePermissions:Permission[],correlationId:string):Promise<OrganisationRoleRecord>;
+  updateOrganisationRole(actor:AuthenticatedSession,organisationId:string,roleId:string,displayName:string,rolePermissions:Permission[],correlationId:string):Promise<OrganisationRoleRecord|null>;
+  deleteOrganisationRole(actor:AuthenticatedSession,organisationId:string,roleId:string,correlationId:string):Promise<boolean>;
+  listSsoConnections(actor:AuthenticatedSession,organisationId:string):Promise<SsoConnectionRecord[]>;
+  createSsoConnection(actor:AuthenticatedSession,organisationId:string,input:SsoConnectionInput,correlationId:string):Promise<SsoConnectionRecord>;
+  updateSsoConnection(actor:AuthenticatedSession,organisationId:string,connectionId:string,input:SsoConnectionInput,correlationId:string):Promise<SsoConnectionRecord|null>;
+  deleteSsoConnection(actor:AuthenticatedSession,organisationId:string,connectionId:string,correlationId:string):Promise<boolean>;
+  listScimTokens(actor:AuthenticatedSession,organisationId:string):Promise<ScimTokenSummary[]>;
+  createScimToken(actor:AuthenticatedSession,organisationId:string,name:string,prefix:string,tokenHash:Buffer,expiresAt:Date,correlationId:string):Promise<ScimTokenSummary>;
+  revokeScimToken(actor:AuthenticatedSession,organisationId:string,tokenId:string,correlationId:string):Promise<boolean>;
+  authenticateScimToken(tokenHash:Buffer):Promise<{organisationId:string;tokenId:string;provisioningAccountId:string}|null>;
+  listScimUsers(organisationId:string,provisioningAccountId:string,startIndex:number,count:number,userNameFilter:string|null):Promise<{items:ScimManagedUserRecord[];total:number}>;
+  getScimUser(organisationId:string,provisioningAccountId:string,userId:string):Promise<ScimManagedUserRecord|null>;
+  upsertScimUser(organisationId:string,provisioningAccountId:string,userId:string|null,input:ScimManagedUserInput):Promise<ScimManagedUserRecord>;
   listWorkspaceEnvironments(actor: AuthenticatedSession, workspaceId: string): Promise<WorkspaceEnvironmentRecord[]>;
   listSharedConnections(actor: AuthenticatedSession, workspaceId: string, environmentId: string | null): Promise<SharedConnectionRecord[]>;
   createSharedConnection(actor: AuthenticatedSession, workspaceId: string, input: Omit<SharedConnectionRecord, "id" | "workspaceId" | "health" | "expiresAt" | "lastUsedAt" | "createdBy">, correlationId: string): Promise<SharedConnectionRecord>;

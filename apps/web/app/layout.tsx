@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { brand } from "@sandbox/brand";
 import {
   Bell, Box, CreditCard, Download, Gauge, KeyRound, LifeBuoy,
   Package, ReceiptText, Settings, ShieldCheck, User, Users,
 } from "lucide-react";
 import "./globals.css";
+import { authenticatedClient } from "../lib/auth";
 
 export const metadata: Metadata = {
   metadataBase: new URL(brand.domains.app),
@@ -28,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <Link href="/" className="wordmark"><span><Box size={17}/></span>Sandbox</Link><i>Account</i>
       <a className="product-link" href={brand.domains.marketing}>Back to product</a>
       <button aria-label="Notifications"><Bell size={16}/></button>
-      <div className="account-chip" aria-label="Unauthenticated account"><User size={13}/></div>
+      <Suspense fallback={<div className="account-chip" aria-label="Loading account"><User size={13}/></div>}><AccountChip/></Suspense>
     </header>
     <aside className="portal-sidebar"><nav aria-label="Account navigation">
       {accountLinks.map(([href, label, Icon]) => <Link href={href} key={href}><Icon/>{label}</Link>)}
@@ -36,3 +38,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <div className="portal-content">{children}</div>
   </body></html>;
 }
+
+async function AccountChip(){const api=await authenticatedClient();if(!api)return <div className="account-chip" aria-label="Account unavailable"><User size={13}/></div>;try{const profile=(await api.getAccountProfile()).data;return <div className="account-chip" title={`${profile.displayName} · ${profile.email}`} aria-label={`Signed in as ${profile.displayName}`}>{profile.displayName.slice(0,2).toUpperCase()}</div>}catch{return <div className="account-chip" aria-label="Account unavailable"><User size={13}/></div>}}
