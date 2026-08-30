@@ -99,6 +99,23 @@ export interface ProductAccountSummary {
 }
 export interface ProductCheckoutInput { ownerType:"personal"|"organisation";ownerId:string;planId:string }
 
+export type BuiltInRole="owner"|"administrator"|"developer"|"operator"|"viewer";
+export interface AccountWorkspace { id:string;organisationId:string;name:string;slug:string;role:BuiltInRole;createdAt:string }
+export interface AccountOrganisation { id:string;name:string;slug:string;role:BuiltInRole;createdAt:string;workspaces:AccountWorkspace[] }
+export interface AccountProfile {accountId:string;email:string;displayName:string;sessionId:string}
+export interface AccountSession {id:string;deviceName:string;createdAt:string;lastSeenAt:string;expiresAt:string;current:boolean}
+export interface WorkspaceMember {accountId:string;email:string;displayName:string;role:BuiltInRole;joinedAt:string}
+export interface WorkspaceEnvironment {environmentId:string;environment:"development"|"staging"|"production"}
+export interface SyncedWorkflow { workflowId:string;name:string;currentDraftRevisionId:string|null;currentPublishedRevisionId:string|null;createdAt:string;updatedAt:string|null }
+export interface EncryptedWorkflowRevision {
+  workflowId:string;revisionId:string;parentRevisionId:string|null;schemaVersion:number;contentHash:string;editorDeviceId:string;updatedAt:string;
+  syncState:"local"|"synced"|"conflicted"|"deleted";encryption:{algorithm:"aes-256-gcm";keyVersion:number};encryptedPayload:string;payloadKeyEnvelope:string;
+  searchableMetadata:{name:string;folderId:string|null;requiredPlugins:Array<{pluginId:string;version:string;packageIntegrity:string}>;permissionRequirements:string[];runnerPolicy:Record<string,unknown>};
+}
+export interface WorkflowApproval {approvalId:string;workflowId:string;revisionId:string;status:"pending"|"approved"|"rejected"|"expired";requiredApprovals:number;approvalCount:number;createdAt:string}
+export interface RunnerPool {id:string;workspaceId:string;environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";memberCount:number;createdAt:string;updatedAt:string}
+export interface RunnerPoolInput {environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region?:string|null;requiredTags?:string[];maximumConcurrency:number;status?:"active"|"paused"|"draining";members?:Array<{runnerId:string;priority?:number}>}
+
 export interface PersonalAccessTokenInput {
   name: string;
   scopes: string[];
@@ -168,6 +185,110 @@ export class SandboxApiClient {
 
   createProductCheckout<T = {checkout:{checkoutId:string;url:string;expiresAt:string}}>(input:ProductCheckoutInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({method:"POST",path:"/v1/product-checkout",body:input,parse});
+  }
+
+  listAccountOrganisations<T = {items:AccountOrganisation[]}>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/organisations",parse});
+  }
+
+  getAccountProfile<T = AccountProfile>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/profile",parse});
+  }
+
+  listAccountSessions<T = {items:AccountSession[]}>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/sessions",parse});
+  }
+
+  revokeAccountSession<T = {revoked:true}>(sessionId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/account/sessions/${encodeURIComponent(sessionId)}/revoke`,body:{},parse});
+  }
+
+  createOrganisation<T = {organisation:{id:string;name:string;slug:string;createdAt:string};workspace:{id:string;organisationId:string;name:string;slug:string;createdAt:string}}>(input:{name:string;slug:string},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:"/v1/organisations",body:input,parse});
+  }
+
+  listSyncedWorkflows<T = {items:SyncedWorkflow[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/sync/workflows`,parse});
+  }
+
+  enableWorkflowSync<T = {workflowId:string;name:string;ownerType:"workspace";ownerId:string}>(workspaceId:string,input:{workflowId:string;name:string},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/sync/workflows`,body:input,parse});
+  }
+
+  appendWorkflowRevision<T = {revision:EncryptedWorkflowRevision;conflictRevisionId:string|null}>(workspaceId:string,revision:EncryptedWorkflowRevision,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/sync/revisions`,body:revision,parse});
+  }
+
+  listWorkflowRevisions<T = {items:EncryptedWorkflowRevision[];nextCursor:string|null}>(workspaceId:string,workflowId:string,query:{cursor?:string;limit?:number}={},parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/sync/workflows/${encodeURIComponent(workflowId)}/revisions`,query,parse});
+  }
+
+  listWorkflowApprovals<T = {items:WorkflowApproval[]}>(workspaceId:string,status:"all"|"pending"|"approved"|"rejected"="pending",parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/workflow-approvals`,query:{status},parse});
+  }
+
+  requestWorkflowApproval<T = {approval:WorkflowApproval}>(workspaceId:string,workflowId:string,revisionId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/workflows/${encodeURIComponent(workflowId)}/revisions/${encodeURIComponent(revisionId)}/request-approval`,body:{},parse});
+  }
+
+  decideWorkflowApproval<T = {approval:WorkflowApproval}>(workspaceId:string,approvalId:string,decision:"approved"|"rejected",reason:string|null=null,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/workflow-approvals/${encodeURIComponent(approvalId)}/decision`,body:{decision,reason},parse});
+  }
+
+  publishWorkflow<T = {workflowId:string;publishedRevisionId:string;previousPublishedRevisionId:string|null}>(workspaceId:string,workflowId:string,revisionId:string,changeSummary:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/workflows/${encodeURIComponent(workflowId)}/revisions/${encodeURIComponent(revisionId)}/publish`,body:{changeSummary},parse});
+  }
+
+  listDeployments<T = {items:unknown[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments`,parse});
+  }
+
+  listWorkspaceMembers<T = {items:WorkspaceMember[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/members`,parse});
+  }
+
+  listWorkspaceRunners<T = {items:unknown[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/runners`,parse});
+  }
+
+  listWorkspaceEnvironments<T = {items:WorkspaceEnvironment[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/environments`,parse});
+  }
+
+  listWorkspaceConnections<T = {items:unknown[]}>(workspaceId:string,environmentId?:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/connections`,query:{environmentId},parse});
+  }
+
+  getWorkspaceGovernance<T = {policies:Record<string,unknown>}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/governance`,parse});
+  }
+
+  listWorkspaceAudit<T = {items:unknown[];nextCursor:string|null}>(workspaceId:string,limit=100,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/audit`,query:{limit},parse});
+  }
+
+  getWorkspaceActivity<T = {runners:unknown[];runs:unknown[];pendingApprovalCount:number;webhookFailureCount:number}>(workspaceId:string,limit=30,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/activity`,query:{limit},parse});
+  }
+
+  validateDeployment<T = {validation:Record<string,unknown>}>(workspaceId:string,input:unknown,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/deployments/validate`,body:input,parse});
+  }
+
+  listRunnerPools<T = {items:RunnerPool[]}>(workspaceId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/runner-pools`,parse});
+  }
+
+  createRunnerPool<T = {pool:RunnerPool}>(workspaceId:string,input:RunnerPoolInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/runner-pools`,body:input,parse});
+  }
+
+  updateRunnerPool<T = {pool:RunnerPool}>(workspaceId:string,poolId:string,input:RunnerPoolInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"PUT",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/runner-pools/${encodeURIComponent(poolId)}`,body:input,parse});
+  }
+
+  deleteRunnerPool<T = {deleted:true}>(workspaceId:string,poolId:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"DELETE",path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/runner-pools/${encodeURIComponent(poolId)}`,body:{},parse});
   }
 
   listPersonalAccessTokens<T = {items:TokenSummary[]}>(parse?: (value: unknown) => T): Promise<ApiResult<T>> {

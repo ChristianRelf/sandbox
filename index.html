@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0a0b" />
     <title>Sandbox</title>
+    <script>
+      (() => {
+        try {
+          const next = JSON.parse(localStorage.getItem("sandbox.app-preferences.v2") || "null");
+          const old = JSON.parse(localStorage.getItem("sandbox.app-preferences.v1") || "null");
+          const choice = next?.colorScheme || (old ? "dark" : "system");
+          const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.theme = choice === "system" ? (dark ? "dark" : "light") : choice;
+          document.documentElement.dataset.surface = next?.darkSurface || old?.surfaceTheme || "charcoal";
+        } catch { document.documentElement.dataset.theme = "dark"; }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

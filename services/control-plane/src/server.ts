@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import rateLimit from "@fastify/rate-limit";
-import { permissions, runSummarySchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
+import { executionTargetSchema, permissions, runnerIdentitySchema, runnerRequirementsSchema, runSummarySchema, usageEstimateSchema, workflowRevisionSchema, type Permission, type RunnerCommand } from "@sandbox/contracts";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { Authorizer } from "./authorization.js";
@@ -21,6 +21,7 @@ import { validMetricsBearer, type ReadinessService, type ServiceMetrics } from "
 import type { SupportAccessAdministration } from "./support_access.js";
 import type { PrivacyAdministration } from "./privacy.js";
 import type { ProductCommerceAdministration } from "./product_commerce.js";
+import { validateDeployment } from "./deployment.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -104,6 +105,24 @@ const usageEventInput=z.object({
   eventId:z.string().uuid(),workspaceId:z.string().uuid(),environmentId:z.string().uuid(),executionId:z.string().uuid(),deploymentId:z.string().uuid(),
   meter:z.enum(["hosted_runner_seconds","managed_browser_seconds","network_egress_bytes","artifact_storage_byte_seconds"]),unit:z.enum(["seconds","bytes","byte_seconds"]),quantity:z.number().int().nonnegative(),
   sourceEventId:z.string().min(1).max(200),idempotencyKey:z.string().min(16).max(200),periodStartedAt:z.string().datetime({offset:true}),periodEndedAt:z.string().datetime({offset:true}),region:z.string().min(1).max(80),metadata:z.record(z.string(),z.unknown()).default({})
+}).strict();
+const deploymentNodeInput=z.object({
+  nodeId:z.string().min(1).max(200),nodeType:z.string().min(1).max(200),nodeVersion:z.number().int().positive(),
+  plugin:z.object({pluginId:z.string().min(3).max(200),version:z.string().min(1).max(50),packageIntegrity:z.string().regex(/^sha256:[a-f0-9]{64}$/)}).nullable(),
+  requiresBrowser:z.boolean(),requiresLocalFile:z.boolean(),localFileLabel:z.string().max(500).nullable(),requiredConnectionIds:z.array(z.string().uuid()).max(1000),
+  requiredEnvironmentVariables:z.array(z.string().min(1).max(100)).max(1000),networkTargets:z.array(z.string().min(1).max(253)).max(1000),approvalRequired:z.boolean()
+}).strict();
+const deploymentValidationInput=z.object({
+  target:executionTargetSchema,region:z.string().trim().min(1).max(80),requirements:runnerRequirementsSchema,nodes:z.array(deploymentNodeInput).max(5000),
+  graphIssues:z.array(z.object({code:z.string().min(1).max(120),message:z.string().min(1).max(1000),nodeId:z.string().max(200).nullable()}).strict()).max(5000),
+  availableRunners:z.array(runnerIdentitySchema).max(5000),availableConnectionIds:z.array(z.string().uuid()).max(1000),availableEnvironmentVariables:z.array(z.string().min(1).max(100)).max(1000),
+  approvedNetworkTargets:z.array(z.string().min(1).max(253)).max(1000),approvedPluginPackages:z.array(z.object({pluginId:z.string().min(3).max(200),version:z.string().min(1).max(50),packageIntegrity:z.string().regex(/^sha256:[a-f0-9]{64}$/)}).strict()).max(1000),
+  approvalSnapshotPresent:z.boolean(),concurrencyLimit:z.number().int(),retentionDays:z.number().int(),estimatedUsage:usageEstimateSchema
+}).strict();
+const runnerPoolInput=z.object({
+  environmentId:z.string().uuid(),name:z.string().trim().min(1).max(100),strategy:z.enum(["least_loaded","round_robin","priority_failover"]),region:z.string().trim().min(1).max(80).nullable().default(null),
+  requiredTags:z.array(z.string().trim().min(1).max(50)).max(50).default([]),maximumConcurrency:z.number().int().min(1).max(10000),status:z.enum(["active","paused","draining"]).default("active"),
+  members:z.array(z.object({runnerId:z.string().uuid(),priority:z.number().int().min(0).max(10000).default(100)}).strict()).max(5000).default([])
 }).strict();
 
 export interface ApiDependencies {
@@ -406,6 +425,11 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       displayName: session.email.split("@")[0],
       sessionId: session.sessionId
     };
+  });
+
+  app.get("/v1/account/organisations", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    return { items: await dependencies.repository.listAccountOrganisations(session) };
   });
 
   app.delete("/v1/account", async request => {
@@ -860,6 +884,54 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return dependencies.repository.listWorkspaceActivity(session, workspaceId, limit);
   });
 
+  app.get("/v1/workspaces/:workspaceId/deployments",async request=>{
+    const session=await authenticate(request,dependencies.sessions);
+    const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"workflows.view");
+    return {items:await dependencies.repository.listDeployments(session,workspaceId)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/deployments/validate",async request=>{
+    const session=await authenticate(request,dependencies.sessions);
+    const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"deployments.manage");
+    const input=deploymentValidationInput.parse(request.body);
+    if(input.requirements.workspaceId!==workspaceId)throw new DomainError("deployment_workspace_mismatch","Runner requirements must target the requested workspace.",400);
+    return {validation:validateDeployment(input)};
+  });
+
+  app.get("/v1/workspaces/:workspaceId/runner-pools",async request=>{
+    const session=await authenticate(request,dependencies.sessions);
+    const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"workflows.view");
+    return {items:await dependencies.repository.listRunnerPools(session,workspaceId)};
+  });
+
+  app.post("/v1/workspaces/:workspaceId/runner-pools",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);
+    const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"runners.manage");
+    return {pool:await dependencies.repository.createRunnerPool(session,workspaceId,runnerPoolInput.parse(request.body),request.id)};
+  });
+
+  app.put("/v1/workspaces/:workspaceId/runner-pools/:poolId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);
+    const {workspaceId,poolId}=z.object({workspaceId:z.string().uuid(),poolId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"runners.manage");
+    const pool=await dependencies.repository.updateRunnerPool(session,workspaceId,poolId,runnerPoolInput.parse(request.body),request.id);
+    if(!pool)throw new DomainError("runner_pool_not_found","Runner pool was not found in this workspace.",404);
+    return {pool};
+  });
+
+  app.delete("/v1/workspaces/:workspaceId/runner-pools/:poolId",async request=>{
+    const session=await authenticate(request,dependencies.sessions);requireFreshRequest(request);
+    const {workspaceId,poolId}=z.object({workspaceId:z.string().uuid(),poolId:z.string().uuid()}).parse(request.params);
+    await authorizer.require(session,workspaceId,"runners.manage");
+    const deleted=await dependencies.repository.deleteRunnerPool(session,workspaceId,poolId,request.id);
+    if(!deleted)throw new DomainError("runner_pool_not_found","Runner pool was not found in this workspace.",404);
+    return {deleted:true};
+  });
+
   app.post("/v1/workspaces/:workspaceId/sync/revisions", async request => {
     const session = await authenticate(request, dependencies.sessions);
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
@@ -878,6 +950,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
     await authorizer.require(session, workspaceId, "workflows.edit");
     return dependencies.repository.createSyncedWorkflow(session, workspaceId, syncedWorkflowInput.parse(request.body), request.id);
+  });
+
+  app.get("/v1/workspaces/:workspaceId/sync/workflows", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listSyncedWorkflows(session, workspaceId) };
   });
 
   app.get("/v1/workspaces/:workspaceId/sync/workflows/:workflowId/revisions", async request => {
@@ -912,6 +991,14 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const { workspaceId, workflowId, revisionId } = z.object({ workspaceId: z.string().uuid(), workflowId: z.string().uuid(), revisionId: z.string().uuid() }).parse(request.params);
     await authorizer.require(session, workspaceId, "workflows.edit");
     return { approval: await dependencies.repository.requestWorkflowApproval(session, workspaceId, workflowId, revisionId, request.id) };
+  });
+
+  app.get("/v1/workspaces/:workspaceId/workflow-approvals", async request => {
+    const session = await authenticate(request, dependencies.sessions);
+    const { workspaceId } = z.object({ workspaceId: z.string().uuid() }).parse(request.params);
+    const { status } = z.object({ status: z.enum(["all", "pending", "approved", "rejected"]).default("pending") }).parse(request.query);
+    await authorizer.require(session, workspaceId, "workflows.view");
+    return { items: await dependencies.repository.listWorkflowApprovals(session, workspaceId, status) };
   });
 
   app.post("/v1/workspaces/:workspaceId/workflow-approvals/:approvalId/decision", async request => {

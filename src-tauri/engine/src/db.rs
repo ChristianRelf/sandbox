@@ -1,15 +1,19 @@
 use crate::{
     BrowserDiagnostics, BrowserProfile, ConnectionMetadata, ConnectionStatus, EngineError,
     ExecutionError, ExecutionRecord, ExecutionStatus, InstalledPlugin, PendingApproval,
-    PluginInstallState, PluginRevocation, RecordedWorkflowDraft, Workflow, WorkflowSummary,
+    PluginInstallState, PluginRevocation, RecordedWorkflowDraft, Workflow, WorkflowMetadata,
+    WorkflowMetadataPatch, WorkflowRevisionSummary, WorkflowSummary,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct Database {
@@ -89,7 +93,20 @@ impl Database {
                 ))
                 .map_err(storage)?;
         }
+        if version < 8 {
+            connection
+                .execute_batch(include_str!("../migrations/008_workflow_metadata.sql"))
+                .map_err(storage)?;
+        }
+        if version < 9 {
+            connection
+                .execute_batch(include_str!(
+                    "../migrations/009_workflow_revisions_and_state.sql"
+                ))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
+        backfill_workflow_revisions(&connection)?;
         Ok(())
     }
 
@@ -651,6 +668,12 @@ impl Database {
                 .communication_approval_revision = None;
         }
         workflow.updated_at = Utc::now();
+        let content_hash = workflow_content_hash(&workflow)?;
+        if let Some(old) = &previous {
+            if self.current_revision_hash(&workflow.id)?.as_deref() == Some(&content_hash) {
+                return Ok(old.clone());
+            }
+        }
         let trigger_type = workflow
             .nodes
             .iter()
@@ -668,11 +691,33 @@ impl Database {
             .lock()
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
         let transaction = connection.transaction().map_err(storage)?;
+        let parent_revision_id: Option<String> = transaction
+            .query_row(
+                "SELECT revision_id FROM workflow_revision_heads WHERE workflow_id=?",
+                [&workflow.id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        let revision_id = Uuid::new_v4().to_string();
+        let change_summary = summarize_workflow_change(previous.as_ref(), &workflow);
         transaction.execute(
             "INSERT INTO workflows(id,name,description,enabled,trigger_type,schema_version,definition_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,enabled=excluded.enabled,trigger_type=excluded.trigger_type,schema_version=excluded.schema_version,definition_json=excluded.definition_json,updated_at=excluded.updated_at",
             params![workflow.id, workflow.name, workflow.description, workflow.enabled, trigger_type, workflow.schema_version, json, workflow.created_at.to_rfc3339(), workflow.updated_at.to_rfc3339()]
         ).map_err(storage)?;
+        transaction
+            .execute(
+                "INSERT INTO workflow_revisions(revision_id,workflow_id,parent_revision_id,schema_version,content_hash,definition_json,change_summary,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                params![revision_id, workflow.id, parent_revision_id, workflow.schema_version, content_hash, json, change_summary, workflow.updated_at.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        transaction
+            .execute(
+                "INSERT INTO workflow_revision_heads(workflow_id,revision_id) VALUES(?,?) ON CONFLICT(workflow_id) DO UPDATE SET revision_id=excluded.revision_id",
+                params![workflow.id, revision_id],
+            )
+            .map_err(storage)?;
         if previous_permissions.as_deref() != Some(current_permissions.as_str()) {
             transaction.execute("INSERT INTO permission_audit(workflow_id,changed_at,previous_json,current_json,reason) VALUES(?,?,?,?,?)",
                 params![workflow.id, Utc::now().to_rfc3339(), previous_permissions, current_permissions, "Workflow permissions changed"]
@@ -680,6 +725,127 @@ impl Database {
         }
         transaction.commit().map_err(storage)?;
         Ok(workflow)
+    }
+
+    fn current_revision_hash(&self, workflow_id: &str) -> Result<Option<String>, EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT revision.content_hash FROM workflow_revision_heads head JOIN workflow_revisions revision ON revision.revision_id=head.revision_id WHERE head.workflow_id=?",
+                [workflow_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)
+    }
+
+    pub fn list_workflow_revisions(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Vec<WorkflowRevisionSummary>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection
+            .prepare(
+                "SELECT revision.revision_id,revision.workflow_id,revision.parent_revision_id,revision.schema_version,revision.content_hash,revision.change_summary,revision.created_at,CASE WHEN head.revision_id=revision.revision_id THEN 1 ELSE 0 END FROM workflow_revisions revision LEFT JOIN workflow_revision_heads head ON head.workflow_id=revision.workflow_id WHERE revision.workflow_id=? ORDER BY revision.created_at DESC,revision.revision_id DESC",
+            )
+            .map_err(storage)?;
+        let revisions = statement
+            .query_map([workflow_id], |row| {
+                let created_at: String = row.get(6)?;
+                Ok(WorkflowRevisionSummary {
+                    revision_id: row.get(0)?,
+                    workflow_id: row.get(1)?,
+                    parent_revision_id: row.get(2)?,
+                    schema_version: row.get(3)?,
+                    content_hash: row.get(4)?,
+                    change_summary: row.get(5)?,
+                    created_at: parse_time(&created_at),
+                    current: row.get::<_, i64>(7)? != 0,
+                })
+            })
+            .map_err(storage)?
+            .map(|row| row.map_err(storage))
+            .collect();
+        revisions
+    }
+
+    pub fn get_workflow_revision(
+        &self,
+        workflow_id: &str,
+        revision_id: &str,
+    ) -> Result<Option<Workflow>, EngineError> {
+        let json: Option<String> = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT definition_json FROM workflow_revisions WHERE workflow_id=? AND revision_id=?",
+                params![workflow_id, revision_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        json.map(|value| decode_workflow(&value)).transpose()
+    }
+
+    pub fn restore_workflow_revision(
+        &self,
+        workflow_id: &str,
+        revision_id: &str,
+    ) -> Result<Workflow, EngineError> {
+        let mut workflow = self
+            .get_workflow_revision(workflow_id, revision_id)?
+            .ok_or_else(|| EngineError::Storage("Workflow revision no longer exists.".into()))?;
+        workflow.updated_at = Utc::now();
+        self.save_workflow(workflow)
+    }
+
+    pub fn get_workflow_state(
+        &self,
+        workflow_id: &str,
+        key: &str,
+    ) -> Result<Option<Value>, EngineError> {
+        validate_state_key(key)?;
+        let encoded: Option<String> = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT value_json FROM workflow_state WHERE workflow_id=? AND state_key=?",
+                params![workflow_id, key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        encoded
+            .map(|value| serde_json::from_str(&value).map_err(storage))
+            .transpose()
+    }
+
+    pub fn set_workflow_states(
+        &self,
+        workflow_id: &str,
+        values: &std::collections::HashMap<String, Value>,
+    ) -> Result<(), EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        for (key, value) in values {
+            validate_state_key(key)?;
+            transaction
+                .execute(
+                    "INSERT INTO workflow_state(workflow_id,state_key,value_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(workflow_id,state_key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
+                    params![workflow_id, key, serde_json::to_string(value).map_err(storage)?, Utc::now().to_rfc3339()],
+                )
+                .map_err(storage)?;
+        }
+        transaction.commit().map_err(storage)
     }
 
     pub fn get_workflow(&self, id: &str) -> Result<Option<Workflow>, EngineError> {
@@ -699,23 +865,62 @@ impl Database {
     }
 
     pub fn list_workflows(&self) -> Result<Vec<WorkflowSummary>, EngineError> {
-        let workflows: Vec<Workflow> = {
+        self.list_workflows_including_archived(false)
+    }
+
+    pub fn list_workflows_including_archived(
+        &self,
+        include_archived: bool,
+    ) -> Result<Vec<WorkflowSummary>, EngineError> {
+        let workflows: Vec<(Workflow, WorkflowMetadata)> = {
             let connection = self
                 .connection
                 .lock()
                 .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
             let mut statement = connection
-                .prepare("SELECT definition_json FROM workflows ORDER BY updated_at DESC")
+                .prepare("SELECT w.definition_json,COALESCE(m.favorite,0),m.folder,COALESCE(m.tags_json,'[]'),m.archived_at,m.last_opened_at FROM workflows w LEFT JOIN workflow_metadata m ON m.workflow_id=w.id WHERE (?=1 OR m.archived_at IS NULL) ORDER BY w.updated_at DESC")
                 .map_err(storage)?;
             let rows = statement
-                .query_map([], |row| row.get::<_, String>(0))
+                .query_map([if include_archived { 1 } else { 0 }], |row| {
+                    let definition = row.get::<_, String>(0)?;
+                    let favorite = row.get::<_, i64>(1)? != 0;
+                    let folder = row.get::<_, Option<String>>(2)?;
+                    let tags_json = row.get::<_, String>(3)?;
+                    let archived_at = row.get::<_, Option<String>>(4)?;
+                    let last_opened_at = row.get::<_, Option<String>>(5)?;
+                    Ok((
+                        definition,
+                        favorite,
+                        folder,
+                        tags_json,
+                        archived_at,
+                        last_opened_at,
+                    ))
+                })
                 .map_err(storage)?;
-            rows.map(|row| decode_workflow(&row.map_err(storage)?))
-                .collect::<Result<_, _>>()?
+            rows.map(|row| {
+                let (definition, favorite, folder, tags_json, archived_at, last_opened_at) =
+                    row.map_err(storage)?;
+                Ok((
+                    decode_workflow(&definition)?,
+                    WorkflowMetadata {
+                        favorite,
+                        folder,
+                        tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+                        archived_at: archived_at
+                            .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                            .map(|value| value.with_timezone(&Utc)),
+                        last_opened_at: last_opened_at
+                            .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                            .map(|value| value.with_timezone(&Utc)),
+                    },
+                ))
+            })
+            .collect::<Result<_, _>>()?
         };
         workflows
             .into_iter()
-            .map(|workflow| {
+            .map(|(workflow, metadata)| {
                 let last_execution = self
                     .list_executions(Some(&workflow.id), 1)?
                     .into_iter()
@@ -723,11 +928,81 @@ impl Database {
                 let next_run_at = self.get_next_run(&workflow.id)?;
                 Ok(WorkflowSummary {
                     workflow,
+                    metadata,
                     last_execution,
                     next_run_at,
                 })
             })
             .collect()
+    }
+
+    pub fn update_workflow_metadata(
+        &self,
+        id: &str,
+        patch: WorkflowMetadataPatch,
+    ) -> Result<WorkflowMetadata, EngineError> {
+        let current = self.get_workflow_metadata(id)?;
+        let folder = match patch.folder {
+            Some(value) => value
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            None => current.folder,
+        };
+        if folder
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 64)
+        {
+            return Err(EngineError::Storage(
+                "Folder names are limited to 64 characters.".into(),
+            ));
+        }
+        let tags = patch
+            .tags
+            .unwrap_or(current.tags)
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        if tags.len() > 10 || tags.iter().any(|value| value.chars().count() > 32) {
+            return Err(EngineError::Storage(
+                "Use at most 10 tags, each no longer than 32 characters.".into(),
+            ));
+        }
+        let metadata = WorkflowMetadata {
+            favorite: patch.favorite.unwrap_or(current.favorite),
+            folder,
+            tags,
+            archived_at: patch.archived_at.unwrap_or(current.archived_at),
+            last_opened_at: patch.last_opened_at.unwrap_or(current.last_opened_at),
+        };
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO workflow_metadata(workflow_id,favorite,folder,tags_json,archived_at,last_opened_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workflow_id) DO UPDATE SET favorite=excluded.favorite,folder=excluded.folder,tags_json=excluded.tags_json,archived_at=excluded.archived_at,last_opened_at=excluded.last_opened_at",
+            params![id, metadata.favorite, metadata.folder, serde_json::to_string(&metadata.tags).map_err(storage)?, metadata.archived_at.map(|value|value.to_rfc3339()), metadata.last_opened_at.map(|value|value.to_rfc3339())]
+        ).map_err(storage)?;
+        Ok(metadata)
+    }
+
+    pub fn get_workflow_metadata(&self, id: &str) -> Result<WorkflowMetadata, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let value = connection.query_row("SELECT favorite,folder,tags_json,archived_at,last_opened_at FROM workflow_metadata WHERE workflow_id=?", [id], |row| Ok((row.get::<_,i64>(0)?,row.get::<_,Option<String>>(1)?,row.get::<_,String>(2)?,row.get::<_,Option<String>>(3)?,row.get::<_,Option<String>>(4)?))).optional().map_err(storage)?;
+        Ok(value
+            .map(
+                |(favorite, folder, tags_json, archived_at, last_opened_at)| WorkflowMetadata {
+                    favorite: favorite != 0,
+                    folder,
+                    tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+                    archived_at: archived_at
+                        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                        .map(|value| value.with_timezone(&Utc)),
+                    last_opened_at: last_opened_at
+                        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
+                        .map(|value| value.with_timezone(&Utc)),
+                },
+            )
+            .unwrap_or_default())
     }
 
     pub fn delete_workflow(&self, id: &str) -> Result<(), EngineError> {
@@ -737,6 +1012,35 @@ impl Database {
             .execute("DELETE FROM workflows WHERE id=?", [id])
             .map_err(storage)?;
         Ok(())
+    }
+
+    pub fn delete_workflow_with_artifacts(&self, id: &str) -> Result<Vec<String>, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let artifacts = {
+            let mut statement = transaction.prepare("SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE execution_id IN (SELECT id FROM executions WHERE workflow_id=?)").map_err(storage)?;
+            let rows = statement
+                .query_map([id], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?;
+            rows.into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>()
+        };
+        transaction
+            .execute("DELETE FROM workflows WHERE id=?", [id])
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(artifacts)
     }
 
     pub fn save_execution(&self, record: &ExecutionRecord) -> Result<(), EngineError> {
@@ -770,7 +1074,7 @@ impl Database {
             .lock()
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
         if let Some(id) = workflow_id {
-            let mut statement = connection.prepare("SELECT id,workflow_id,workflow_version,trigger_json,status,started_at,completed_at,duration_ms,node_executions_json,error_json,skip_reason,recovered_after_crash FROM executions WHERE workflow_id=? ORDER BY started_at DESC LIMIT ?").map_err(storage)?;
+            let mut statement = connection.prepare("SELECT id,workflow_id,workflow_version,trigger_json,status,started_at,completed_at,duration_ms,node_executions_json,error_json,skip_reason,recovered_after_crash FROM executions WHERE workflow_id=? ORDER BY started_at DESC, id DESC LIMIT ?").map_err(storage)?;
             let values = statement
                 .query_map(params![id, limit as i64], parse_execution)
                 .map_err(storage)?
@@ -778,7 +1082,7 @@ impl Database {
                 .collect();
             values
         } else {
-            let mut statement = connection.prepare("SELECT id,workflow_id,workflow_version,trigger_json,status,started_at,completed_at,duration_ms,node_executions_json,error_json,skip_reason,recovered_after_crash FROM executions ORDER BY started_at DESC LIMIT ?").map_err(storage)?;
+            let mut statement = connection.prepare("SELECT id,workflow_id,workflow_version,trigger_json,status,started_at,completed_at,duration_ms,node_executions_json,error_json,skip_reason,recovered_after_crash FROM executions ORDER BY started_at DESC, id DESC LIMIT ?").map_err(storage)?;
             let values = statement
                 .query_map([limit as i64], parse_execution)
                 .map_err(storage)?
@@ -786,6 +1090,20 @@ impl Database {
                 .collect();
             values
         }
+    }
+
+    pub fn all_executions(&self) -> Result<Vec<ExecutionRecord>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement = connection.prepare("SELECT id,workflow_id,workflow_version,trigger_json,status,started_at,completed_at,duration_ms,node_executions_json,error_json,skip_reason,recovered_after_crash FROM executions ORDER BY started_at DESC, id DESC").map_err(storage)?;
+        let values = statement
+            .query_map([], parse_execution)
+            .map_err(storage)?
+            .map(|value| value.map_err(storage))
+            .collect();
+        values
     }
 
     pub fn clear_old_executions(&self, keep: usize) -> Result<(usize, Vec<String>), EngineError> {
@@ -823,6 +1141,35 @@ impl Database {
             .map_err(storage)?;
         transaction.commit().map_err(storage)?;
         Ok((removed, paths))
+    }
+
+    pub fn delete_execution(&self, id: &str) -> Result<Vec<String>, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let artifacts = {
+            let mut statement = transaction.prepare("SELECT screenshot_path,trace_path FROM browser_diagnostics WHERE execution_id=?").map_err(storage)?;
+            let rows = statement
+                .query_map([id], |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                    ))
+                })
+                .map_err(storage)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(storage)?;
+            rows.into_iter()
+                .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
+                .collect::<Vec<_>>()
+        };
+        transaction
+            .execute("DELETE FROM executions WHERE id=?", [id])
+            .map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(artifacts)
     }
 
     pub fn recover_unfinished(&self) -> Result<usize, EngineError> {
@@ -1334,7 +1681,7 @@ fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata>
 fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
     match workflow.schema_version {
         crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
-        1 | 2 => {
+        1 | 2 | 3 => {
             workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
             Ok(workflow)
         }
@@ -1379,6 +1726,94 @@ fn migrate_saved_workflows(connection: &Connection) -> Result<(), EngineError> {
     Ok(())
 }
 
+fn backfill_workflow_revisions(connection: &Connection) -> Result<(), EngineError> {
+    let rows: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT workflow.id,workflow.definition_json FROM workflows workflow LEFT JOIN workflow_revision_heads head ON head.workflow_id=workflow.id WHERE head.workflow_id IS NULL",
+            )
+            .map_err(storage)?;
+        let values = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(storage)?
+            .collect::<Result<_, _>>()
+            .map_err(storage)?;
+        values
+    };
+    for (workflow_id, definition_json) in rows {
+        let workflow = decode_workflow(&definition_json)?;
+        let canonical_json = serde_json::to_string(&workflow).map_err(storage)?;
+        let revision_id = Uuid::new_v4().to_string();
+        connection
+            .execute(
+                "INSERT INTO workflow_revisions(revision_id,workflow_id,parent_revision_id,schema_version,content_hash,definition_json,change_summary,created_at) VALUES(?,?,NULL,?,?,?,?,?)",
+                params![revision_id, workflow_id, workflow.schema_version, workflow_content_hash(&workflow)?, canonical_json, "Imported existing workflow", workflow.updated_at.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        connection
+            .execute(
+                "INSERT INTO workflow_revision_heads(workflow_id,revision_id) VALUES(?,?)",
+                params![workflow_id, revision_id],
+            )
+            .map_err(storage)?;
+    }
+    Ok(())
+}
+
+fn workflow_content_hash(workflow: &Workflow) -> Result<String, EngineError> {
+    let mut value = serde_json::to_value(workflow).map_err(storage)?;
+    if let Some(object) = value.as_object_mut() {
+        object.remove("updatedAt");
+    }
+    let encoded = serde_json::to_vec(&value).map_err(storage)?;
+    Ok(format!("sha256:{:x}", Sha256::digest(encoded)))
+}
+
+fn summarize_workflow_change(previous: Option<&Workflow>, current: &Workflow) -> String {
+    let Some(previous) = previous else {
+        return "Created workflow".into();
+    };
+    let mut changes = Vec::new();
+    if previous.name != current.name {
+        changes.push("renamed workflow");
+    }
+    if previous.nodes != current.nodes {
+        changes.push("changed nodes");
+    }
+    if previous.edges != current.edges {
+        changes.push("changed connections");
+    }
+    if previous.settings != current.settings {
+        changes.push("changed settings or permissions");
+    }
+    if previous.enabled != current.enabled {
+        changes.push(if current.enabled {
+            "enabled workflow"
+        } else {
+            "disabled workflow"
+        });
+    }
+    if changes.is_empty() {
+        "Updated workflow details".into()
+    } else {
+        let summary = changes.join(", ");
+        let mut characters = summary.chars();
+        match characters.next() {
+            Some(first) => first.to_uppercase().collect::<String>() + characters.as_str(),
+            None => "Updated workflow".into(),
+        }
+    }
+}
+
+fn validate_state_key(key: &str) -> Result<(), EngineError> {
+    if key.trim().is_empty() || key.len() > 128 {
+        return Err(EngineError::Storage(
+            "Workflow state keys must contain 1 to 128 characters.".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1402,6 +1837,7 @@ mod tests {
                 position: Position { x: 0., y: 0. },
                 configuration: json!({}),
                 disabled: false,
+                input_bindings: Default::default(),
                 plugin: None,
             }],
             edges: vec![],
@@ -1416,7 +1852,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 7);
+            assert_eq!(db.schema_version().unwrap(), 9);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -1424,6 +1860,133 @@ mod tests {
         assert_eq!(saved.name, "Saved");
         assert_eq!(saved.schema_version, crate::model::CURRENT_SCHEMA_VERSION);
         assert!(!saved.settings.permissions.browser_automation_permitted);
+    }
+
+    #[test]
+    fn migrates_every_supported_database_version_to_nine() {
+        let migrations = [
+            include_str!("../migrations/001_initial.sql"),
+            include_str!("../migrations/002_schedule_state.sql"),
+            include_str!("../migrations/003_browser_integrations.sql"),
+            include_str!("../migrations/004_integration_polling.sql"),
+            include_str!("../migrations/005_plugin_installations.sql"),
+            include_str!("../migrations/006_plugin_execution.sql"),
+            include_str!("../migrations/007_runner_command_receipts.sql"),
+            include_str!("../migrations/008_workflow_metadata.sql"),
+        ];
+        for version in 1..=8 {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join(format!("v{version}.db"));
+            {
+                let connection = Connection::open(&path).unwrap();
+                connection
+                    .pragma_update(None, "foreign_keys", "ON")
+                    .unwrap();
+                for migration in migrations.iter().take(version) {
+                    connection.execute_batch(migration).unwrap();
+                }
+            }
+            let upgraded = Database::open(&path).unwrap();
+            assert_eq!(
+                upgraded.schema_version().unwrap(),
+                9,
+                "failed migration from v{version}"
+            );
+        }
+    }
+
+    #[test]
+    fn workflow_revisions_are_immutable_and_restore_creates_a_new_head() {
+        let db = Database::in_memory().unwrap();
+        let first = db.save_workflow(workflow()).unwrap();
+        let initial = db.list_workflow_revisions("w").unwrap();
+        assert_eq!(initial.len(), 1);
+        let initial_revision = initial[0].revision_id.clone();
+
+        let mut changed = first;
+        changed.name = "Changed".into();
+        db.save_workflow(changed).unwrap();
+        let changed_revisions = db.list_workflow_revisions("w").unwrap();
+        assert_eq!(changed_revisions.len(), 2);
+        assert!(changed_revisions[0].current);
+
+        let restored = db
+            .restore_workflow_revision("w", &initial_revision)
+            .unwrap();
+        assert_eq!(restored.name, "Saved");
+        let restored_revisions = db.list_workflow_revisions("w").unwrap();
+        assert_eq!(restored_revisions.len(), 3);
+        assert!(restored_revisions[0].current);
+        assert_eq!(
+            restored_revisions[0].parent_revision_id.as_deref(),
+            Some(changed_revisions[0].revision_id.as_str())
+        );
+    }
+
+    #[test]
+    fn workflow_state_is_scoped_and_replaced_atomically() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        db.set_workflow_states(
+            "w",
+            &std::collections::HashMap::from([("heading".into(), json!("First"))]),
+        )
+        .unwrap();
+        assert_eq!(
+            db.get_workflow_state("w", "heading").unwrap(),
+            Some(json!("First"))
+        );
+        db.set_workflow_states(
+            "w",
+            &std::collections::HashMap::from([("heading".into(), json!("Second"))]),
+        )
+        .unwrap();
+        assert_eq!(
+            db.get_workflow_state("w", "heading").unwrap(),
+            Some(json!("Second"))
+        );
+    }
+
+    #[test]
+    fn workflow_metadata_defaults_validates_and_hides_archived_rows() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+        let listed = db.list_workflows().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].metadata, WorkflowMetadata::default());
+        let updated = db
+            .update_workflow_metadata(
+                "w",
+                WorkflowMetadataPatch {
+                    favorite: Some(true),
+                    folder: Some(Some("  Operations  ".into())),
+                    tags: Some(vec![" daily ".into(), "reports".into()]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(updated.favorite);
+        assert_eq!(updated.folder.as_deref(), Some("Operations"));
+        assert_eq!(updated.tags, vec!["daily", "reports"]);
+        assert!(db
+            .update_workflow_metadata(
+                "w",
+                WorkflowMetadataPatch {
+                    tags: Some((0..11).map(|value| format!("tag-{value}")).collect()),
+                    ..Default::default()
+                }
+            )
+            .is_err());
+        db.update_workflow_metadata(
+            "w",
+            WorkflowMetadataPatch {
+                archived_at: Some(Some(Utc::now())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(db.list_workflows().unwrap().is_empty());
+        assert_eq!(db.list_workflows_including_archived(true).unwrap().len(), 1);
     }
 
     #[test]

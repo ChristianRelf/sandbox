@@ -1,6 +1,6 @@
 export type BuiltInNodeType =
   | "manual_trigger" | "schedule_trigger" | "file_watch_trigger" | "condition" | "set_data" | "delay"
-  | "http_request" | "desktop_notification" | "move_file" | "run_command"
+  | "http_request" | "desktop_notification" | "move_file" | "read_file" | "write_file" | "copy_path" | "delete_path" | "list_folder" | "parse_csv" | "parse_json" | "parse_text" | "get_workflow_state" | "set_workflow_state" | "compare_previous" | "run_command"
   | "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option" | "press_key"
   | "wait_for" | "extract_data" | "screenshot" | "download_file" | "upload_file" | "close_browser"
   | "gmail_new_email_trigger" | "gmail_get_email" | "gmail_create_draft" | "gmail_send_email" | "gmail_add_label"
@@ -13,8 +13,16 @@ export type ExecutionStatus = "queued" | "running" | "successful" | "failed" | "
 export interface Position { x:number; y:number }
 export interface PluginNodePin { pluginId:string; pluginVersion:string; packageIntegrity:string; publisherId:string; input?:unknown; credentialReferences?:Record<string,string> }
 export interface WorkflowOwner { ownerType:"personal"|"workspace"; ownerId:string }
-export interface WorkflowNode { id:string; type:NodeType; version:number; name:string; position:Position; configuration:Record<string,unknown>; disabled:boolean; plugin?:PluginNodePin }
-export interface WorkflowEdge { id:string; sourceNodeId:string; sourceHandle:string; targetNodeId:string; targetHandle:string }
+export type ValueType="any"|"string"|"number"|"boolean"|"object"|"array"|"path"|"connection";
+export interface NodePortDefinition { key:string; label:string; type:ValueType; required?:boolean; description?:string; sensitive?:boolean }
+export type InputBinding=
+  | {kind:"literal";value:unknown}
+  | {kind:"node_output";nodeId:string;path?:string[]}
+  | {kind:"template";template:string}
+  | {kind:"protected_variable";name:string}
+  | {kind:"connection";connectionId:string};
+export interface WorkflowNode { id:string; type:NodeType; version:number; name:string; position:Position; configuration:Record<string,unknown>; disabled:boolean; inputBindings?:Record<string,InputBinding>; plugin?:PluginNodePin }
+export interface WorkflowEdge { id:string; sourceNodeId:string; sourceHandle:string; targetNodeId:string; targetHandle:string; kind?:"control"; sourcePort?:string; targetPort?:string }
 export interface PermissionSummary { approvedFolders:string[]; approvedNetworkDomains:string[]; commandExecutionPermitted:boolean; backgroundExecutionPermitted:boolean; approvalRevision?:string|null; approvedBrowserProfileIds:string[]; browserAutomationPermitted:boolean; externalCommunicationPermitted:boolean; communicationApprovalRevision?:string|null }
 export interface WorkflowSettings { defaultNodeTimeoutMs:number; maxConcurrentNodes:number; permissions:PermissionSummary }
 export interface Workflow { id:string; schemaVersion:number; owner?:WorkflowOwner; name:string; description:string; enabled:boolean; triggerNodeId:string; nodes:WorkflowNode[]; edges:WorkflowEdge[]; settings:WorkflowSettings; createdAt:string; updatedAt:string }
@@ -24,11 +32,26 @@ export interface StructuredLocator { primary:LocatorCandidate; alternatives:Loca
 export interface BrowserDiagnostics { currentUrl:string; pageTitle:string; locatorAttempts:Array<{kind:string;value:string;matchCount:number;succeeded:boolean;weakFallback:boolean;error?:string}>; successfulLocator?:LocatorCandidate; matchCount:number; consoleErrors:string[]; failedNetworkRequests:string[]; screenshotPath?:string; tracePath?:string; playwrightError?:string; unexpectedNavigation:boolean; rerecordAvailable:boolean }
 export interface NodeExecution { nodeId:string; status:NodeStatus; startedAt?:string; completedAt?:string; durationMs?:number; input:unknown; output:unknown; logs:string[]; retryCount:number; error?:ExecutionError; skipReason?:string; branchFollowed?:string; browserDiagnostics?:BrowserDiagnostics }
 export interface ExecutionRecord { id:string; workflowId:string; workflowVersion:number; trigger:unknown; status:ExecutionStatus; startedAt:string; completedAt?:string; durationMs?:number; nodeExecutions:NodeExecution[]; error?:ExecutionError; skipReason?:string; recoveredAfterCrash:boolean }
-export interface WorkflowSummary { workflow:Workflow; lastExecution?:ExecutionRecord; nextRunAt?:string }
-export interface ValidationIssue { code:string; message:string; nodeId?:string; edgeId?:string }
-export interface RunnerStatus { paused:boolean; activeWorkflowIds:string[]; localSchedulesStopOnQuit:boolean }
+export interface WorkflowMetadata { favorite:boolean; folder?:string; tags:string[]; archivedAt?:string; lastOpenedAt?:string }
+export interface WorkflowMetadataPatch { favorite?:boolean; folder?:string|null; tags?:string[]; archivedAt?:string|null; lastOpenedAt?:string|null }
+export interface WorkflowSummary { workflow:Workflow; metadata:WorkflowMetadata; lastExecution?:ExecutionRecord; nextRunAt?:string }
+export interface WorkflowRevisionSummary { revisionId:string; workflowId:string; parentRevisionId?:string; schemaVersion:number; contentHash:string; changeSummary:string; createdAt:string; current:boolean }
+export interface ValidationIssue { code:string; message:string; severity:"error"|"warning"; nodeId?:string; edgeId?:string; fieldPath?:string; suggestion?:string }
+export interface ExecutionQuery { search?:string; workflowIds?:string[]; statuses?:ExecutionStatus[]; triggerTypes?:string[]; startedAfter?:string; startedBefore?:string; cursor?:string; limit?:number }
+export interface ExecutionPage { items:ExecutionRecord[]; nextCursor?:string }
+export interface RunnerStatus { paused:boolean; activeWorkflowIds:string[]; localSchedulesStopOnQuit:boolean; scheduledWorkflowCount:number; nextRunAt?:string }
 export interface AccountMetadata { accountId:string; email:string; displayName:string; sessionId:string; expiresAt:string; signedInAt:string }
 export interface AccountStatus { configured:boolean; signedIn:boolean; metadata?:AccountMetadata; localWorkflowsAvailable:boolean; configurationError?:string }
+export type BuiltInRole="owner"|"administrator"|"developer"|"operator"|"viewer";
+export interface AccountWorkspace { id:string; organisationId:string; name:string; slug:string; role:BuiltInRole; createdAt:string }
+export interface AccountOrganisation { id:string; name:string; slug:string; role:BuiltInRole; createdAt:string; workspaces:AccountWorkspace[] }
+export interface CloudWorkflow { workflowId:string; name:string; currentDraftRevisionId?:string|null; currentPublishedRevisionId?:string|null; createdAt:string; updatedAt?:string|null }
+export interface SyncEncryption { algorithm:"aes-256-gcm"; keyVersion:number }
+export interface SyncSearchableMetadata { name:string; folderId?:string|null; requiredPlugins:Array<{pluginId:string;version:string;packageIntegrity:string}>; permissionRequirements:string[]; runnerPolicy:Record<string,unknown> }
+export interface EncryptedWorkflowRevision { workflowId:string; revisionId:string; parentRevisionId?:string|null; schemaVersion:number; contentHash:string; editorDeviceId:string; updatedAt:string; syncState:"local"|"synced"|"conflicted"|"deleted"; encryption:SyncEncryption; encryptedPayload:string; payloadKeyEnvelope:string; searchableMetadata:SyncSearchableMetadata }
+export interface CloudSyncResult { revision:EncryptedWorkflowRevision; conflictRevisionId?:string|null }
+export interface CloudWorkflowApproval { approvalId:string;workflowId:string;revisionId:string;status:"pending"|"approved"|"rejected"|"expired";requiredApprovals:number;approvalCount:number;createdAt:string }
+export interface CloudPublishResult { workflowId:string;publishedRevisionId:string;previousPublishedRevisionId?:string|null }
 export interface BrowserProfileSettings { viewportWidth:number; viewportHeight:number; downloadFolder?:string; proxy?:string; userAgent?:string; permissions:string[] }
 export interface BrowserProfile { id:string; name:string; persistent:boolean; dataPath:string; settings:BrowserProfileSettings; createdAt:string; lastUsedAt?:string }
 export interface BrowserEngineStatus { available:boolean; protocolVersion:number; sidecarVersion?:string; browserName?:string; browserVersion?:string; error?:string }

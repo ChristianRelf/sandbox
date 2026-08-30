@@ -16,16 +16,16 @@ const session: AuthenticatedSession = {
 
 function repository(permissionByWorkspace: Record<string, Permission[]>): ControlPlaneRepository {
   return {
-    permissions: vi.fn(async (_accountId, workspaceId) => new Set(permissionByWorkspace[workspaceId] ?? [])),
-    createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), createSyncedWorkflow: vi.fn(), appendWorkflowRevision: vi.fn(),
+    permissions: vi.fn(async (_accountId, workspaceId) => new Set(permissionByWorkspace[workspaceId] ?? [])), listAccountOrganisations:vi.fn(),
+    createOrganisation: vi.fn(), createInvitation: vi.fn(), acceptInvitation: vi.fn(), createSyncedWorkflow: vi.fn(), listSyncedWorkflows:vi.fn(), appendWorkflowRevision: vi.fn(),
     listWorkflowRevisions: vi.fn(), getWorkflowRevision: vi.fn(), resolveSyncConflict: vi.fn(),
     createPublisher: vi.fn(), registerPublisherSigningKey: vi.fn(), createPluginSubmission: vi.fn(), getPluginSubmission: vi.fn(), recordAutomatedPluginReview: vi.fn(), publishPluginVersion: vi.fn(), decidePluginReview: vi.fn(), revokePluginVersion: vi.fn(),
     searchMarketplace: vi.fn(), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
-    requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
+    requestWorkflowApproval: vi.fn(), listWorkflowApprovals:vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
-    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(), listRunnerPools:vi.fn(), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
     getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
     createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn(),

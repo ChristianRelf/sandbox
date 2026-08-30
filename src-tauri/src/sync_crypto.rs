@@ -370,6 +370,7 @@ mod tests {
                 position: Position { x: 0.0, y: 0.0 },
                 configuration: serde_json::json!({"localOnly":"secret-value"}),
                 disabled: false,
+                input_bindings: Default::default(),
                 plugin: None,
             }],
             edges: vec![],

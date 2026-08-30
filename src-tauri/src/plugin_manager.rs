@@ -695,6 +695,7 @@ mod tests {
                 position: Position { x: 0.0, y: 0.0 },
                 configuration: serde_json::json!({}),
                 disabled: false,
+                input_bindings: Default::default(),
                 plugin: Some(PluginNodePin {
                     plugin_id: plugin.plugin_id.clone(),
                     plugin_version: plugin.version.clone(),

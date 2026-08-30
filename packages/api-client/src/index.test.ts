@@ -47,4 +47,13 @@ describe("SandboxApiClient v1 compatibility",()=>{
     expect(()=>new SandboxApiClient({baseUrl:"http://api.sandbox.test",fetch})).toThrow(/HTTPS/);
     expect(()=>new SandboxApiClient({baseUrl:"https://user:password@api.sandbox.test",fetch})).toThrow(/credentials/);
   });
+
+  it("exposes typed account discovery and encrypted sync routes",async()=>{
+    const fetch=vi.fn(async()=>json({items:[]}));
+    const client=new SandboxApiClient({baseUrl:"https://api.sandbox.test",fetch});
+    await client.listAccountOrganisations();
+    await client.listSyncedWorkflows("workspace id");
+    expect(String(fetch.mock.calls[0][0])).toBe("https://api.sandbox.test/v1/account/organisations");
+    expect(String(fetch.mock.calls[1][0])).toBe("https://api.sandbox.test/v1/workspaces/workspace%20id/sync/workflows");
+  });
 });

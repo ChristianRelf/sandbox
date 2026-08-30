@@ -42,5 +42,12 @@
     "shortDescription": "Local-first visual workflow automation",
     "category": "DeveloperTool",
     "windows": { "wix": { "language": "en-US" }, "nsis": { "displayLanguageSelector": false } }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["sandbox"]
+      }
+    }
   }
 }

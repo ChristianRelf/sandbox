@@ -1,4 +1,4 @@
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerAuthorizationContext, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Permission, RunnerAuthorizationContext, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
 import type { BillingEvent } from "./billing.js";
 
 export interface AuthenticatedSession {
@@ -26,6 +26,11 @@ export interface SessionVerifier {
 export interface OrganisationInput { name: string; slug: string }
 export interface OrganisationRecord extends OrganisationInput { id: string; createdAt: string }
 export interface WorkspaceRecord { id: string; organisationId: string; name: string; slug: string; createdAt: string }
+export interface AccountWorkspaceRecord extends WorkspaceRecord { role: BuiltInRole }
+export interface AccountOrganisationRecord extends OrganisationRecord { role: BuiltInRole; workspaces: AccountWorkspaceRecord[] }
+export interface SyncedWorkflowRecord { workflowId: string; name: string; currentDraftRevisionId: string | null; currentPublishedRevisionId: string | null; createdAt: string; updatedAt: string | null }
+export interface RunnerPoolRecord { id:string;workspaceId:string;environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";memberCount:number;createdAt:string;updatedAt:string }
+export interface RunnerPoolInput {environmentId:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;requiredTags:string[];maximumConcurrency:number;status:"active"|"paused"|"draining";members:Array<{runnerId:string;priority:number}>}
 export interface InvitationInput { workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: Date; tokenHash: Buffer }
 export interface InvitationRecord { id: string; organisationId: string; workspaceIds: string[]; email: string; role: BuiltInRole; expiresAt: string; status: string }
 export interface SyncWriteResult { revision: WorkflowRevision; conflictRevisionId: string | null }
@@ -86,10 +91,12 @@ export interface ProtectedVariableResolution extends ProtectedVariableRecord { v
 
 export interface ControlPlaneRepository {
   permissions(accountId: string, workspaceId: string): Promise<ReadonlySet<Permission>>;
+  listAccountOrganisations(actor: AuthenticatedSession): Promise<AccountOrganisationRecord[]>;
   createOrganisation(actor: AuthenticatedSession, input: OrganisationInput, correlationId: string): Promise<{ organisation: OrganisationRecord; workspace: WorkspaceRecord }>;
   createInvitation(actor: AuthenticatedSession, workspaceId: string, input: InvitationInput, correlationId: string): Promise<InvitationRecord>;
   acceptInvitation(actor: AuthenticatedSession, rawToken: string, correlationId: string): Promise<{ organisationId: string; workspaceIds: string[] }>;
   createSyncedWorkflow(actor: AuthenticatedSession, workspaceId: string, input: SyncedWorkflowInput, correlationId: string): Promise<{ workflowId: string; name: string; ownerType: "workspace"; ownerId: string }>;
+  listSyncedWorkflows(actor: AuthenticatedSession, workspaceId: string): Promise<SyncedWorkflowRecord[]>;
   appendWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, revision: WorkflowRevision, correlationId: string): Promise<SyncWriteResult>;
   listWorkflowRevisions(actor: AuthenticatedSession, workspaceId: string, workflowId: string, cursor: string | null, limit: number): Promise<{ items: WorkflowRevision[]; nextCursor: string | null }>;
   getWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string): Promise<WorkflowRevision | null>;
@@ -116,6 +123,7 @@ export interface ControlPlaneRepository {
   createRunnerCommand(actor: AuthenticatedSession, input: RunnerCommandInput, correlationId: string): Promise<RunnerCommand>;
   revokeRunner(actor: AuthenticatedSession, workspaceId: string, runnerId: string, correlationId: string): Promise<boolean>;
   requestWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, correlationId: string): Promise<WorkflowApprovalRecord>;
+  listWorkflowApprovals(actor: AuthenticatedSession, workspaceId: string, status: "all" | "pending" | "approved" | "rejected"): Promise<WorkflowApprovalRecord[]>;
   decideWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, approvalId: string, decision: "approved" | "rejected", reason: string | null, correlationId: string): Promise<WorkflowApprovalRecord>;
   publishWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, changeSummary: string, correlationId: string): Promise<{ workflowId: string; publishedRevisionId: string; previousPublishedRevisionId: string | null }>;
   rollbackWorkflowRevision(actor: AuthenticatedSession, workspaceId: string, workflowId: string, revisionId: string, reason: string, correlationId: string): Promise<{ workflowId: string; publishedRevisionId: string; previousPublishedRevisionId: string | null }>;
@@ -131,6 +139,11 @@ export interface ControlPlaneRepository {
   updateRunnerCommandStatus(device: RunnerDeviceSession, commandId: string, status: "accepted" | "rejected" | "completed", resultSummary: Record<string, unknown> | null): Promise<boolean>;
   recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void>;
   listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number): Promise<{ runners: RunnerRecord[]; runs: RunSummary[]; pendingApprovalCount: number; webhookFailureCount: number }>;
+  listDeployments(actor: AuthenticatedSession, workspaceId: string): Promise<DeploymentRecord[]>;
+  listRunnerPools(actor: AuthenticatedSession, workspaceId: string): Promise<RunnerPoolRecord[]>;
+  createRunnerPool(actor:AuthenticatedSession,workspaceId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord>;
+  updateRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord|null>;
+  deleteRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,correlationId:string):Promise<boolean>;
   listWorkspaceEnvironments(actor: AuthenticatedSession, workspaceId: string): Promise<WorkspaceEnvironmentRecord[]>;
   listSharedConnections(actor: AuthenticatedSession, workspaceId: string, environmentId: string | null): Promise<SharedConnectionRecord[]>;
   createSharedConnection(actor: AuthenticatedSession, workspaceId: string, input: Omit<SharedConnectionRecord, "id" | "workspaceId" | "health" | "expiresAt" | "lastUsedAt" | "createdBy">, correlationId: string): Promise<SharedConnectionRecord>;

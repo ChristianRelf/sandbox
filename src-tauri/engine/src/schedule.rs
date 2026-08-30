@@ -89,6 +89,7 @@ mod tests {
             position: Position { x: 0., y: 0. },
             configuration: config,
             disabled: false,
+            input_bindings: Default::default(),
             plugin: None,
         }
     }

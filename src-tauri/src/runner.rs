@@ -25,6 +25,7 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
         .items(&[&open, &approvals, &pause, &quit])
         .build()?;
     let paused = state.paused.clone();
+    let pause_control = pause.clone();
     let quitting = state.quitting.clone();
     let mut builder = TrayIconBuilder::with_id("runner")
         .menu(&menu)
@@ -46,6 +47,8 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
             "pause" => {
                 let next = !paused.load(Ordering::SeqCst);
                 paused.store(next, Ordering::SeqCst);
+                let _ = pause_control.set_checked(next);
+                let _ = app.emit("runner-status-changed", json!({"paused":next}));
                 if let Some(tray) = app.tray_by_id("runner") {
                     let _ = tray.set_tooltip(Some(if next {
                         "Sandbox runner · Paused"

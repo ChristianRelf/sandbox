@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use rand::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use url::Url;
 
@@ -55,6 +55,23 @@ struct TokenResponse {
     refresh_token: String,
     expires_in: i64,
     token_type: String,
+}
+
+#[derive(Deserialize)]
+struct RefreshTokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: i64,
+    token_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountSecret {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize)]
@@ -159,7 +176,7 @@ impl AccountAuthAttempt {
         &self,
         client: &Client,
         code: &str,
-    ) -> Result<(Value, AccountMetadata), String> {
+    ) -> Result<(AccountSecret, AccountMetadata), String> {
         let response = client
             .post(&self.token_url)
             .form(&[
@@ -222,10 +239,56 @@ impl AccountAuthAttempt {
             signed_in_at: Utc::now(),
         };
         Ok((
-            json!({"accessToken":token.access_token,"refreshToken":token.refresh_token,"tokenType":"Bearer","expiresAt":expires_at}),
+            AccountSecret {
+                access_token: token.access_token,
+                refresh_token: token.refresh_token,
+                token_type: "Bearer".into(),
+                expires_at,
+            },
             metadata,
         ))
     }
+}
+
+pub async fn refresh(client: &Client, current: &AccountSecret) -> Result<AccountSecret, String> {
+    let configuration = configuration()?;
+    let response = client
+        .post(&configuration.token_url)
+        .form(&[
+            ("client_id", configuration.client_id.as_str()),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", current.refresh_token.as_str()),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("Account session refresh could not connect: {error}"))?;
+    let status = response.status();
+    let body: Value = response.json().await.map_err(|error| {
+        format!("Account service returned an invalid refresh response: {error}")
+    })?;
+    if !status.is_success() {
+        return Err(format!(
+            "Account session refresh failed with HTTP {status}: {}",
+            body.get("error_description")
+                .and_then(Value::as_str)
+                .or_else(|| body.get("error").and_then(Value::as_str))
+                .unwrap_or("sign in again")
+        ));
+    }
+    let token: RefreshTokenResponse = serde_json::from_value(body)
+        .map_err(|error| format!("Account refresh response was incomplete: {error}"))?;
+    if !token.token_type.eq_ignore_ascii_case("bearer") || token.access_token.is_empty() {
+        return Err("Account service returned an unsupported refresh response.".into());
+    }
+    Ok(AccountSecret {
+        access_token: token.access_token,
+        refresh_token: token
+            .refresh_token
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| current.refresh_token.clone()),
+        token_type: "Bearer".into(),
+        expires_at: Utc::now() + Duration::seconds(token.expires_in.clamp(60, 86_400)),
+    })
 }
 
 fn configuration() -> Result<Configuration, String> {

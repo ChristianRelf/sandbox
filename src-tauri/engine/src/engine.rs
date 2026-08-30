@@ -2,9 +2,9 @@ use crate::{
     permissions::{require_domain, require_path},
     redaction::{bounded_log, redact_value},
     references::resolve_value,
-    validation::{topological_order, validate},
-    Database, EngineError, ExecutionRecord, ExecutionStatus, NodeExecution, NodeStatus,
-    PendingApproval, Workflow, WorkflowNode,
+    validation::{topological_order, validate, ValidationSeverity},
+    Database, EngineError, ExecutionRecord, ExecutionStatus, InputBinding, NodeExecution,
+    NodeStatus, PendingApproval, Workflow, WorkflowNode,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -159,9 +159,13 @@ impl Engine {
         cancellation: CancellationToken,
     ) -> Result<ExecutionRecord, EngineError> {
         let issues = validate(workflow);
-        if !issues.is_empty() {
+        let errors = issues
+            .into_iter()
+            .filter(|issue| issue.severity == ValidationSeverity::Error)
+            .collect::<Vec<_>>();
+        if !errors.is_empty() {
             return Err(EngineError::Validation(
-                issues
+                errors
                     .into_iter()
                     .map(|i| i.message)
                     .collect::<Vec<_>>()
@@ -204,6 +208,7 @@ impl Engine {
         };
         self.publish(&record)?;
         let mut outputs: HashMap<String, Value> = HashMap::new();
+        let mut pending_state: HashMap<String, Value> = HashMap::new();
         let mut active_edges: HashMap<String, bool> = workflow
             .edges
             .iter()
@@ -312,7 +317,7 @@ impl Engine {
             };
             let execution = tokio::select! {
                 _ = cancellation.cancelled() => Err(EngineError::Cancelled),
-                result = tokio::time::timeout(Duration::from_millis(timeout_ms), self.execute_node(node, workflow, &record.id, &trigger, &outputs, cancellation.clone())) => {
+                result = tokio::time::timeout(Duration::from_millis(timeout_ms), self.execute_node(node, workflow, &record.id, &trigger, &outputs, &pending_state, cancellation.clone())) => {
                     match result { Ok(value) => value, Err(_) => Err(EngineError::Node(format!("{} exceeded its {}-second timeout.", node.name, timeout_ms as f64 / 1000.0))) }
                 }
             };
@@ -336,6 +341,9 @@ impl Engine {
                         {
                             active_edges.insert(edge.id.clone(), edge.source_handle == branch);
                         }
+                    }
+                    for (key, value) in result.state_updates {
+                        pending_state.insert(key, value);
                     }
                     outputs.insert(node.id.clone(), result.output);
                 }
@@ -411,6 +419,9 @@ impl Engine {
             .node_executions
             .iter()
             .find_map(|node| node.error.clone());
+        if record.status == ExecutionStatus::Successful && !pending_state.is_empty() {
+            self.db.set_workflow_states(&workflow.id, &pending_state)?;
+        }
         self.publish(&record)?;
         Ok(record)
     }
@@ -542,11 +553,12 @@ impl Engine {
             .and_then(Value::as_u64)
             .unwrap_or(workflow.settings.default_node_timeout_ms)
             .clamp(100, 600_000);
+        let retry_state = HashMap::new();
         let execution = tokio::select! {
             _ = cancellation.cancelled() => Err(EngineError::Cancelled),
             result = tokio::time::timeout(
                 Duration::from_millis(timeout_ms),
-                self.execute_node(node, workflow, &record.id, &previous.trigger, &outputs, cancellation.clone())
+                self.execute_node(node, workflow, &record.id, &previous.trigger, &outputs, &retry_state, cancellation.clone())
             ) => match result {
                 Ok(value) => value,
                 Err(_) => Err(EngineError::Node(format!(
@@ -569,6 +581,12 @@ impl Engine {
                     .extend(result.logs.into_iter().map(bounded_log).take(99));
                 node_record.branch_followed = result.branch;
                 node_record.browser_diagnostics = result.browser_diagnostics;
+                if !result.state_updates.is_empty() {
+                    self.db.set_workflow_states(
+                        &workflow.id,
+                        &result.state_updates.into_iter().collect(),
+                    )?;
+                }
                 record.status = ExecutionStatus::Successful;
             }
             Err(error) => {
@@ -608,6 +626,154 @@ impl Engine {
         Ok(record)
     }
 
+    pub async fn test_node(
+        &self,
+        workflow: Workflow,
+        node_id: &str,
+        input_overrides: Value,
+        previous_execution_id: Option<&str>,
+        allow_side_effects: bool,
+        cancellation: CancellationToken,
+    ) -> Result<ExecutionRecord, EngineError> {
+        self.db.verify_workflow_plugin_pins(&workflow)?;
+        let mut node = workflow
+            .nodes
+            .iter()
+            .find(|node| node.id == node_id)
+            .cloned()
+            .ok_or_else(|| EngineError::Node("The selected node no longer exists.".into()))?;
+        if node_has_side_effect(&node.node_type) && !allow_side_effects {
+            return Err(EngineError::Permission(
+                "Testing this node can change external state. Confirm side effects before running the test.".into(),
+            ));
+        }
+        let overrides = input_overrides.as_object().ok_or_else(|| {
+            EngineError::Validation("Node test input overrides must be a JSON object.".into())
+        })?;
+        let configuration = node.configuration.as_object_mut().ok_or_else(|| {
+            EngineError::Validation("Node configuration must be a JSON object.".into())
+        })?;
+        for (key, value) in overrides {
+            configuration.insert(key.clone(), value.clone());
+        }
+
+        let previous = previous_execution_id
+            .map(|id| self.db.get_execution(id))
+            .transpose()?
+            .flatten();
+        if previous
+            .as_ref()
+            .is_some_and(|record| record.workflow_id != workflow.id)
+        {
+            return Err(EngineError::Validation(
+                "The selected execution snapshot belongs to another workflow.".into(),
+            ));
+        }
+        let outputs: HashMap<String, Value> = previous
+            .as_ref()
+            .map(|record| {
+                record
+                    .node_executions
+                    .iter()
+                    .filter(|execution| execution.status == NodeStatus::Successful)
+                    .map(|execution| (execution.node_id.clone(), execution.output.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let trigger = previous
+            .as_ref()
+            .map(|record| record.trigger.clone())
+            .unwrap_or_else(|| json!({"type":"node_test"}));
+        let started = Utc::now();
+        let mut record = ExecutionRecord {
+            id: Uuid::new_v4().to_string(),
+            workflow_id: workflow.id.clone(),
+            workflow_version: workflow.schema_version,
+            trigger: trigger.clone(),
+            status: ExecutionStatus::Running,
+            started_at: started,
+            completed_at: None,
+            duration_ms: None,
+            node_executions: vec![NodeExecution {
+                node_id: node.id.clone(),
+                status: NodeStatus::Running,
+                started_at: Some(started),
+                completed_at: None,
+                duration_ms: None,
+                input: redact_value(
+                    &json!({"snapshotExecutionId":previous_execution_id,"overrides":overrides}),
+                ),
+                output: Value::Null,
+                logs: vec![
+                    "Testing only this node; upstream and downstream nodes will not run.".into(),
+                ],
+                retry_count: 0,
+                error: None,
+                skip_reason: None,
+                branch_followed: None,
+                browser_diagnostics: None,
+            }],
+            error: None,
+            skip_reason: None,
+            recovered_after_crash: false,
+        };
+        self.publish(&record)?;
+        let instant = Instant::now();
+        let pending_state = HashMap::new();
+        let result = self
+            .execute_node(
+                &node,
+                &workflow,
+                &record.id,
+                &trigger,
+                &outputs,
+                &pending_state,
+                cancellation,
+            )
+            .await;
+        let completed = Utc::now();
+        let node_record = &mut record.node_executions[0];
+        node_record.completed_at = Some(completed);
+        node_record.duration_ms = Some(instant.elapsed().as_millis() as u64);
+        match result {
+            Ok(result) => {
+                node_record.status = NodeStatus::Successful;
+                node_record.output = redact_value(&result.output);
+                node_record
+                    .logs
+                    .extend(result.logs.into_iter().map(bounded_log));
+                node_record.branch_followed = result.branch;
+                node_record.browser_diagnostics = result.browser_diagnostics;
+                if !result.state_updates.is_empty() {
+                    node_record.logs.push(
+                        "Workflow state changes were previewed but not committed by this node test."
+                            .into(),
+                    );
+                }
+                record.status = ExecutionStatus::Successful;
+            }
+            Err(error) => {
+                node_record.status = if matches!(error, EngineError::Cancelled) {
+                    NodeStatus::Cancelled
+                } else {
+                    NodeStatus::Failed
+                };
+                node_record.error = Some(error.execution_error());
+                node_record.logs.push(bounded_log(error.to_string()));
+                record.error = node_record.error.clone();
+                record.status = if matches!(error, EngineError::Cancelled) {
+                    ExecutionStatus::Cancelled
+                } else {
+                    ExecutionStatus::Failed
+                };
+            }
+        }
+        record.completed_at = Some(completed);
+        record.duration_ms = Some((completed - started).num_milliseconds().max(0) as u64);
+        self.publish(&record)?;
+        Ok(record)
+    }
+
     fn publish(&self, record: &ExecutionRecord) -> Result<(), EngineError> {
         self.db.save_execution(record)?;
         let _ = self.events.send(EngineEvent::ExecutionUpdated {
@@ -623,8 +789,11 @@ impl Engine {
         execution_id: &str,
         trigger: &Value,
         outputs: &HashMap<String, Value>,
+        pending_state: &HashMap<String, Value>,
         cancellation: CancellationToken,
     ) -> Result<NodeResult, EngineError> {
+        let resolved_node = resolve_node_bindings(node, trigger, outputs)?;
+        let node = &resolved_node;
         match node.node_type.as_str() {
             "manual_trigger"
             | "schedule_trigger"
@@ -671,6 +840,17 @@ impl Engine {
                     .log("Desktop notification delivered."))
             }
             "move_file" => execute_move(node, workflow, trigger, outputs).await,
+            "read_file" => execute_read_file(node, workflow, trigger, outputs).await,
+            "write_file" => execute_write_file(node, workflow, trigger, outputs).await,
+            "copy_path" => execute_copy_path(node, workflow, trigger, outputs).await,
+            "delete_path" => execute_delete_path(node, workflow, trigger, outputs).await,
+            "list_folder" => execute_list_folder(node, workflow, trigger, outputs).await,
+            "parse_csv" => execute_parse_csv(node, workflow, trigger, outputs).await,
+            "parse_json" => execute_parse_json(node, workflow, trigger, outputs).await,
+            "parse_text" => execute_parse_text(node, workflow, trigger, outputs).await,
+            "get_workflow_state" | "set_workflow_state" | "compare_previous" => {
+                self.execute_workflow_state(node, workflow, trigger, outputs, pending_state)
+            }
             "run_command" => execute_command(node, workflow, trigger, outputs, cancellation).await,
             "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option"
             | "press_key" | "wait_for" | "extract_data" | "screenshot" | "download_file"
@@ -705,6 +885,63 @@ impl Engine {
             other => Err(EngineError::Node(format!(
                 "Node type '{other}' is not supported by this runner."
             ))),
+        }
+    }
+
+    fn execute_workflow_state(
+        &self,
+        node: &WorkflowNode,
+        workflow: &Workflow,
+        trigger: &Value,
+        outputs: &HashMap<String, Value>,
+        pending_state: &HashMap<String, Value>,
+    ) -> Result<NodeResult, EngineError> {
+        let config = resolve_value(&node.configuration, trigger, outputs)?;
+        let key = config
+            .get("key")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .ok_or_else(|| EngineError::Node("Workflow state requires a key.".into()))?;
+        let stored = pending_state
+            .get(key)
+            .cloned()
+            .or(self.db.get_workflow_state(&workflow.id, key)?);
+        match node.node_type.as_str() {
+            "get_workflow_state" => {
+                let found = stored.is_some();
+                let value = stored
+                    .unwrap_or_else(|| config.get("defaultValue").cloned().unwrap_or(Value::Null));
+                Ok(
+                    NodeResult::new(json!({"key":key,"found":found,"value":value}))
+                        .log(format!("Read workflow state '{key}'.")),
+                )
+            }
+            "set_workflow_state" => {
+                let value = config.get("value").cloned().unwrap_or(Value::Null);
+                Ok(
+                    NodeResult::new(json!({"key":key,"previous":stored,"value":value}))
+                        .with_state_update(key, value)
+                        .log(format!(
+                            "Prepared workflow state '{key}' for commit after success."
+                        )),
+                )
+            }
+            "compare_previous" => {
+                let current = config.get("value").cloned().unwrap_or(Value::Null);
+                let normalization = config
+                    .get("normalization")
+                    .and_then(Value::as_str)
+                    .unwrap_or("trim");
+                let changed = stored.as_ref().is_some_and(|previous| {
+                    normalize_state_value(previous, normalization)
+                        != normalize_state_value(&current, normalization)
+                });
+                Ok(NodeResult::new(json!({"key":key,"changed":changed,"firstObservation":stored.is_none(),"previous":stored,"current":current}))
+                    .with_state_update(key, current)
+                    .log(if changed { format!("Detected a change in workflow state '{key}'.") } else { format!("Workflow state '{key}' is unchanged.") }))
+            }
+            _ => unreachable!("state dispatcher only receives state nodes"),
         }
     }
 
@@ -980,6 +1217,7 @@ impl Engine {
                         retry_count: attempt,
                         branch: None,
                         browser_diagnostics: None,
+                        state_updates: vec![],
                     });
                 }
                 Err(error) => {
@@ -1009,6 +1247,7 @@ struct NodeResult {
     retry_count: u32,
     branch: Option<String>,
     browser_diagnostics: Option<crate::BrowserDiagnostics>,
+    state_updates: Vec<(String, Value)>,
 }
 impl NodeResult {
     fn new(output: Value) -> Self {
@@ -1018,6 +1257,7 @@ impl NodeResult {
             retry_count: 0,
             branch: None,
             browser_diagnostics: None,
+            state_updates: vec![],
         }
     }
     fn log(mut self, message: impl Into<String>) -> Self {
@@ -1027,6 +1267,100 @@ impl NodeResult {
     fn with_browser_diagnostics(mut self, diagnostics: Option<crate::BrowserDiagnostics>) -> Self {
         self.browser_diagnostics = diagnostics;
         self
+    }
+    fn with_state_update(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.state_updates.push((key.into(), value));
+        self
+    }
+}
+
+fn resolve_node_bindings(
+    node: &WorkflowNode,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<WorkflowNode, EngineError> {
+    if node.input_bindings.is_empty() {
+        return Ok(node.clone());
+    }
+    let mut resolved = node.clone();
+    let configuration = resolved.configuration.as_object_mut().ok_or_else(|| {
+        EngineError::Validation("Node configuration must be a JSON object.".into())
+    })?;
+    for (field, binding) in &node.input_bindings {
+        let value = match binding {
+            InputBinding::Literal { value } => value.clone(),
+            InputBinding::NodeOutput { node_id, path } => {
+                let output = outputs.get(node_id).ok_or_else(|| {
+                    EngineError::Node(format!(
+                        "Input '{field}' requires output from node '{node_id}', but no successful output is available."
+                    ))
+                })?;
+                value_at_path(output, path).cloned().ok_or_else(|| {
+                    EngineError::Node(format!(
+                        "Input '{field}' could not find output path '{}' on node '{node_id}'.",
+                        path.join(".")
+                    ))
+                })?
+            }
+            InputBinding::Template { template } => {
+                resolve_value(&Value::String(template.clone()), trigger, outputs)?
+            }
+            InputBinding::ProtectedVariable { name } => {
+                return Err(EngineError::Permission(format!(
+                    "Protected variable '{name}' must be mapped by the selected deployment environment."
+                )))
+            }
+            InputBinding::Connection { connection_id } => Value::String(connection_id.clone()),
+        };
+        configuration.insert(field.clone(), value);
+    }
+    Ok(resolved)
+}
+
+fn value_at_path<'a>(value: &'a Value, path: &[String]) -> Option<&'a Value> {
+    let mut current = value;
+    for segment in path {
+        current = match current {
+            Value::Object(object) => object.get(segment)?,
+            Value::Array(array) => array.get(segment.parse::<usize>().ok()?)?,
+            _ => return None,
+        };
+    }
+    Some(current)
+}
+
+fn node_has_side_effect(node_type: &str) -> bool {
+    matches!(
+        node_type,
+        "desktop_notification"
+            | "move_file"
+            | "write_file"
+            | "copy_path"
+            | "delete_path"
+            | "run_command"
+            | "gmail_create_draft"
+            | "gmail_send_email"
+            | "gmail_add_label"
+            | "discord_webhook"
+            | "discord_embed"
+            | "slack_webhook"
+            | "approval"
+            | "set_workflow_state"
+            | "compare_previous"
+    )
+}
+
+fn normalize_state_value(value: &Value, normalization: &str) -> Value {
+    let Value::String(text) = value else {
+        return value.clone();
+    };
+    match normalization {
+        "lowercase" => Value::String(text.trim().to_lowercase()),
+        "collapse_whitespace" => {
+            Value::String(text.split_whitespace().collect::<Vec<_>>().join(" "))
+        }
+        "none" => value.clone(),
+        _ => Value::String(text.trim().to_string()),
     }
 }
 
@@ -1078,6 +1412,7 @@ fn execute_condition(
         retry_count: 0,
         branch: Some(branch),
         browser_diagnostics: None,
+        state_updates: vec![],
     })
 }
 fn contains(left: &Value, right: &Value) -> bool {
@@ -1138,6 +1473,539 @@ fn strings<'a>(left: &'a Value, right: &'a Value) -> Option<(&'a str, &'a str)> 
 }
 fn numbers(left: &Value, right: &Value) -> Option<(f64, f64)> {
     Some((left.as_f64()?, right.as_f64()?))
+}
+
+async fn resolved_text_source(
+    config: &Value,
+    workflow: &Workflow,
+    node_name: &str,
+) -> Result<(String, Option<PathBuf>), EngineError> {
+    if let Some(content) = config
+        .get("content")
+        .and_then(Value::as_str)
+        .filter(|content| !content.is_empty())
+    {
+        return Ok((content.to_string(), None));
+    }
+    let path = config
+        .get("path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| {
+            EngineError::Node(format!(
+                "{node_name} requires mapped content or an approved file path."
+            ))
+        })?;
+    let path = require_path(Path::new(path), &workflow.settings.permissions)?;
+    let metadata = tokio::fs::metadata(&path).await.map_err(|error| {
+        EngineError::Node(format!(
+            "{node_name} could not inspect '{}': {error}",
+            path.display()
+        ))
+    })?;
+    let maximum = config
+        .get("maximumBytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(10_485_760)
+        .clamp(1, 104_857_600);
+    if metadata.len() > maximum {
+        return Err(EngineError::Node(format!(
+            "{node_name} refused '{}' because it exceeds the configured {} byte limit.",
+            path.display(),
+            maximum
+        )));
+    }
+    let bytes = tokio::fs::read(&path).await.map_err(|error| {
+        EngineError::Node(format!(
+            "{node_name} could not read '{}': {error}",
+            path.display()
+        ))
+    })?;
+    let text = String::from_utf8(bytes).map_err(|_| {
+        EngineError::Node(format!(
+            "{node_name} supports UTF-8 text files. '{}' is not valid UTF-8.",
+            path.display()
+        ))
+    })?;
+    Ok((text, Some(path)))
+}
+
+async fn execute_read_file(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let (content, path) = resolved_text_source(&config, workflow, "Read File").await?;
+    let path = path.ok_or_else(|| EngineError::Node("Read File requires a file path.".into()))?;
+    let bytes = content.len();
+    Ok(
+        NodeResult::new(json!({"path":path,"content":content,"bytes":bytes}))
+            .log(format!("Read {bytes} bytes from '{}'.", path.display())),
+    )
+}
+
+async fn execute_write_file(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let path = config
+        .get("path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| EngineError::Node("Write File requires a target path.".into()))?;
+    let path = require_path(&path, &workflow.settings.permissions)?;
+    let content = config
+        .get("content")
+        .and_then(Value::as_str)
+        .ok_or_else(|| EngineError::Node("Write File requires text content.".into()))?;
+    let overwrite = config
+        .get("overwrite")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if path.exists() && !overwrite {
+        return Err(EngineError::Node(format!(
+            "Write File cannot overwrite '{}'. Enable overwrite or choose another path.",
+            path.display()
+        )));
+    }
+    if config
+        .get("createParents")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await.map_err(|error| {
+                EngineError::Node(format!(
+                    "Write File could not create '{}': {error}",
+                    parent.display()
+                ))
+            })?;
+        }
+    }
+    tokio::fs::write(&path, content.as_bytes())
+        .await
+        .map_err(|error| {
+            EngineError::Node(format!(
+                "Write File could not write '{}': {error}",
+                path.display()
+            ))
+        })?;
+    Ok(
+        NodeResult::new(json!({"path":path,"bytes":content.len()})).log(format!(
+            "Wrote {} bytes to '{}'.",
+            content.len(),
+            path.display()
+        )),
+    )
+}
+
+async fn execute_copy_path(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let source = config
+        .get("source")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| EngineError::Node("Copy File or Folder requires a source.".into()))?;
+    let destination = config
+        .get("destination")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| EngineError::Node("Copy File or Folder requires a destination.".into()))?;
+    let source = require_path(&source, &workflow.settings.permissions)?;
+    let destination = require_path(&destination, &workflow.settings.permissions)?;
+    let overwrite = config
+        .get("overwrite")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if destination.exists() && !overwrite {
+        return Err(EngineError::Node(format!(
+            "Copy File or Folder cannot overwrite '{}'.",
+            destination.display()
+        )));
+    }
+    let source_for_copy = source.clone();
+    let destination_for_copy = destination.clone();
+    let copied = tokio::task::spawn_blocking(move || {
+        copy_path_sync(&source_for_copy, &destination_for_copy, overwrite)
+    })
+    .await
+    .map_err(|error| EngineError::Node(format!("Copy worker failed: {error}")))??;
+    Ok(
+        NodeResult::new(json!({"source":source,"destination":destination,"entries":copied}))
+            .log(format!("Copied {copied} file system entries.")),
+    )
+}
+
+fn copy_path_sync(source: &Path, destination: &Path, overwrite: bool) -> Result<u64, EngineError> {
+    if source.is_file() {
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                EngineError::Node(format!("Could not create '{}': {error}", parent.display()))
+            })?;
+        }
+        if destination.exists() && overwrite {
+            if destination.is_dir() {
+                std::fs::remove_dir_all(destination).map_err(|error| {
+                    EngineError::Node(format!(
+                        "Could not replace '{}': {error}",
+                        destination.display()
+                    ))
+                })?;
+            }
+        }
+        std::fs::copy(source, destination).map_err(|error| {
+            EngineError::Node(format!(
+                "Could not copy '{}' to '{}': {error}",
+                source.display(),
+                destination.display()
+            ))
+        })?;
+        return Ok(1);
+    }
+    if !source.is_dir() {
+        return Err(EngineError::Node(format!(
+            "Copy source '{}' does not exist.",
+            source.display()
+        )));
+    }
+    if destination.exists() && overwrite {
+        if destination.is_dir() {
+            std::fs::remove_dir_all(destination).map_err(|error| {
+                EngineError::Node(format!(
+                    "Could not replace '{}': {error}",
+                    destination.display()
+                ))
+            })?;
+        } else {
+            std::fs::remove_file(destination).map_err(|error| {
+                EngineError::Node(format!(
+                    "Could not replace '{}': {error}",
+                    destination.display()
+                ))
+            })?;
+        }
+    }
+    std::fs::create_dir_all(destination).map_err(|error| {
+        EngineError::Node(format!(
+            "Could not create '{}': {error}",
+            destination.display()
+        ))
+    })?;
+    let mut copied = 1;
+    for entry in std::fs::read_dir(source).map_err(|error| {
+        EngineError::Node(format!("Could not list '{}': {error}", source.display()))
+    })? {
+        let entry = entry.map_err(|error| EngineError::Node(error.to_string()))?;
+        copied += copy_path_sync(
+            &entry.path(),
+            &destination.join(entry.file_name()),
+            overwrite,
+        )?;
+    }
+    Ok(copied)
+}
+
+async fn execute_delete_path(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let path = config
+        .get("path")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| EngineError::Node("Delete File or Folder requires a path.".into()))?;
+    let path = require_path(&path, &workflow.settings.permissions)?;
+    if path.is_dir() {
+        if !config
+            .get("recursive")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(EngineError::Node(
+                "Deleting a folder requires the recursive option.".into(),
+            ));
+        }
+        tokio::fs::remove_dir_all(&path).await.map_err(|error| {
+            EngineError::Node(format!("Could not delete '{}': {error}", path.display()))
+        })?;
+    } else {
+        tokio::fs::remove_file(&path).await.map_err(|error| {
+            EngineError::Node(format!("Could not delete '{}': {error}", path.display()))
+        })?;
+    }
+    Ok(NodeResult::new(json!({"path":path,"deleted":true}))
+        .log(format!("Deleted '{}'.", path.display())))
+}
+
+async fn execute_list_folder(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let folder = config
+        .get("folder")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .ok_or_else(|| EngineError::Node("List Folder requires a folder.".into()))?;
+    let folder = require_path(&folder, &workflow.settings.permissions)?;
+    if !folder.is_dir() {
+        return Err(EngineError::Node(format!(
+            "List Folder expected '{}' to be a folder.",
+            folder.display()
+        )));
+    }
+    let recursive = config
+        .get("recursive")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let pattern = config
+        .get("pattern")
+        .and_then(Value::as_str)
+        .unwrap_or("*")
+        .to_string();
+    let root = folder.clone();
+    let entries = tokio::task::spawn_blocking(move || list_folder_sync(&root, recursive, &pattern))
+        .await
+        .map_err(|error| EngineError::Node(format!("Folder listing worker failed: {error}")))??;
+    Ok(
+        NodeResult::new(json!({"folder":folder,"count":entries.len(),"entries":entries}))
+            .log(format!("Listed {} matching entries.", entries.len())),
+    )
+}
+
+fn list_folder_sync(
+    folder: &Path,
+    recursive: bool,
+    pattern: &str,
+) -> Result<Vec<Value>, EngineError> {
+    let matcher = globset::Glob::new(pattern)
+        .map_err(|error| EngineError::Node(format!("Folder pattern is invalid: {error}")))?
+        .compile_matcher();
+    let mut pending = vec![folder.to_path_buf()];
+    let mut entries = Vec::new();
+    while let Some(current) = pending.pop() {
+        for entry in std::fs::read_dir(&current).map_err(|error| {
+            EngineError::Node(format!("Could not list '{}': {error}", current.display()))
+        })? {
+            let entry = entry.map_err(|error| EngineError::Node(error.to_string()))?;
+            let path = entry.path();
+            let metadata = entry
+                .metadata()
+                .map_err(|error| EngineError::Node(error.to_string()))?;
+            let relative = path.strip_prefix(folder).unwrap_or(&path);
+            if matcher.is_match(relative) || matcher.is_match(entry.file_name()) {
+                entries.push(json!({
+                    "name":entry.file_name().to_string_lossy(),
+                    "path":path,
+                    "relativePath":relative,
+                    "isDirectory":metadata.is_dir(),
+                    "bytes":if metadata.is_file(){Some(metadata.len())}else{None},
+                }));
+            }
+            if recursive && metadata.is_dir() {
+                pending.push(path);
+            }
+            if entries.len() >= 10_000 {
+                return Err(EngineError::Node(
+                    "List Folder exceeded the 10,000 entry safety limit.".into(),
+                ));
+            }
+        }
+    }
+    entries.sort_by(|left, right| {
+        left["relativePath"]
+            .as_str()
+            .cmp(&right["relativePath"].as_str())
+    });
+    Ok(entries)
+}
+
+async fn execute_parse_csv(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let (content, path) = resolved_text_source(&config, workflow, "Parse CSV").await?;
+    let delimiter_text = config
+        .get("delimiter")
+        .and_then(Value::as_str)
+        .unwrap_or(",");
+    let mut delimiter_chars = delimiter_text.chars();
+    let delimiter = delimiter_chars
+        .next()
+        .filter(|_| delimiter_chars.next().is_none())
+        .ok_or_else(|| EngineError::Node("CSV delimiter must be one character.".into()))?;
+    let trim = config.get("trim").and_then(Value::as_bool).unwrap_or(true);
+    let mut records = parse_csv_records(&content, delimiter, trim)?;
+    let has_headers = config
+        .get("hasHeaders")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let headers = if has_headers && !records.is_empty() {
+        unique_headers(records.remove(0))
+    } else {
+        vec![]
+    };
+    let rows: Vec<Value> = if has_headers {
+        records
+            .into_iter()
+            .map(|record| {
+                Value::Object(
+                    headers
+                        .iter()
+                        .enumerate()
+                        .map(|(index, header)| {
+                            (
+                                header.clone(),
+                                Value::String(record.get(index).cloned().unwrap_or_default()),
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    } else {
+        records.into_iter().map(|record| json!(record)).collect()
+    };
+    Ok(
+        NodeResult::new(json!({"path":path,"headers":headers,"rows":rows,"rowCount":rows.len()}))
+            .log(format!("Parsed {} CSV data rows.", rows.len())),
+    )
+}
+
+fn parse_csv_records(
+    content: &str,
+    delimiter: char,
+    trim: bool,
+) -> Result<Vec<Vec<String>>, EngineError> {
+    let mut records = Vec::new();
+    let mut record = Vec::new();
+    let mut field = String::new();
+    let mut quoted = false;
+    let mut characters = content.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '"' if quoted && characters.peek() == Some(&'"') => {
+                field.push('"');
+                characters.next();
+            }
+            '"' => quoted = !quoted,
+            value if value == delimiter && !quoted => {
+                record.push(if trim {
+                    field.trim().to_string()
+                } else {
+                    std::mem::take(&mut field)
+                });
+                field.clear();
+            }
+            '\n' if !quoted => {
+                record.push(if trim {
+                    field.trim().to_string()
+                } else {
+                    std::mem::take(&mut field)
+                });
+                field.clear();
+                if record.iter().any(|value| !value.is_empty()) {
+                    records.push(std::mem::take(&mut record));
+                } else {
+                    record.clear();
+                }
+            }
+            '\r' if !quoted && characters.peek() == Some(&'\n') => {}
+            value => field.push(value),
+        }
+    }
+    if quoted {
+        return Err(EngineError::Node(
+            "CSV input ended inside a quoted field.".into(),
+        ));
+    }
+    if !field.is_empty() || !record.is_empty() {
+        record.push(if trim {
+            field.trim().to_string()
+        } else {
+            field
+        });
+        records.push(record);
+    }
+    Ok(records)
+}
+
+fn unique_headers(headers: Vec<String>) -> Vec<String> {
+    let mut counts = HashMap::<String, usize>::new();
+    headers
+        .into_iter()
+        .enumerate()
+        .map(|(index, header)| {
+            let base = if header.trim().is_empty() {
+                format!("column_{}", index + 1)
+            } else {
+                header
+            };
+            let count = counts.entry(base.clone()).or_insert(0);
+            *count += 1;
+            if *count == 1 {
+                base
+            } else {
+                format!("{base}_{}", *count)
+            }
+        })
+        .collect()
+}
+
+async fn execute_parse_json(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let (content, path) = resolved_text_source(&config, workflow, "Parse JSON").await?;
+    let value: Value = serde_json::from_str(&content)
+        .map_err(|error| EngineError::Node(format!("JSON input is invalid: {error}")))?;
+    Ok(NodeResult::new(json!({"path":path,"value":value})).log("Parsed JSON input."))
+}
+
+async fn execute_parse_text(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
+) -> Result<NodeResult, EngineError> {
+    let config = resolve_value(&node.configuration, trigger, outputs)?;
+    let (mut content, path) = resolved_text_source(&config, workflow, "Parse Text").await?;
+    if config.get("trim").and_then(Value::as_bool).unwrap_or(true) {
+        content = content.trim().to_string();
+    }
+    let remove_empty = config
+        .get("removeEmptyLines")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let lines: Vec<String> = content
+        .lines()
+        .filter(|line| !remove_empty || !line.trim().is_empty())
+        .map(str::to_string)
+        .collect();
+    Ok(NodeResult::new(json!({"path":path,"text":content,"lines":lines,"lineCount":lines.len(),"characterCount":content.chars().count()}))
+        .log(format!("Parsed {} lines of text.", lines.len())))
 }
 
 async fn execute_move(
@@ -1360,6 +2228,7 @@ mod tests {
             position: Position { x: 0., y: 0. },
             configuration: config,
             disabled: false,
+            input_bindings: Default::default(),
             plugin: None,
         }
     }
@@ -1370,6 +2239,9 @@ mod tests {
             source_handle: handle.into(),
             target_node_id: t.into(),
             target_handle: "input".into(),
+            kind: "control".into(),
+            source_port: Some(handle.into()),
+            target_port: Some("input".into()),
         }
     }
     fn base(nodes: Vec<WorkflowNode>, edges: Vec<WorkflowEdge>) -> Workflow {
@@ -1470,6 +2342,7 @@ mod tests {
                 &workflow,
                 "run-plugin",
                 &json!({"label":"resolved","value":42}),
+                &HashMap::new(),
                 &HashMap::new(),
                 CancellationToken::new(),
             )

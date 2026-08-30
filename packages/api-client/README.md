@@ -21,7 +21,7 @@ reuse the logical request identity. Bearer credentials are never included in
 thrown errors, redirects outside the configured origin cannot be requested, and
 fetch credentials are omitted.
 
-Convenience methods provide stable compile-time types for personal access tokens
-and service accounts. Every published operation has a named v1 OpenAPI request
+Convenience methods provide stable compile-time types for account workspaces,
+encrypted workflow sync, personal access tokens, and service accounts. Every published operation has a named v1 OpenAPI request
 and response schema; use `request({ parse })` with a Zod parser or equivalent when
 runtime response validation is also required.

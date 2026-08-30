@@ -28,6 +28,7 @@ use std::{
     },
 };
 use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 use tokio_util::sync::CancellationToken;
 
@@ -238,14 +239,25 @@ pub struct AppState {
     pub data_dir: std::path::PathBuf,
     pub plugin_manager: plugin_manager::PluginManager,
     pub sync_crypto: sync_crypto::WorkflowSyncCrypto,
+    pub pending_deep_links: Arc<Mutex<Vec<String>>>,
 }
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all()?;
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let database =
@@ -262,6 +274,14 @@ pub fn run() {
             )
             .map_err(|error| error.to_string())?;
             let sync_crypto = sync_crypto::WorkflowSyncCrypto::new(credential_vault.clone());
+            let pending_deep_links = Arc::new(Mutex::new(
+                app.deep_link()
+                    .get_current()?
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|url| validate_deep_link(url.as_str()))
+                    .collect(),
+            ));
             let sidecar_for_verify = browser_sidecar.clone();
             tauri::async_runtime::block_on(async {
                 let _ = sidecar_for_verify.verify().await;
@@ -287,6 +307,7 @@ pub fn run() {
                 data_dir,
                 plugin_manager,
                 sync_crypto,
+                pending_deep_links,
             };
             runner::create_tray(app, &state)?;
             runner::start_background_services(app.handle().clone(), &state);
@@ -298,6 +319,26 @@ pub fn run() {
                 }
             });
             app.manage(state);
+            let app_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<String> = event
+                    .urls()
+                    .iter()
+                    .filter_map(|url| validate_deep_link(url.as_str()))
+                    .collect();
+                if urls.is_empty() {
+                    return;
+                }
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.pending_deep_links.lock().extend(urls.clone());
+                }
+                let _ = app_handle.emit("deep-link-requested", &urls);
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -314,12 +355,21 @@ pub fn run() {
             commands::list_workflows,
             commands::get_workflow,
             commands::save_workflow,
+            commands::list_workflow_revisions,
+            commands::get_workflow_revision,
+            commands::restore_workflow_revision,
             commands::delete_workflow,
+            commands::update_workflow_metadata,
+            commands::duplicate_workflow,
+            commands::archive_workflow,
+            commands::restore_workflow,
+            commands::purge_workflow,
             commands::create_workflow,
             commands::export_workflow,
             commands::import_workflow,
             commands::validate_workflow,
             commands::run_workflow,
+            commands::test_workflow_node,
             commands::retry_failed_node,
             commands::retry_browser_execution_headed,
             commands::open_execution_artifact,
@@ -327,8 +377,11 @@ pub fn run() {
             commands::list_executions,
             commands::get_execution,
             commands::clear_execution_history,
+            commands::query_executions,
+            commands::delete_execution,
             commands::approve_permissions,
             commands::runner_status,
+            commands::set_runner_paused,
             commands::browser_engine_status,
             commands::restart_browser_engine,
             commands::list_browser_profiles,
@@ -354,6 +407,16 @@ pub fn run() {
             commands::account_status,
             commands::start_account_auth,
             commands::sign_out_account,
+            commands::list_account_organisations,
+            commands::create_account_organisation,
+            commands::list_cloud_workflows,
+            commands::push_cloud_workflow,
+            commands::list_cloud_workflow_revisions,
+            commands::list_cloud_workflow_approvals,
+            commands::request_cloud_workflow_approval,
+            commands::decide_cloud_workflow_approval,
+            commands::publish_cloud_workflow,
+            commands::import_cloud_workflow_revision,
             commands::list_pending_approvals,
             commands::resolve_pending_approval,
             commands::inspect_plugin_package,
@@ -364,8 +427,31 @@ pub fn run() {
             commands::prepare_workflow_sync,
             commands::import_synced_revision_copy,
             commands::search_marketplace,
-            commands::inspect_marketplace_plugin
+            commands::inspect_marketplace_plugin,
+            commands::take_deep_link_requests
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sandbox");
+}
+
+fn validate_deep_link(raw: &str) -> Option<String> {
+    if raw.len() > 4096 {
+        return None;
+    }
+    let parsed = url::Url::parse(raw).ok()?;
+    if parsed.scheme() != "sandbox"
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    let supported = matches!(
+        (parsed.host_str(), parsed.path()),
+        (Some("marketplace"), "/install") | (Some("templates"), "/import")
+    );
+    if !supported || parsed.query_pairs().count() > 20 {
+        return None;
+    }
+    Some(parsed.to_string())
 }

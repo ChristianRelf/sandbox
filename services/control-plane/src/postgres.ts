@@ -1,9 +1,9 @@
 import { createHash, createPublicKey, randomUUID, verify } from "node:crypto";
-import type { AuditEvent, BuiltInRole, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
+import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Permission, RunnerCommand, RunnerRecord, RunSummary, WorkflowRevision } from "@sandbox/contracts";
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, SharedConnectionRecord, SyncedWorkflowInput, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
+import type { AccountOrganisationRecord, AuthenticatedSession, ControlPlaneRepository, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, RunnerPoolInput, RunnerPoolRecord, SharedConnectionRecord, SyncedWorkflowInput, SyncedWorkflowRecord, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 import type { BillingEvent } from "./billing.js";
@@ -21,6 +21,58 @@ export class PostgresRepository implements ControlPlaneRepository {
         [workspaceId, accountId]
       );
       return new Set(result.rows.map(row => row.permission).filter(permission => allPermissions.includes(permission)));
+    });
+  }
+
+  async listAccountOrganisations(actor: AuthenticatedSession): Promise<AccountOrganisationRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{
+        organisation_id:string; organisation_name:string; organisation_slug:string; organisation_created_at:Date; organisation_role:BuiltInRole;
+        workspace_id:string | null; workspace_name:string | null; workspace_slug:string | null; workspace_created_at:Date | null; workspace_role:BuiltInRole | null;
+      }>(
+        `SELECT organisation.id AS organisation_id, organisation.name AS organisation_name,
+                organisation.slug AS organisation_slug, organisation.created_at AS organisation_created_at,
+                organisation_role.role_key AS organisation_role,
+                workspace.id AS workspace_id, workspace.name AS workspace_name,
+                workspace.slug AS workspace_slug, workspace.created_at AS workspace_created_at,
+                workspace_role.role_key AS workspace_role
+           FROM memberships membership
+           JOIN organisations organisation ON organisation.id = membership.organisation_id AND organisation.deleted_at IS NULL
+           JOIN roles organisation_role ON organisation_role.id = membership.role_id
+           LEFT JOIN workspace_memberships workspace_membership ON workspace_membership.account_id = membership.account_id
+           LEFT JOIN workspaces workspace ON workspace.id = workspace_membership.workspace_id
+             AND workspace.organisation_id = organisation.id AND workspace.deleted_at IS NULL
+           LEFT JOIN roles workspace_role ON workspace_role.id = workspace_membership.role_id
+          WHERE membership.account_id = $1 AND membership.status = 'active'
+          ORDER BY organisation.name, workspace.name`,
+        [actor.accountId]
+      );
+      const organisations = new Map<string, AccountOrganisationRecord>();
+      for (const row of result.rows) {
+        let organisation = organisations.get(row.organisation_id);
+        if (!organisation) {
+          organisation = {
+            id: row.organisation_id,
+            name: row.organisation_name,
+            slug: row.organisation_slug,
+            role: row.organisation_role,
+            createdAt: row.organisation_created_at.toISOString(),
+            workspaces: []
+          };
+          organisations.set(row.organisation_id, organisation);
+        }
+        if (row.workspace_id && row.workspace_name && row.workspace_slug && row.workspace_created_at && row.workspace_role) {
+          organisation.workspaces.push({
+            id: row.workspace_id,
+            organisationId: row.organisation_id,
+            name: row.workspace_name,
+            slug: row.workspace_slug,
+            role: row.workspace_role,
+            createdAt: row.workspace_created_at.toISOString()
+          });
+        }
+      }
+      return [...organisations.values()];
     });
   }
 
@@ -111,13 +163,44 @@ export class PostgresRepository implements ControlPlaneRepository {
 
   async createSyncedWorkflow(actor: AuthenticatedSession, workspaceId: string, input: SyncedWorkflowInput, correlationId: string) {
     return this.withAccount(actor.accountId, async client => {
-      await client.query(
+      const inserted = await client.query(
         `INSERT INTO synced_workflows(id, owner_type, owner_id, workspace_id, name)
-         VALUES($1, 'workspace', $2, $2, $3)`,
+         VALUES($1, 'workspace', $2, $2, $3)
+         ON CONFLICT(id) DO NOTHING`,
         [input.workflowId, workspaceId, input.name]
       );
-      await appendAudit(client, actor, workspaceId, "workflow.sync_enabled", "workflow", input.workflowId, null, { name: input.name }, correlationId);
+      const existing = await client.query<{workspace_id:string;name:string}>(
+        `SELECT workspace_id, name FROM synced_workflows WHERE id = $1 AND deleted_at IS NULL`,
+        [input.workflowId]
+      );
+      if (!existing.rowCount || existing.rows[0].workspace_id !== workspaceId) throw new DomainError("workflow_id_unavailable", "Workflow ID is already owned by another workspace.", 409);
+      if (inserted.rowCount) await appendAudit(client, actor, workspaceId, "workflow.sync_enabled", "workflow", input.workflowId, null, { name: input.name }, correlationId);
       return { workflowId: input.workflowId, name: input.name, ownerType: "workspace" as const, ownerId: workspaceId };
+    });
+  }
+
+  async listSyncedWorkflows(actor: AuthenticatedSession, workspaceId: string): Promise<SyncedWorkflowRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{
+        id:string; name:string; current_draft_revision_id:string | null; current_published_revision_id:string | null; created_at:Date; updated_at:Date | null;
+      }>(
+        `SELECT workflow.id, workflow.name, workflow.current_draft_revision_id,
+                workflow.current_published_revision_id, workflow.created_at,
+                revision.updated_at
+           FROM synced_workflows workflow
+           LEFT JOIN workflow_revisions revision ON revision.id = workflow.current_draft_revision_id
+          WHERE workflow.workspace_id = $1 AND workflow.deleted_at IS NULL
+          ORDER BY COALESCE(revision.updated_at, workflow.created_at) DESC, workflow.id`,
+        [workspaceId]
+      );
+      return result.rows.map(row => ({
+        workflowId: row.id,
+        name: row.name,
+        currentDraftRevisionId: row.current_draft_revision_id,
+        currentPublishedRevisionId: row.current_published_revision_id,
+        createdAt: row.created_at.toISOString(),
+        updatedAt: row.updated_at?.toISOString() ?? null
+      }));
     });
   }
 
@@ -569,6 +652,24 @@ export class PostgresRepository implements ControlPlaneRepository {
     });
   }
 
+  async listWorkflowApprovals(actor: AuthenticatedSession, workspaceId: string, status: "all" | "pending" | "approved" | "rejected"): Promise<WorkflowApprovalRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const requiredApprovals = await requiredApprovalCount(client, workspaceId);
+      const result = await client.query<ApprovalRow & {approval_count:string}>(
+        `SELECT approval.id, approval.workflow_id, approval.revision_id, approval.status,
+                approval.created_at, count(vote.account_id) FILTER (WHERE vote.decision = 'approved')::text AS approval_count
+           FROM workflow_approvals approval
+           LEFT JOIN workflow_approval_votes vote ON vote.approval_id = approval.id
+          WHERE approval.workspace_id = $1 AND ($2 = 'all' OR approval.status = $2)
+          GROUP BY approval.id
+          ORDER BY approval.created_at DESC
+          LIMIT 200`,
+        [workspaceId, status]
+      );
+      return result.rows.map(row => approvalFromRow(row, requiredApprovals, Number(row.approval_count)));
+    });
+  }
+
   async decideWorkflowApproval(actor: AuthenticatedSession, workspaceId: string, approvalId: string, decision: "approved" | "rejected", reason: string | null, correlationId: string): Promise<WorkflowApprovalRecord> {
     return this.withAccount(actor.accountId, async client => {
       const approval = await client.query<ApprovalRow>(`SELECT id,workflow_id,revision_id,status,created_at FROM workflow_approvals WHERE id=$1 AND workspace_id=$2 FOR UPDATE`, [approvalId, workspaceId]);
@@ -794,6 +895,86 @@ export class PostgresRepository implements ControlPlaneRepository {
       const approvals = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM workflow_approvals WHERE workspace_id=$1 AND status='pending'`, [workspaceId]);
       const webhooks = await client.query<{ count: string }>(`SELECT count(*)::text AS count FROM webhook_deliveries WHERE workspace_id=$1 AND status='failed'`, [workspaceId]);
       return { runners: runners.rows.map(runnerFromRow), runs: runs.rows.map(runSummaryFromRow), pendingApprovalCount: Number(approvals.rows[0]?.count ?? 0), webhookFailureCount: Number(webhooks.rows[0]?.count ?? 0) };
+    });
+  }
+
+  async listDeployments(actor: AuthenticatedSession, workspaceId: string): Promise<DeploymentRecord[]> {
+    return this.withAccount(actor.accountId, async client => {
+      const result = await client.query<{
+        id:string;workspace_id:string;workflow_id:string;workflow_revision_id:string;environment_id:string;environment:string;target_type:DeploymentRecord["target"];
+        target_runner_id:string|null;runner_pool_id:string|null;region:string;required_connection_ids:string[];required_plugins:DeploymentRecord["requiredPlugins"];
+        permission_snapshot_id:string;status:DeploymentRecord["status"];validation_result:Record<string,unknown>;usage_estimate:DeploymentRecord["usageEstimate"];
+        created_by:string;created_at:Date;activated_at:Date|null;supersedes_deployment_id:string|null;
+      }>(
+        `SELECT deployment.id,deployment.workspace_id,deployment.workflow_id,deployment.workflow_revision_id,
+                deployment.environment_id,environment.environment_key AS environment,deployment.target_type,
+                deployment.target_runner_id,deployment.runner_pool_id,deployment.region,deployment.required_connection_ids,
+                deployment.required_plugins,deployment.permission_snapshot_id,deployment.status,deployment.validation_result,
+                deployment.usage_estimate,deployment.created_by,deployment.created_at,deployment.activated_at,
+                deployment.supersedes_deployment_id
+           FROM workflow_deployments deployment
+           JOIN environments environment ON environment.id=deployment.environment_id
+          WHERE deployment.workspace_id=$1
+          ORDER BY deployment.updated_at DESC,deployment.id
+          LIMIT 500`,
+        [workspaceId]
+      );
+      return result.rows.map(row=>({
+        deploymentId:row.id,workspaceId:row.workspace_id,workflowId:row.workflow_id,workflowRevisionId:row.workflow_revision_id,
+        environmentId:row.environment_id,environment:row.environment as DeploymentRecord["environment"],target:row.target_type,targetRunnerId:row.target_runner_id,
+        runnerPoolId:row.runner_pool_id,region:row.region,requiredConnectionIds:row.required_connection_ids,requiredPlugins:row.required_plugins,
+        permissionSnapshotId:row.permission_snapshot_id,status:row.status,validation:row.validation_result,usageEstimate:row.usage_estimate,
+        createdBy:row.created_by,createdAt:row.created_at.toISOString(),activatedAt:row.activated_at?.toISOString()??null,supersedesDeploymentId:row.supersedes_deployment_id
+      }));
+    });
+  }
+
+  async listRunnerPools(actor: AuthenticatedSession, workspaceId: string) {
+    return this.withAccount(actor.accountId, async client => {
+      const result=await client.query<{
+        id:string;workspace_id:string;environment_id:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;required_tags:string[];maximum_concurrency:number;status:"active"|"paused"|"draining";member_count:string;created_at:Date;updated_at:Date;
+      }>(
+        `SELECT pool.id,pool.workspace_id,pool.environment_id,pool.name,pool.strategy,pool.region,
+                pool.required_tags,pool.maximum_concurrency,pool.status,count(member.runner_id)::text AS member_count,
+                pool.created_at,pool.updated_at
+           FROM runner_pools pool LEFT JOIN runner_pool_members member ON member.pool_id=pool.id AND member.enabled
+          WHERE pool.workspace_id=$1
+          GROUP BY pool.id ORDER BY pool.name,pool.id`,
+        [workspaceId]
+      );
+      return result.rows.map(row=>({id:row.id,workspaceId:row.workspace_id,environmentId:row.environment_id,name:row.name,strategy:row.strategy,region:row.region,requiredTags:row.required_tags,maximumConcurrency:row.maximum_concurrency,status:row.status,memberCount:Number(row.member_count),createdAt:row.created_at.toISOString(),updatedAt:row.updated_at.toISOString()}));
+    });
+  }
+
+  async createRunnerPool(actor:AuthenticatedSession,workspaceId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord>{
+    return this.withAccount(actor.accountId,async client=>{
+      await validateRunnerPoolReferences(client,workspaceId,input);
+      const poolId=randomUUID();
+      await client.query(`INSERT INTO runner_pools(id,workspace_id,environment_id,name,strategy,region,required_tags,maximum_concurrency,status,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[poolId,workspaceId,input.environmentId,input.name,input.strategy,input.region,input.requiredTags,input.maximumConcurrency,input.status,actor.accountId]);
+      await replaceRunnerPoolMembers(client,poolId,input.members);
+      await appendAudit(client,actor,workspaceId,"runner_pool.created","runner_pool",poolId,null,{name:input.name,environmentId:input.environmentId,strategy:input.strategy,memberCount:input.members.length},correlationId);
+      return readRunnerPool(client,workspaceId,poolId);
+    });
+  }
+
+  async updateRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,input:RunnerPoolInput,correlationId:string):Promise<RunnerPoolRecord|null>{
+    return this.withAccount(actor.accountId,async client=>{
+      await validateRunnerPoolReferences(client,workspaceId,input);
+      const updated=await client.query(`UPDATE runner_pools SET environment_id=$1,name=$2,strategy=$3,region=$4,required_tags=$5,maximum_concurrency=$6,status=$7,updated_at=now() WHERE id=$8 AND workspace_id=$9`,[input.environmentId,input.name,input.strategy,input.region,input.requiredTags,input.maximumConcurrency,input.status,poolId,workspaceId]);
+      if(!updated.rowCount)return null;
+      await replaceRunnerPoolMembers(client,poolId,input.members);
+      await appendAudit(client,actor,workspaceId,"runner_pool.updated","runner_pool",poolId,null,{name:input.name,environmentId:input.environmentId,strategy:input.strategy,status:input.status,memberCount:input.members.length},correlationId);
+      return readRunnerPool(client,workspaceId,poolId);
+    });
+  }
+
+  async deleteRunnerPool(actor:AuthenticatedSession,workspaceId:string,poolId:string,correlationId:string):Promise<boolean>{
+    return this.withAccount(actor.accountId,async client=>{
+      const active=await client.query(`SELECT 1 FROM workflow_deployments WHERE runner_pool_id=$1 AND status IN ('active','degraded','paused','deploying') LIMIT 1`,[poolId]);
+      if(active.rowCount)throw new DomainError("runner_pool_in_use","Pause or supersede active deployments before deleting this runner pool.",409);
+      const deleted=await client.query(`DELETE FROM runner_pools WHERE id=$1 AND workspace_id=$2`,[poolId,workspaceId]);
+      if(deleted.rowCount)await appendAudit(client,actor,workspaceId,"runner_pool.deleted","runner_pool",poolId,null,{},correlationId);
+      return Boolean(deleted.rowCount);
     });
   }
 
@@ -1196,6 +1377,29 @@ export class PostgresRepository implements ControlPlaneRepository {
   }
 }
 
+async function validateRunnerPoolReferences(client:PoolClient,workspaceId:string,input:RunnerPoolInput):Promise<void>{
+  const environment=await client.query(`SELECT 1 FROM environments WHERE id=$1 AND workspace_id=$2`,[input.environmentId,workspaceId]);
+  if(!environment.rowCount)throw new DomainError("environment_not_found","Runner pool environment does not belong to this workspace.",404);
+  const runnerIds=[...new Set(input.members.map(member=>member.runnerId))];
+  if(runnerIds.length!==input.members.length)throw new DomainError("runner_pool_member_duplicate","A runner can appear only once in a pool.",400);
+  if(runnerIds.length){
+    const runners=await client.query<{count:string}>(`SELECT count(*)::text AS count FROM runners WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND revoked_at IS NULL`,[workspaceId,runnerIds]);
+    if(Number(runners.rows[0]?.count??0)!==runnerIds.length)throw new DomainError("runner_pool_member_invalid","Every pool member must be an active runner in this workspace.",400);
+  }
+}
+
+async function replaceRunnerPoolMembers(client:PoolClient,poolId:string,members:RunnerPoolInput["members"]):Promise<void>{
+  await client.query(`DELETE FROM runner_pool_members WHERE pool_id=$1`,[poolId]);
+  for(const member of members)await client.query(`INSERT INTO runner_pool_members(pool_id,runner_id,priority) VALUES($1,$2,$3)`,[poolId,member.runnerId,member.priority]);
+}
+
+async function readRunnerPool(client:PoolClient,workspaceId:string,poolId:string):Promise<RunnerPoolRecord>{
+  const result=await client.query<RunnerPoolRow>(`SELECT pool.id,pool.workspace_id,pool.environment_id,pool.name,pool.strategy,pool.region,pool.required_tags,pool.maximum_concurrency,pool.status,count(member.runner_id)::text AS member_count,pool.created_at,pool.updated_at FROM runner_pools pool LEFT JOIN runner_pool_members member ON member.pool_id=pool.id AND member.enabled WHERE pool.workspace_id=$1 AND pool.id=$2 GROUP BY pool.id`,[workspaceId,poolId]);
+  if(!result.rowCount)throw new DomainError("runner_pool_not_found","Runner pool was not found in this workspace.",404);
+  const row=result.rows[0];
+  return {id:row.id,workspaceId:row.workspace_id,environmentId:row.environment_id,name:row.name,strategy:row.strategy,region:row.region,requiredTags:row.required_tags,maximumConcurrency:row.maximum_concurrency,status:row.status,memberCount:Number(row.member_count),createdAt:row.created_at.toISOString(),updatedAt:row.updated_at.toISOString()};
+}
+
 interface WorkflowRevisionRow {
   id: string;
   workflow_id: string;
@@ -1214,6 +1418,8 @@ interface WorkflowRevisionRow {
   encryption_key_version: number;
   sync_state: WorkflowRevision["syncState"];
 }
+
+interface RunnerPoolRow {id:string;workspace_id:string;environment_id:string;name:string;strategy:"least_loaded"|"round_robin"|"priority_failover";region:string|null;required_tags:string[];maximum_concurrency:number;status:"active"|"paused"|"draining";member_count:string;created_at:Date;updated_at:Date}
 
 interface RunnerPairingMetadata {
   operatingSystem: string; architecture: string; applicationVersion: string; protocolVersion: number; pluginRuntimeVersion: string;

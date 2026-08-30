@@ -317,6 +317,70 @@
         ]
       }
     },
+    "/v1/account/organisations": {
+      "get": {
+        "operationId": "get_v1_account_organisations",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1AccountOrganisationsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/account/profile": {
       "get": {
         "operationId": "get_v1_account_profile",
@@ -4391,6 +4455,163 @@
         }
       }
     },
+    "/v1/workspaces/{workspaceId}/deployments": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_deployments",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdDeploymentsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/workspaces/{workspaceId}/deployments/validate": {
+      "post": {
+        "operationId": "post_v1_workspaces_workspaceId_deployments_validate",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdDeploymentsValidateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdDeploymentsValidateInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/workspaces/{workspaceId}/environments": {
       "get": {
         "operationId": "get_v1_workspaces_workspaceId_environments",
@@ -5475,6 +5696,345 @@
         }
       }
     },
+    "/v1/workspaces/{workspaceId}/runner-pools": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_runner_pools",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdRunnerPoolsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_workspaces_workspaceId_runner_pools",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnerPoolsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1WorkspacesWorkspaceIdRunnerPoolsInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workspaces/{workspaceId}/runner-pools/{poolId}": {
+      "delete": {
+        "operationId": "delete_v1_workspaces_workspaceId_runner_pools_poolId",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdRunnerPoolsPoolIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteV1WorkspacesWorkspaceIdRunnerPoolsPoolIdInput"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "put_v1_workspaces_workspaceId_runner_pools_poolId",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "poolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdRunnerPoolsPoolIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutV1WorkspacesWorkspaceIdRunnerPoolsPoolIdInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/workspaces/{workspaceId}/runners": {
       "get": {
         "operationId": "get_v1_workspaces_workspaceId_runners",
@@ -6496,6 +7056,76 @@
       }
     },
     "/v1/workspaces/{workspaceId}/sync/workflows": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_sync_workflows",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdSyncWorkflowsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
       "post": {
         "operationId": "post_v1_workspaces_workspaceId_sync_workflows",
         "tags": [
@@ -7087,6 +7717,78 @@
             }
           }
         }
+      }
+    },
+    "/v1/workspaces/{workspaceId}/workflow-approvals": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_workflow_approvals",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdWorkflowApprovalsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/v1/workspaces/{workspaceId}/workflow-approvals/{approvalId}/decision": {
@@ -8971,6 +9673,14 @@
         ],
         "description": "Successful response for GET /v1/account/profile."
       },
+      "GetV1AccountOrganisationsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/account/organisations."
+      },
       "DeleteV1AccountInput": {
         "allOf": [
           {
@@ -9443,6 +10153,86 @@
         ],
         "description": "Successful response for GET /v1/workspaces/{workspaceId}/activity."
       },
+      "GetV1WorkspacesWorkspaceIdDeploymentsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/deployments."
+      },
+      "PostV1WorkspacesWorkspaceIdDeploymentsValidateInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/deployments/validate."
+      },
+      "PostV1WorkspacesWorkspaceIdDeploymentsValidateResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/deployments/validate."
+      },
+      "GetV1WorkspacesWorkspaceIdRunnerPoolsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/runner-pools."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnerPoolsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/workspaces/{workspaceId}/runner-pools."
+      },
+      "PostV1WorkspacesWorkspaceIdRunnerPoolsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/workspaces/{workspaceId}/runner-pools."
+      },
+      "PutV1WorkspacesWorkspaceIdRunnerPoolsPoolIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for PUT /v1/workspaces/{workspaceId}/runner-pools/{poolId}."
+      },
+      "PutV1WorkspacesWorkspaceIdRunnerPoolsPoolIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for PUT /v1/workspaces/{workspaceId}/runner-pools/{poolId}."
+      },
+      "DeleteV1WorkspacesWorkspaceIdRunnerPoolsPoolIdInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for DELETE /v1/workspaces/{workspaceId}/runner-pools/{poolId}."
+      },
+      "DeleteV1WorkspacesWorkspaceIdRunnerPoolsPoolIdResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for DELETE /v1/workspaces/{workspaceId}/runner-pools/{poolId}."
+      },
       "PostV1WorkspacesWorkspaceIdSyncRevisionsInput": {
         "allOf": [
           {
@@ -9474,6 +10264,14 @@
           }
         ],
         "description": "Successful response for POST /v1/workspaces/{workspaceId}/sync/workflows."
+      },
+      "GetV1WorkspacesWorkspaceIdSyncWorkflowsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/sync/workflows."
       },
       "GetV1WorkspacesWorkspaceIdSyncWorkflowsWorkflowIdRevisionsResponse": {
         "allOf": [
@@ -9522,6 +10320,14 @@
           }
         ],
         "description": "Successful response for POST /v1/workspaces/{workspaceId}/workflows/{workflowId}/revisions/{revisionId}/request-approval."
+      },
+      "GetV1WorkspacesWorkspaceIdWorkflowApprovalsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/workflow-approvals."
       },
       "PostV1WorkspacesWorkspaceIdWorkflowApprovalsApprovalIdDecisionInput": {
         "allOf": [

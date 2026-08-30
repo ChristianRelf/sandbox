@@ -5,13 +5,14 @@ use crate::{
     templates, AppState,
 };
 use chrono::{DateTime, Utc};
+use reqwest::Method;
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
     BrowserProfile, BrowserProfileSettings, ConnectionMetadata, ConnectionStatus, ExecutionRecord,
     InstalledPlugin, PendingApproval, PermissionSummary, StructuredLocator, Workflow,
-    WorkflowSummary,
+    WorkflowMetadataPatch, WorkflowRevisionSummary, WorkflowSummary,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::hash_map::Entry;
 use std::sync::atomic::Ordering;
@@ -25,6 +26,71 @@ use uuid::Uuid;
 type Result<T> = std::result::Result<T, String>;
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountWorkspace {
+    pub id: String,
+    pub organisation_id: String,
+    pub name: String,
+    pub slug: String,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountOrganisation {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+    pub workspaces: Vec<AccountWorkspace>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudWorkflow {
+    pub workflow_id: String,
+    pub name: String,
+    pub current_draft_revision_id: Option<String>,
+    pub current_published_revision_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudSyncResult {
+    pub revision: EncryptedWorkflowRevision,
+    pub conflict_revision_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudWorkflowApproval {
+    pub approval_id: String,
+    pub workflow_id: String,
+    pub revision_id: String,
+    pub status: String,
+    pub required_approvals: u32,
+    pub approval_count: u32,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudPublishResult {
+    pub workflow_id: String,
+    pub published_revision_id: String,
+    pub previous_published_revision_id: Option<String>,
+}
+
+#[tauri::command]
+pub fn take_deep_link_requests(state: State<'_, AppState>) -> Vec<String> {
+    std::mem::take(&mut *state.pending_deep_links.lock())
 }
 
 #[tauri::command]
@@ -133,6 +199,15 @@ pub fn prepare_workflow_sync(
     editor_device_id: String,
     state: State<'_, AppState>,
 ) -> Result<EncryptedWorkflowRevision> {
+    prepare_workflow_sync_revision(&id, parent_revision_id, editor_device_id, &state)
+}
+
+fn prepare_workflow_sync_revision(
+    id: &str,
+    parent_revision_id: Option<String>,
+    editor_device_id: String,
+    state: &AppState,
+) -> Result<EncryptedWorkflowRevision> {
     if !state
         .credential_vault
         .exists(account_auth::ACCOUNT_VAULT_ID)
@@ -143,7 +218,7 @@ pub fn prepare_workflow_sync(
     let workflow = state
         .engine
         .database()
-        .get_workflow(&id)
+        .get_workflow(id)
         .map_err(err)?
         .ok_or_else(|| "Workflow no longer exists.".to_string())?;
     let mut definition = serde_json::to_value(&workflow).map_err(err)?;
@@ -169,11 +244,322 @@ pub fn prepare_workflow_sync(
 }
 
 #[tauri::command]
+pub async fn list_account_organisations(
+    state: State<'_, AppState>,
+) -> Result<Vec<AccountOrganisation>> {
+    let payload =
+        control_plane_json(&state, Method::GET, "/v1/account/organisations", None).await?;
+    serde_json::from_value(
+        payload
+            .get("items")
+            .cloned()
+            .ok_or_else(|| "Account workspace response did not contain items.".to_string())?,
+    )
+    .map_err(|error| format!("Account workspace response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn create_account_organisation(
+    name: String,
+    slug: String,
+    state: State<'_, AppState>,
+) -> Result<AccountOrganisation> {
+    let name = name.trim();
+    let slug = slug.trim();
+    if !(2..=100).contains(&name.len()) {
+        return Err("Organisation name must be between 2 and 100 characters.".into());
+    }
+    if slug.is_empty()
+        || slug.len() > 63
+        || slug.starts_with('-')
+        || slug.ends_with('-')
+        || slug.chars().any(|character| {
+            !character.is_ascii_lowercase() && !character.is_ascii_digit() && character != '-'
+        })
+    {
+        return Err(
+            "Organisation slug must contain lowercase letters, numbers, and internal hyphens."
+                .into(),
+        );
+    }
+    let payload = control_plane_json(
+        &state,
+        Method::POST,
+        "/v1/organisations",
+        Some(json!({"name":name,"slug":slug})),
+    )
+    .await?;
+    let organisation = payload
+        .get("organisation")
+        .cloned()
+        .ok_or_else(|| "Organisation response was incomplete.".to_string())?;
+    let workspace = payload.get("workspace").cloned().ok_or_else(|| {
+        "Organisation response did not contain its default workspace.".to_string()
+    })?;
+    let mut organisation: AccountOrganisation = serde_json::from_value(json!({
+        "id": organisation.get("id"),
+        "name": organisation.get("name"),
+        "slug": organisation.get("slug"),
+        "role": "owner",
+        "createdAt": organisation.get("createdAt"),
+        "workspaces": [{
+            "id": workspace.get("id"),
+            "organisationId": workspace.get("organisationId"),
+            "name": workspace.get("name"),
+            "slug": workspace.get("slug"),
+            "role": "owner",
+            "createdAt": workspace.get("createdAt")
+        }]
+    }))
+    .map_err(|error| format!("Organisation response was invalid: {error}"))?;
+    organisation.workspaces.shrink_to_fit();
+    Ok(organisation)
+}
+
+#[tauri::command]
+pub async fn list_cloud_workflows(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CloudWorkflow>> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let payload = control_plane_json(
+        &state,
+        Method::GET,
+        &format!("/v1/workspaces/{workspace_id}/sync/workflows"),
+        None,
+    )
+    .await?;
+    serde_json::from_value(
+        payload
+            .get("items")
+            .cloned()
+            .ok_or_else(|| "Cloud workflow response did not contain items.".to_string())?,
+    )
+    .map_err(|error| format!("Cloud workflow response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn push_cloud_workflow(
+    workflow_id: String,
+    workspace_id: String,
+    parent_revision_id: Option<String>,
+    editor_device_id: String,
+    state: State<'_, AppState>,
+) -> Result<CloudSyncResult> {
+    let workflow_id = checked_uuid(&workflow_id, "Workflow")?;
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    if let Some(parent) = parent_revision_id.as_deref() {
+        checked_uuid(parent, "Parent revision")?;
+    }
+    let workflow = state
+        .engine
+        .database()
+        .get_workflow(&workflow_id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    control_plane_json(
+        &state,
+        Method::POST,
+        &format!("/v1/workspaces/{workspace_id}/sync/workflows"),
+        Some(json!({"workflowId":workflow_id,"name":workflow.name})),
+    )
+    .await?;
+    let revision =
+        prepare_workflow_sync_revision(&workflow_id, parent_revision_id, editor_device_id, &state)?;
+    let payload = control_plane_json(
+        &state,
+        Method::POST,
+        &format!("/v1/workspaces/{workspace_id}/sync/revisions"),
+        Some(serde_json::to_value(&revision).map_err(err)?),
+    )
+    .await?;
+    serde_json::from_value(payload)
+        .map_err(|error| format!("Cloud sync response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn list_cloud_workflow_revisions(
+    workspace_id: String,
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<EncryptedWorkflowRevision>> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let workflow_id = checked_uuid(&workflow_id, "Workflow")?;
+    let payload = control_plane_json(
+        &state,
+        Method::GET,
+        &format!("/v1/workspaces/{workspace_id}/sync/workflows/{workflow_id}/revisions?limit=100"),
+        None,
+    )
+    .await?;
+    serde_json::from_value(
+        payload
+            .get("items")
+            .cloned()
+            .ok_or_else(|| "Cloud revision response did not contain items.".to_string())?,
+    )
+    .map_err(|error| format!("Cloud revision response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn list_cloud_workflow_approvals(
+    workspace_id: String,
+    status: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<CloudWorkflowApproval>> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let status = status.unwrap_or_else(|| "all".into());
+    if !matches!(status.as_str(), "all" | "pending" | "approved" | "rejected") {
+        return Err("Approval status filter is invalid.".into());
+    }
+    let payload = control_plane_json(
+        &state,
+        Method::GET,
+        &format!("/v1/workspaces/{workspace_id}/workflow-approvals?status={status}"),
+        None,
+    )
+    .await?;
+    serde_json::from_value(
+        payload
+            .get("items")
+            .cloned()
+            .ok_or_else(|| "Cloud approval response did not contain items.".to_string())?,
+    )
+    .map_err(|error| format!("Cloud approval response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn request_cloud_workflow_approval(
+    workspace_id: String,
+    workflow_id: String,
+    revision_id: String,
+    state: State<'_, AppState>,
+) -> Result<CloudWorkflowApproval> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let workflow_id = checked_uuid(&workflow_id, "Workflow")?;
+    let revision_id = checked_uuid(&revision_id, "Revision")?;
+    let payload = control_plane_json(
+        &state,
+        Method::POST,
+        &format!("/v1/workspaces/{workspace_id}/workflows/{workflow_id}/revisions/{revision_id}/request-approval"),
+        Some(json!({})),
+    ).await?;
+    serde_json::from_value(
+        payload
+            .get("approval")
+            .cloned()
+            .ok_or_else(|| "Approval response was incomplete.".to_string())?,
+    )
+    .map_err(|error| format!("Approval response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn decide_cloud_workflow_approval(
+    workspace_id: String,
+    approval_id: String,
+    decision: String,
+    reason: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<CloudWorkflowApproval> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let approval_id = checked_uuid(&approval_id, "Approval")?;
+    if !matches!(decision.as_str(), "approved" | "rejected") {
+        return Err("Approval decision must be approved or rejected.".into());
+    }
+    if decision == "rejected"
+        && reason
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        return Err("A rejection reason is required.".into());
+    }
+    let payload = control_plane_json(
+        &state,
+        Method::POST,
+        &format!("/v1/workspaces/{workspace_id}/workflow-approvals/{approval_id}/decision"),
+        Some(json!({"decision":decision,"reason":reason})),
+    )
+    .await?;
+    serde_json::from_value(
+        payload
+            .get("approval")
+            .cloned()
+            .ok_or_else(|| "Approval response was incomplete.".to_string())?,
+    )
+    .map_err(|error| format!("Approval response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn publish_cloud_workflow(
+    workspace_id: String,
+    workflow_id: String,
+    revision_id: String,
+    change_summary: String,
+    state: State<'_, AppState>,
+) -> Result<CloudPublishResult> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let workflow_id = checked_uuid(&workflow_id, "Workflow")?;
+    let revision_id = checked_uuid(&revision_id, "Revision")?;
+    if change_summary.trim().is_empty() || change_summary.len() > 2_000 {
+        return Err(
+            "A publication change summary is required and must be at most 2,000 characters.".into(),
+        );
+    }
+    let payload = control_plane_json(
+        &state,
+        Method::POST,
+        &format!(
+            "/v1/workspaces/{workspace_id}/workflows/{workflow_id}/revisions/{revision_id}/publish"
+        ),
+        Some(json!({"changeSummary":change_summary.trim()})),
+    )
+    .await?;
+    serde_json::from_value(payload)
+        .map_err(|error| format!("Publication response was invalid: {error}"))
+}
+
+#[tauri::command]
+pub async fn import_cloud_workflow_revision(
+    workspace_id: String,
+    workflow_id: String,
+    revision_id: String,
+    state: State<'_, AppState>,
+) -> Result<Workflow> {
+    let workspace_id = checked_uuid(&workspace_id, "Workspace")?;
+    let workflow_id = checked_uuid(&workflow_id, "Workflow")?;
+    let revision_id = checked_uuid(&revision_id, "Revision")?;
+    let payload = control_plane_json(
+        &state,
+        Method::GET,
+        &format!(
+            "/v1/workspaces/{workspace_id}/sync/workflows/{workflow_id}/revisions/{revision_id}"
+        ),
+        None,
+    )
+    .await?;
+    let revision: EncryptedWorkflowRevision = serde_json::from_value(
+        payload
+            .get("revision")
+            .cloned()
+            .ok_or_else(|| "Cloud revision response did not contain a revision.".to_string())?,
+    )
+    .map_err(|error| format!("Cloud revision response was invalid: {error}"))?;
+    import_synced_revision(&revision, &state)
+}
+
+#[tauri::command]
 pub fn import_synced_revision_copy(
     revision: EncryptedWorkflowRevision,
     state: State<'_, AppState>,
 ) -> Result<Workflow> {
-    let mut workflow = state.sync_crypto.decrypt(&revision)?;
+    import_synced_revision(&revision, &state)
+}
+
+fn import_synced_revision(
+    revision: &EncryptedWorkflowRevision,
+    state: &AppState,
+) -> Result<Workflow> {
+    let mut workflow = state.sync_crypto.decrypt(revision)?;
     workflow.id = Uuid::new_v4().to_string();
     workflow.name = format!("{} (synced conflict copy)", workflow.name);
     workflow.enabled = false;
@@ -200,12 +586,33 @@ pub async fn inspect_marketplace_plugin(
 }
 
 #[tauri::command]
-pub fn list_workflows(state: State<'_, AppState>) -> Result<Vec<WorkflowSummary>> {
-    state.engine.database().list_workflows().map_err(err)
+pub fn list_workflows(
+    include_archived: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkflowSummary>> {
+    state
+        .engine
+        .database()
+        .list_workflows_including_archived(include_archived.unwrap_or(false))
+        .map_err(err)
 }
 #[tauri::command]
 pub fn get_workflow(id: String, state: State<'_, AppState>) -> Result<Option<Workflow>> {
-    state.engine.database().get_workflow(&id).map_err(err)
+    let workflow = state.engine.database().get_workflow(&id).map_err(err)?;
+    if workflow.is_some() {
+        state
+            .engine
+            .database()
+            .update_workflow_metadata(
+                &id,
+                WorkflowMetadataPatch {
+                    last_opened_at: Some(Some(Utc::now())),
+                    ..Default::default()
+                },
+            )
+            .map_err(err)?;
+    }
+    Ok(workflow)
 }
 #[tauri::command]
 pub fn save_workflow(workflow: Workflow, state: State<'_, AppState>) -> Result<Workflow> {
@@ -215,8 +622,198 @@ pub fn save_workflow(workflow: Workflow, state: State<'_, AppState>) -> Result<W
     state.engine.database().save_workflow(workflow).map_err(err)
 }
 #[tauri::command]
+pub fn list_workflow_revisions(
+    workflow_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkflowRevisionSummary>> {
+    state
+        .engine
+        .database()
+        .list_workflow_revisions(&workflow_id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn get_workflow_revision(
+    workflow_id: String,
+    revision_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<Workflow>> {
+    state
+        .engine
+        .database()
+        .get_workflow_revision(&workflow_id, &revision_id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn restore_workflow_revision(
+    workflow_id: String,
+    revision_id: String,
+    state: State<'_, AppState>,
+) -> Result<Workflow> {
+    state
+        .engine
+        .database()
+        .restore_workflow_revision(&workflow_id, &revision_id)
+        .map_err(err)
+}
+#[tauri::command]
 pub fn delete_workflow(id: String, state: State<'_, AppState>) -> Result<()> {
     state.engine.database().delete_workflow(&id).map_err(err)
+}
+
+#[tauri::command]
+pub fn update_workflow_metadata(
+    id: String,
+    patch: WorkflowMetadataPatch,
+    state: State<'_, AppState>,
+) -> Result<WorkflowSummary> {
+    state
+        .engine
+        .database()
+        .update_workflow_metadata(&id, patch)
+        .map_err(err)?;
+    state
+        .engine
+        .database()
+        .list_workflows_including_archived(true)
+        .map_err(err)?
+        .into_iter()
+        .find(|item| item.workflow.id == id)
+        .ok_or_else(|| "Workflow no longer exists.".into())
+}
+
+#[tauri::command]
+pub fn duplicate_workflow(
+    id: String,
+    name: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Workflow> {
+    let mut workflow = state
+        .engine
+        .database()
+        .get_workflow(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    let summaries = state
+        .engine
+        .database()
+        .list_workflows_including_archived(true)
+        .map_err(err)?;
+    let names = summaries
+        .iter()
+        .map(|item| item.workflow.name.to_lowercase())
+        .collect::<std::collections::HashSet<_>>();
+    let base = name
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("{} copy", workflow.name));
+    let mut candidate = base.clone();
+    let mut suffix = 2;
+    while names.contains(&candidate.to_lowercase()) {
+        candidate = format!("{base} {suffix}");
+        suffix += 1;
+    }
+    workflow.id = Uuid::new_v4().to_string();
+    workflow.name = candidate;
+    workflow.enabled = false;
+    workflow.settings.permissions = PermissionSummary::default();
+    workflow.created_at = Utc::now();
+    workflow.updated_at = workflow.created_at;
+    state.engine.database().save_workflow(workflow).map_err(err)
+}
+
+#[tauri::command]
+pub fn archive_workflow(id: String, state: State<'_, AppState>) -> Result<()> {
+    let mut workflow = state
+        .engine
+        .database()
+        .get_workflow(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    if workflow.enabled {
+        workflow.enabled = false;
+        state
+            .engine
+            .database()
+            .save_workflow(workflow)
+            .map_err(err)?;
+    }
+    state
+        .engine
+        .database()
+        .update_workflow_metadata(
+            &id,
+            WorkflowMetadataPatch {
+                archived_at: Some(Some(Utc::now())),
+                ..Default::default()
+            },
+        )
+        .map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restore_workflow(id: String, state: State<'_, AppState>) -> Result<()> {
+    let mut workflow = state
+        .engine
+        .database()
+        .get_workflow(&id)
+        .map_err(err)?
+        .ok_or_else(|| "Workflow no longer exists.".to_string())?;
+    if workflow.enabled {
+        workflow.enabled = false;
+        state
+            .engine
+            .database()
+            .save_workflow(workflow)
+            .map_err(err)?;
+    }
+    state
+        .engine
+        .database()
+        .update_workflow_metadata(
+            &id,
+            WorkflowMetadataPatch {
+                archived_at: Some(None),
+                ..Default::default()
+            },
+        )
+        .map_err(err)?;
+    Ok(())
+}
+
+fn remove_safe_artifacts(paths: Vec<String>, root: &std::path::Path) {
+    let Ok(root) = root.canonicalize() else {
+        return;
+    };
+    for path in paths {
+        let candidate = std::path::PathBuf::from(path);
+        if let Ok(candidate) = candidate.canonicalize() {
+            if candidate.is_file() && candidate.starts_with(&root) {
+                let _ = std::fs::remove_file(candidate);
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub fn purge_workflow(id: String, state: State<'_, AppState>) -> Result<()> {
+    let metadata = state
+        .engine
+        .database()
+        .get_workflow_metadata(&id)
+        .map_err(err)?;
+    if metadata.archived_at.is_none() {
+        return Err("Only archived workflows can be permanently deleted.".into());
+    }
+    let artifacts = state
+        .engine
+        .database()
+        .delete_workflow_with_artifacts(&id)
+        .map_err(err)?;
+    remove_safe_artifacts(artifacts, &state.data_dir.join("artifacts"));
+    Ok(())
 }
 #[tauri::command]
 pub fn create_workflow(
@@ -427,6 +1024,28 @@ pub async fn run_workflow(
     result
 }
 #[tauri::command]
+pub async fn test_workflow_node(
+    workflow: Workflow,
+    node_id: String,
+    input_overrides: Option<Value>,
+    previous_execution_id: Option<String>,
+    allow_side_effects: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<ExecutionRecord> {
+    state
+        .engine
+        .test_node(
+            workflow,
+            &node_id,
+            input_overrides.unwrap_or_else(|| json!({})),
+            previous_execution_id.as_deref(),
+            allow_side_effects.unwrap_or(false),
+            CancellationToken::new(),
+        )
+        .await
+        .map_err(err)
+}
+#[tauri::command]
 pub async fn retry_failed_node(
     execution_id: String,
     node_id: String,
@@ -577,14 +1196,117 @@ pub fn clear_execution_history(keep: Option<usize>, state: State<'_, AppState>) 
         .database()
         .clear_old_executions(keep.unwrap_or(0))
         .map_err(err)?;
-    let artifact_root = state.data_dir.join("artifacts");
-    for path in artifacts {
-        let candidate = std::path::PathBuf::from(path);
-        if candidate.is_file() && candidate.starts_with(&artifact_root) {
-            let _ = std::fs::remove_file(candidate);
+    remove_safe_artifacts(artifacts, &state.data_dir.join("artifacts"));
+    Ok(removed)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionQuery {
+    search: Option<String>,
+    workflow_ids: Option<Vec<String>>,
+    statuses: Option<Vec<sandbox_engine::ExecutionStatus>>,
+    trigger_types: Option<Vec<String>>,
+    started_after: Option<DateTime<Utc>>,
+    started_before: Option<DateTime<Utc>>,
+    cursor: Option<String>,
+    limit: Option<usize>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionPage {
+    items: Vec<ExecutionRecord>,
+    next_cursor: Option<String>,
+}
+
+#[tauri::command]
+pub fn query_executions(
+    query: ExecutionQuery,
+    state: State<'_, AppState>,
+) -> Result<ExecutionPage> {
+    let workflows = state
+        .engine
+        .database()
+        .list_workflows_including_archived(true)
+        .map_err(err)?;
+    let mut items = state.engine.database().all_executions().map_err(err)?;
+    items.sort_by(|left, right| {
+        right
+            .started_at
+            .cmp(&left.started_at)
+            .then_with(|| right.id.cmp(&left.id))
+    });
+    if let Some(search) = query.search.filter(|value| !value.trim().is_empty()) {
+        let needle = search.to_lowercase();
+        items.retain(|run| {
+            workflows
+                .iter()
+                .find(|item| item.workflow.id == run.workflow_id)
+                .is_some_and(|item| item.workflow.name.to_lowercase().contains(&needle))
+                || run
+                    .error
+                    .as_ref()
+                    .is_some_and(|error| error.message.to_lowercase().contains(&needle))
+                || run.node_executions.iter().any(|node| {
+                    node.error.as_ref().is_some_and(|error| {
+                        error.message.to_lowercase().contains(&needle)
+                            || error
+                                .detail
+                                .as_ref()
+                                .is_some_and(|detail| detail.to_lowercase().contains(&needle))
+                    })
+                })
+        });
+    }
+    if let Some(ids) = query.workflow_ids.filter(|value| !value.is_empty()) {
+        items.retain(|run| ids.contains(&run.workflow_id));
+    }
+    if let Some(statuses) = query.statuses.filter(|value| !value.is_empty()) {
+        items.retain(|run| statuses.contains(&run.status));
+    }
+    if let Some(types) = query.trigger_types.filter(|value| !value.is_empty()) {
+        items.retain(|run| {
+            run.trigger
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|value| types.iter().any(|item| item == value))
+        });
+    }
+    if let Some(after) = query.started_after {
+        items.retain(|run| run.started_at >= after);
+    }
+    if let Some(before) = query.started_before {
+        items.retain(|run| run.started_at <= before);
+    }
+    if let Some(cursor) = query.cursor {
+        if let Some((started, id)) = cursor.split_once('|') {
+            if let Ok(started) =
+                DateTime::parse_from_rfc3339(started).map(|value| value.with_timezone(&Utc))
+            {
+                items.retain(|run| {
+                    run.started_at < started || (run.started_at == started && run.id.as_str() < id)
+                });
+            }
         }
     }
-    Ok(removed)
+    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let has_more = items.len() > limit;
+    items.truncate(limit);
+    let next_cursor = if has_more {
+        items
+            .last()
+            .map(|run| format!("{}|{}", run.started_at.to_rfc3339(), run.id))
+    } else {
+        None
+    };
+    Ok(ExecutionPage { items, next_cursor })
+}
+
+#[tauri::command]
+pub fn delete_execution(id: String, state: State<'_, AppState>) -> Result<()> {
+    let artifacts = state.engine.database().delete_execution(&id).map_err(err)?;
+    remove_safe_artifacts(artifacts, &state.data_dir.join("artifacts"));
+    Ok(())
 }
 #[tauri::command]
 pub fn approve_permissions(
@@ -609,14 +1331,44 @@ pub struct RunnerStatus {
     paused: bool,
     active_workflow_ids: Vec<String>,
     local_schedules_stop_on_quit: bool,
+    scheduled_workflow_count: usize,
+    next_run_at: Option<DateTime<Utc>>,
 }
 #[tauri::command]
 pub fn runner_status(state: State<'_, AppState>) -> RunnerStatus {
+    let scheduled = state
+        .engine
+        .database()
+        .list_workflows()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| {
+            item.workflow.enabled
+                && item
+                    .workflow
+                    .nodes
+                    .iter()
+                    .any(|node| node.node_type == "schedule_trigger")
+        })
+        .collect::<Vec<_>>();
     RunnerStatus {
         paused: state.paused.load(Ordering::SeqCst),
         active_workflow_ids: state.cancellations.lock().keys().cloned().collect(),
         local_schedules_stop_on_quit: true,
+        scheduled_workflow_count: scheduled.len(),
+        next_run_at: scheduled
+            .into_iter()
+            .filter_map(|item| item.next_run_at)
+            .min(),
     }
+}
+
+#[tauri::command]
+pub fn set_runner_paused(paused: bool, app: AppHandle, state: State<'_, AppState>) -> RunnerStatus {
+    state.paused.store(paused, Ordering::SeqCst);
+    let status = runner_status(state);
+    let _ = app.emit("runner-status-changed", &status);
+    status
 }
 
 #[tauri::command]
@@ -1029,6 +1781,112 @@ pub fn account_status(state: State<'_, AppState>) -> Result<account_auth::Accoun
     })
 }
 
+fn checked_uuid(value: &str, label: &str) -> Result<String> {
+    Uuid::parse_str(value)
+        .map(|value| value.to_string())
+        .map_err(|_| format!("{label} ID must be a UUID."))
+}
+
+async fn control_plane_json(
+    state: &AppState,
+    method: Method,
+    path: &str,
+    body: Option<Value>,
+) -> Result<Value> {
+    if !path.starts_with("/v1/")
+        || path.starts_with("//")
+        || path.contains('\\')
+        || path.contains("..")
+        || path.contains('#')
+    {
+        return Err("Control-plane request path is invalid.".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(err)?;
+    let stored = state
+        .credential_vault
+        .get(account_auth::ACCOUNT_VAULT_ID)
+        .map_err(|_| "Sign in to use workspace and sync features.".to_string())?;
+    let mut secret: account_auth::AccountSecret = serde_json::from_value(stored)
+        .map_err(|_| "The stored account session is invalid. Sign in again.".to_string())?;
+    if secret.expires_at <= Utc::now() + chrono::Duration::seconds(60) {
+        secret = account_auth::refresh(&client, &secret).await?;
+        state.credential_vault.put(
+            account_auth::ACCOUNT_VAULT_ID,
+            &serde_json::to_value(&secret).map_err(err)?,
+        )?;
+        if let Some(mut metadata) = state
+            .engine
+            .database()
+            .get_setting::<account_auth::AccountMetadata>(account_auth::ACCOUNT_METADATA_KEY)
+            .map_err(err)?
+        {
+            metadata.expires_at = secret.expires_at;
+            state
+                .engine
+                .database()
+                .set_setting(account_auth::ACCOUNT_METADATA_KEY, &metadata)
+                .map_err(err)?;
+        }
+    }
+    let base = account_auth::control_plane_url()?;
+    let mut request = client
+        .request(
+            method.clone(),
+            format!("{}{}", base.trim_end_matches('/'), path),
+        )
+        .bearer_auth(&secret.access_token)
+        .header("accept", "application/json")
+        .header("x-correlation-id", Uuid::new_v4().to_string());
+    if method != Method::GET && method != Method::HEAD {
+        request = request.header("x-idempotency-key", Uuid::new_v4().to_string());
+    }
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("Sandbox could not reach the account service: {error}"))?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > 3 * 1024 * 1024)
+    {
+        return Err("Account service response exceeded the 3 MB safety limit.".into());
+    }
+    let status = response.status();
+    let correlation_id = response
+        .headers()
+        .get("x-correlation-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Account service response could not be read: {error}"))?;
+    if bytes.len() > 3 * 1024 * 1024 {
+        return Err("Account service response exceeded the 3 MB safety limit.".into());
+    }
+    let payload: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "Account service returned an invalid JSON response.".to_string())?;
+    if !status.is_success() {
+        let message = payload
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("The account service rejected the request.");
+        return Err(match correlation_id {
+            Some(correlation_id) => {
+                format!("{message} (HTTP {status}, reference {correlation_id})")
+            }
+            None => format!("{message} (HTTP {status})"),
+        });
+    }
+    Ok(payload)
+}
+
 #[tauri::command]
 pub async fn start_account_auth(
     create_account: bool,
@@ -1085,7 +1943,10 @@ pub async fn start_account_auth(
                     return Err(error);
                 }
             };
-            vault.put(account_auth::ACCOUNT_VAULT_ID, &secret)?;
+            vault.put(
+                account_auth::ACCOUNT_VAULT_ID,
+                &serde_json::to_value(&secret).map_err(err)?,
+            )?;
             if let Err(error) = database.set_setting(account_auth::ACCOUNT_METADATA_KEY, &metadata)
             {
                 let _ = vault.delete(account_auth::ACCOUNT_VAULT_ID);

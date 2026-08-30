@@ -2,7 +2,29 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InputBinding {
+    Literal {
+        value: Value,
+    },
+    NodeOutput {
+        node_id: String,
+        #[serde(default)]
+        path: Vec<String>,
+    },
+    Template {
+        template: String,
+    },
+    ProtectedVariable {
+        name: String,
+    },
+    Connection {
+        connection_id: String,
+    },
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +46,11 @@ pub struct WorkflowNode {
     pub configuration: Value,
     #[serde(default)]
     pub disabled: bool,
+    /// Versioned, typed data mappings. Static configuration remains in
+    /// `configuration`; bindings replace individual top-level fields at run
+    /// time without embedding secret material in the workflow document.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub input_bindings: std::collections::BTreeMap<String, InputBinding>,
     /// Present only for third-party nodes. Built-in v0.1/v0.2 nodes keep this
     /// field absent and therefore require no migration choice from the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -124,6 +151,16 @@ pub struct WorkflowEdge {
     pub source_handle: String,
     pub target_node_id: String,
     pub target_handle: String,
+    #[serde(default = "control_edge_kind")]
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_port: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_port: Option<String>,
+}
+
+fn control_edge_kind() -> String {
+    "control".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -281,8 +318,47 @@ pub struct ExecutionRecord {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowSummary {
     pub workflow: Workflow,
+    pub metadata: WorkflowMetadata,
     pub last_execution: Option<ExecutionRecord>,
     pub next_run_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRevisionSummary {
+    pub revision_id: String,
+    pub workflow_id: String,
+    pub parent_revision_id: Option<String>,
+    pub schema_version: u32,
+    pub content_hash: String,
+    pub change_summary: String,
+    pub created_at: DateTime<Utc>,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowMetadata {
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub folder: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub archived_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub last_opened_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowMetadataPatch {
+    pub favorite: Option<bool>,
+    pub folder: Option<Option<String>>,
+    pub tags: Option<Vec<String>>,
+    pub archived_at: Option<Option<DateTime<Utc>>>,
+    pub last_opened_at: Option<Option<DateTime<Utc>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

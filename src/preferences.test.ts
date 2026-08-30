@@ -23,8 +23,12 @@ describe("app preferences", () => {
     });
   });
 
+  it("migrates v1 dark-surface preferences without changing their appearance",()=>{
+    expect(normalisePreferences({surfaceTheme:"oled",accent:"blue"},true)).toMatchObject({colorScheme:"dark",darkSurface:"oled",accent:"blue",editorInspectorWidth:320});
+  });
+
   it("applies visual and node preferences to the document", () => {
-    applyPreferences({ ...defaultPreferences, accent: "violet", surfaceTheme: "oled", increasedContrast: true, showNodeDescriptions: false });
+    applyPreferences({ ...defaultPreferences, accent: "violet", colorScheme: "dark", darkSurface: "oled", increasedContrast: true, showNodeDescriptions: false });
     expect(document.documentElement.dataset).toMatchObject({
       accent: "violet",
       density: "comfortable",

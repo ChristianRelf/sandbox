@@ -1,4 +1,4 @@
-use crate::{EngineError, Workflow};
+use crate::{EngineError, InputBinding, Workflow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -14,8 +14,18 @@ const TRIGGERS: &[&str] = &[
 pub struct ValidationIssue {
     pub code: String,
     pub message: String,
+    pub severity: ValidationSeverity,
     pub node_id: Option<String>,
     pub edge_id: Option<String>,
+    pub field_path: Option<String>,
+    pub suggestion: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ValidationSeverity {
+    Error,
+    Warning,
 }
 
 pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
@@ -140,15 +150,52 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             .iter()
             .filter(|n| !n.disabled && !reachable.contains(n.id.as_str()))
         {
-            issues.push(issue(
+            let mut disconnected = issue(
                 "disconnected_node",
                 format!("{} is not connected to the trigger.", node.name),
                 Some(node.id.clone()),
                 None,
-            ));
+            );
+            disconnected.severity = ValidationSeverity::Warning;
+            disconnected.suggestion =
+                Some("Connect this node or disable it if it is not currently needed.".into());
+            issues.push(disconnected);
         }
     }
     for node in &workflow.nodes {
+        for (field, binding) in &node.input_bindings {
+            if field.trim().is_empty() {
+                let mut binding_issue = issue(
+                    "binding_field_missing",
+                    "A data binding has no target field.",
+                    Some(node.id.clone()),
+                    None,
+                );
+                binding_issue.field_path = Some("inputBindings".into());
+                issues.push(binding_issue);
+            }
+            if let InputBinding::NodeOutput { node_id, .. } = binding {
+                if node_id == &node.id {
+                    let mut binding_issue = issue(
+                        "binding_self_reference",
+                        "A node cannot map its own output as input.",
+                        Some(node.id.clone()),
+                        None,
+                    );
+                    binding_issue.field_path = Some(format!("inputBindings.{field}"));
+                    issues.push(binding_issue);
+                } else if !ids.contains(node_id.as_str()) {
+                    let mut binding_issue = issue(
+                        "binding_source_missing",
+                        format!("Input '{field}' references a node that no longer exists."),
+                        Some(node.id.clone()),
+                        None,
+                    );
+                    binding_issue.field_path = Some(format!("inputBindings.{field}"));
+                    issues.push(binding_issue);
+                }
+            }
+        }
         let missing = match node.node_type.as_str() {
             "http_request" => node
                 .configuration
@@ -183,6 +230,25 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             "move_file" => (node.configuration.get("source").is_none()
                 || node.configuration.get("destinationFolder").is_none())
             .then_some("Move File requires source and destination paths."),
+            "read_file" => missing_string_or_binding(node, "path")
+                .then_some("Read File requires an approved file path."),
+            "write_file" => (missing_string_or_binding(node, "path")
+                || missing_value_or_binding(node, "content"))
+            .then_some("Write File requires a path and content."),
+            "copy_path" => (missing_string_or_binding(node, "source")
+                || missing_string_or_binding(node, "destination"))
+            .then_some("Copy File or Folder requires source and destination paths."),
+            "delete_path" => missing_string_or_binding(node, "path")
+                .then_some("Delete File or Folder requires an approved path."),
+            "list_folder" => missing_string_or_binding(node, "folder")
+                .then_some("List Folder requires an approved folder."),
+            "parse_csv" | "parse_json" | "parse_text" => (missing_string_or_binding(node, "path")
+                && missing_string_or_binding(node, "content"))
+            .then_some("Map content from another node or choose an approved file."),
+            "get_workflow_state" | "set_workflow_state" | "compare_previous" => {
+                missing_string_or_binding(node, "key")
+                    .then_some("Workflow state nodes require a state key.")
+            }
             "run_command" => node
                 .configuration
                 .get("executable")
@@ -287,12 +353,13 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             _ => None,
         };
         if let Some(message) = missing {
-            issues.push(issue(
-                "incomplete_node",
-                message,
-                Some(node.id.clone()),
-                None,
-            ));
+            let mut incomplete = issue("incomplete_node", message, Some(node.id.clone()), None);
+            if let Some(field) = incomplete_field(node) {
+                incomplete.field_path = Some(format!("configuration.{field}"));
+                incomplete.suggestion =
+                    Some("Complete this field before running the workflow.".into());
+            }
+            issues.push(incomplete);
         }
         if is_browser_action(&node.node_type)
             && !has_upstream_browser_session(workflow, &node.id, &mut HashSet::new())
@@ -306,6 +373,92 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
         }
     }
     issues
+}
+
+fn missing_string_or_binding(node: &crate::WorkflowNode, field: &str) -> bool {
+    !node.input_bindings.contains_key(field)
+        && node
+            .configuration
+            .get(field)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+}
+
+fn missing_value_or_binding(node: &crate::WorkflowNode, field: &str) -> bool {
+    !node.input_bindings.contains_key(field)
+        && node
+            .configuration
+            .get(field)
+            .is_none_or(|value| value.is_null())
+}
+
+fn incomplete_field(node: &crate::WorkflowNode) -> Option<&'static str> {
+    let config = &node.configuration;
+    match node.node_type.as_str() {
+        "http_request" | "navigate" => Some("url"),
+        "condition" => Some(if config.get("left").is_none() {
+            "left"
+        } else {
+            "operator"
+        }),
+        "schedule_trigger" => Some("scheduleType"),
+        "file_watch_trigger" => Some("folder"),
+        "desktop_notification" => Some("title"),
+        "move_file" => Some(if config.get("source").is_none() {
+            "source"
+        } else {
+            "destinationFolder"
+        }),
+        "run_command" => Some("executable"),
+        "open_browser" => Some("profileId"),
+        "click_element" | "select_option" | "extract_data" => Some("locator"),
+        "fill_field" => Some(if !has_locator(config) {
+            "locator"
+        } else {
+            "value"
+        }),
+        "download_file" => Some(if !has_locator(config) {
+            "locator"
+        } else {
+            "destinationFolder"
+        }),
+        "upload_file" => Some(if !has_locator(config) {
+            "locator"
+        } else {
+            "file"
+        }),
+        "gmail_new_email_trigger" => Some("credentialId"),
+        "gmail_get_email" => Some(if empty_string(config, "credentialId") {
+            "credentialId"
+        } else {
+            "messageId"
+        }),
+        "gmail_create_draft" | "gmail_send_email" => {
+            Some(if empty_string(config, "credentialId") {
+                "credentialId"
+            } else {
+                "to"
+            })
+        }
+        "gmail_add_label" => Some(if empty_string(config, "credentialId") {
+            "credentialId"
+        } else {
+            "messageId"
+        }),
+        "discord_webhook" | "discord_embed" | "slack_webhook" => {
+            Some(if empty_string(config, "credentialId") {
+                "credentialId"
+            } else if node.node_type == "discord_embed" {
+                "description"
+            } else {
+                "content"
+            })
+        }
+        "approval" => Some("proposedAction"),
+        _ => None,
+    }
 }
 
 fn empty_string(configuration: &serde_json::Value, key: &str) -> bool {
@@ -379,8 +532,11 @@ fn issue(
     ValidationIssue {
         code: code.into(),
         message: message.into(),
+        severity: ValidationSeverity::Error,
         node_id,
         edge_id,
+        field_path: None,
+        suggestion: None,
     }
 }
 
@@ -443,6 +599,7 @@ mod tests {
                 position: Position { x: 0., y: 0. },
                 configuration: json!({}),
                 disabled: false,
+                input_bindings: Default::default(),
                 plugin: None,
             })
             .collect();
@@ -464,6 +621,9 @@ mod tests {
                     source_handle: "output".into(),
                     target_node_id: t.into(),
                     target_handle: "input".into(),
+                    kind: "control".into(),
+                    source_port: Some("output".into()),
+                    target_port: Some("input".into()),
                 })
                 .collect(),
             settings: Default::default(),

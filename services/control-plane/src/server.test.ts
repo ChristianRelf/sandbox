@@ -32,10 +32,12 @@ const workspaceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 function dependencies(permissions: string[]) {
   const repository: ControlPlaneRepository = {
     permissions: vi.fn(async () => new Set(permissions as never[])),
+    listAccountOrganisations: vi.fn(async () => []),
     createOrganisation: vi.fn(),
     createInvitation: vi.fn(async (_actor, _workspace, input) => ({ id: crypto.randomUUID(), organisationId: crypto.randomUUID(), workspaceIds: input.workspaceIds, email: input.email, role: input.role, expiresAt: input.expiresAt.toISOString(), status: "pending" })),
     acceptInvitation: vi.fn(),
     createSyncedWorkflow: vi.fn(),
+    listSyncedWorkflows: vi.fn(async () => []),
     appendWorkflowRevision: vi.fn(async (_actor, _workspace, revision) => ({ revision: { ...revision, syncState: "synced" }, conflictRevisionId: null })),
     listWorkflowRevisions: vi.fn(),
     getWorkflowRevision: vi.fn(),
@@ -44,9 +46,9 @@ function dependencies(permissions: string[]) {
     searchMarketplace: vi.fn(async () => ({ items: [], nextCursor: null })), getMarketplaceListing: vi.fn(), getMarketplacePackage: vi.fn(),
     listAuditEvents: vi.fn(), exportAccountData: vi.fn(), requestAccountDeletion: vi.fn(), listSessions: vi.fn(), revokeSession: vi.fn(),
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
-    requestWorkflowApproval: vi.fn(), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
+    requestWorkflowApproval: vi.fn(), listWorkflowApprovals: vi.fn(async()=>[]), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
-    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(async()=>[]), listRunnerPools:vi.fn(async()=>[]), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
     getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
     createWebhookEndpoint: vi.fn(), listWebhookEndpoints: vi.fn(), getWebhookEndpointByPublicId: vi.fn(), rotateWebhookSecret: vi.fn(), enqueueWebhookDelivery: vi.fn(), dequeueWebhookDeliveries: vi.fn(), acknowledgeWebhookDelivery: vi.fn(),
@@ -80,6 +82,18 @@ describe("control-plane API", () => {
     expect(response.statusCode).toBe(400);
     expect(response.headers["x-correlation-id"]).toBe("client-correlation-0001");
     expect(response.json()).toEqual({error:{code:"invalid_json",message:"The request body must be valid JSON."},correlationId:"client-correlation-0001"});
+    await server.close();
+  });
+
+  it("discovers only the signed-in account's workspaces and authorized synced workflows",async()=>{
+    const deps=dependencies(["workflows.view"]),organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",now=new Date().toISOString();
+    vi.mocked(deps.repository.listAccountOrganisations).mockResolvedValue([{id:organisationId,name:"Acme",slug:"acme",role:"developer",createdAt:now,workspaces:[{id:workspaceId,organisationId,name:"Operations",slug:"operations",role:"developer",createdAt:now}]}]);
+    vi.mocked(deps.repository.listSyncedWorkflows).mockResolvedValue([{workflowId:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",name:"Daily report",currentDraftRevisionId:null,currentPublishedRevisionId:null,createdAt:now,updatedAt:null}]);
+    const server=await createServer(deps),headers={authorization:"Bearer token"};
+    const account=await server.inject({method:"GET",url:"/v1/account/organisations",headers});
+    expect(account.statusCode,account.body).toBe(200);expect(account.json().items[0].workspaces[0].id).toBe(workspaceId);expect(deps.repository.listAccountOrganisations).toHaveBeenCalledWith(session);
+    const workflows=await server.inject({method:"GET",url:`/v1/workspaces/${workspaceId}/sync/workflows`,headers});
+    expect(workflows.statusCode,workflows.body).toBe(200);expect(workflows.json().items[0].name).toBe("Daily report");expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);
     await server.close();
   });
 

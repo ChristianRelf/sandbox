@@ -3,7 +3,8 @@ import { create } from "zustand";
 
 export type Accent = "lime" | "violet" | "blue";
 export type Density = "comfortable" | "compact";
-export type SurfaceTheme = "charcoal" | "oled";
+export type ColorScheme = "system" | "light" | "dark";
+export type DarkSurface = "charcoal" | "oled";
 export type StartView = "workflows" | "history";
 export type DateDisplay = "relative" | "absolute";
 export type UpdateChannel = "beta" | "stable";
@@ -11,7 +12,8 @@ export type UpdateChannel = "beta" | "stable";
 export interface AppPreferences {
   accent: Accent;
   density: Density;
-  surfaceTheme: SurfaceTheme;
+  colorScheme: ColorScheme;
+  darkSurface: DarkSurface;
   startView: StartView;
   dateDisplay: DateDisplay;
   reduceMotion: boolean;
@@ -27,12 +29,14 @@ export interface AppPreferences {
   checkForUpdates: boolean;
   updateChannel: UpdateChannel;
   sidebarCollapsed: boolean;
+  editorInspectorWidth: number;
 }
 
 export const defaultPreferences: AppPreferences = {
   accent: "lime",
   density: "comfortable",
-  surfaceTheme: "charcoal",
+  colorScheme: "system",
+  darkSurface: "charcoal",
   startView: "workflows",
   dateDisplay: "relative",
   reduceMotion: false,
@@ -48,24 +52,28 @@ export const defaultPreferences: AppPreferences = {
   checkForUpdates: true,
   updateChannel: "beta",
   sidebarCollapsed: false,
+  editorInspectorWidth: 320,
 };
 
-const STORAGE_KEY = "sandbox.app-preferences.v1";
+const STORAGE_KEY = "sandbox.app-preferences.v2";
+const LEGACY_STORAGE_KEY = "sandbox.app-preferences.v1";
 const accents = new Set<Accent>(["lime", "violet", "blue"]);
 const densities = new Set<Density>(["comfortable", "compact"]);
-const themes = new Set<SurfaceTheme>(["charcoal", "oled"]);
+const schemes = new Set<ColorScheme>(["system", "light", "dark"]);
+const surfaces = new Set<DarkSurface>(["charcoal", "oled"]);
 const startViews = new Set<StartView>(["workflows", "history"]);
 const dateDisplays = new Set<DateDisplay>(["relative", "absolute"]);
 const gridSizes = new Set([10, 20, 40]);
 const updateChannels = new Set<UpdateChannel>(["beta", "stable"]);
 
-export function normalisePreferences(value: unknown): AppPreferences {
+export function normalisePreferences(value: unknown, legacy = false): AppPreferences {
   if (!value || typeof value !== "object") return { ...defaultPreferences };
-  const input = value as Partial<AppPreferences>;
+  const input = value as Partial<AppPreferences> & { surfaceTheme?: DarkSurface };
   return {
     accent: accents.has(input.accent as Accent) ? input.accent as Accent : defaultPreferences.accent,
     density: densities.has(input.density as Density) ? input.density as Density : defaultPreferences.density,
-    surfaceTheme: themes.has(input.surfaceTheme as SurfaceTheme) ? input.surfaceTheme as SurfaceTheme : defaultPreferences.surfaceTheme,
+    colorScheme: schemes.has(input.colorScheme as ColorScheme) ? input.colorScheme as ColorScheme : legacy ? "dark" : defaultPreferences.colorScheme,
+    darkSurface: surfaces.has((input.darkSurface ?? input.surfaceTheme) as DarkSurface) ? (input.darkSurface ?? input.surfaceTheme) as DarkSurface : defaultPreferences.darkSurface,
     startView: startViews.has(input.startView as StartView) ? input.startView as StartView : defaultPreferences.startView,
     dateDisplay: dateDisplays.has(input.dateDisplay as DateDisplay) ? input.dateDisplay as DateDisplay : defaultPreferences.dateDisplay,
     reduceMotion: typeof input.reduceMotion === "boolean" ? input.reduceMotion : defaultPreferences.reduceMotion,
@@ -81,12 +89,23 @@ export function normalisePreferences(value: unknown): AppPreferences {
     checkForUpdates: typeof input.checkForUpdates === "boolean" ? input.checkForUpdates : defaultPreferences.checkForUpdates,
     updateChannel: updateChannels.has(input.updateChannel as UpdateChannel) ? input.updateChannel as UpdateChannel : defaultPreferences.updateChannel,
     sidebarCollapsed: typeof input.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : defaultPreferences.sidebarCollapsed,
+    editorInspectorWidth: typeof input.editorInspectorWidth === "number" ? Math.max(280, Math.min(480, Math.round(input.editorInspectorWidth))) : defaultPreferences.editorInspectorWidth,
   };
 }
 
 function readPreferences(): AppPreferences {
   if (typeof window === "undefined") return { ...defaultPreferences };
-  try { return normalisePreferences(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null")); }
+  try {
+    const current = window.localStorage.getItem(STORAGE_KEY);
+    if (current) return normalisePreferences(JSON.parse(current));
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const migrated = normalisePreferences(JSON.parse(legacy), true);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+    return { ...defaultPreferences };
+  }
   catch { return { ...defaultPreferences }; }
 }
 
@@ -111,9 +130,13 @@ export const usePreferences = create<PreferenceStore>((set) => ({
 
 export function applyPreferences(preferences: AppPreferences): void {
   const root = document.documentElement;
+  const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true;
+  const effectiveTheme = preferences.colorScheme === "system" ? (systemDark ? "dark" : "light") : preferences.colorScheme;
   root.dataset.accent = preferences.accent;
   root.dataset.density = preferences.density;
-  root.dataset.surface = preferences.surfaceTheme;
+  root.dataset.theme = effectiveTheme;
+  root.dataset.surface = preferences.darkSurface;
+  root.style.colorScheme = effectiveTheme;
   root.dataset.reduceMotion = String(preferences.reduceMotion);
   root.dataset.contrast = preferences.increasedContrast ? "high" : "standard";
   root.dataset.nodeDescriptions = String(preferences.showNodeDescriptions);
@@ -121,10 +144,18 @@ export function applyPreferences(preferences: AppPreferences): void {
 
 export function useApplyPreferences(): void {
   const preferences = usePreferences();
-  useEffect(() => applyPreferences(preferences), [
+  useEffect(() => {
+    applyPreferences(preferences);
+    if (preferences.colorScheme !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => applyPreferences(usePreferences.getState());
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [
     preferences.accent,
     preferences.density,
-    preferences.surfaceTheme,
+    preferences.colorScheme,
+    preferences.darkSurface,
     preferences.reduceMotion,
     preferences.increasedContrast,
     preferences.showNodeDescriptions,

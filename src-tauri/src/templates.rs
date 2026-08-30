@@ -22,6 +22,7 @@ fn node(
         position: Position { x, y },
         configuration,
         disabled: false,
+        input_bindings: Default::default(),
         plugin: None,
     }
 }
@@ -32,6 +33,9 @@ fn edge(id: &str, source: &str, handle: &str, target: &str) -> WorkflowEdge {
         source_handle: handle.into(),
         target_node_id: target.into(),
         target_handle: "input".into(),
+        kind: "control".into(),
+        source_port: Some(handle.into()),
+        target_port: Some("input".into()),
     }
 }
 fn base(
@@ -226,18 +230,26 @@ pub fn website_change_monitor() -> Workflow {
                 json!({"locator":accessible_locator("role", "heading", Some("Example Domain")),"extract":"text","fieldName":"heading","repeated":false,"timeoutMs":30000}),
             ),
             node(
-                "condition",
-                "condition",
-                "Has expected heading",
+                "compare",
+                "compare_previous",
+                "Compare with previous heading",
                 1180.,
                 220.,
-                json!({"left":"{{nodes.extract.output.data.heading}}","operator":"contains","right":"Example Domain"}),
+                json!({"key":"website-heading","value":"{{nodes.extract.output.data.heading}}","normalization":"collapse_whitespace"}),
+            ),
+            node(
+                "condition",
+                "condition",
+                "Heading changed",
+                1460.,
+                220.,
+                json!({"left":"{{nodes.compare.output.changed}}","operator":"equals","right":true}),
             ),
             node(
                 "changed",
                 "desktop_notification",
                 "Notify when changed",
-                1460.,
+                1740.,
                 330.,
                 json!({"title":"Website content changed","message":"The monitored heading is now: {{nodes.extract.output.data.heading}}"}),
             ),
@@ -246,8 +258,9 @@ pub fn website_change_monitor() -> Workflow {
             edge("e1", "schedule", "output", "browser"),
             edge("e2", "browser", "output", "navigate"),
             edge("e3", "navigate", "output", "extract"),
-            edge("e4", "extract", "output", "condition"),
-            edge("e5", "condition", "false", "changed"),
+            edge("e4", "extract", "output", "compare"),
+            edge("e5", "compare", "output", "condition"),
+            edge("e6", "condition", "true", "changed"),
         ],
         "schedule",
         PermissionSummary {
@@ -310,12 +323,28 @@ pub fn download_daily_report() -> Workflow {
                 json!({"locator":accessible_locator("role", "button", Some("Download report")),"destinationFolder":"","filename":"daily-report.csv","collisionBehaviour":"rename","maximumBytes":104857600,"timeoutMs":60000}),
             ),
             node(
-                "notification",
-                "desktop_notification",
-                "Report downloaded",
+                "parse",
+                "parse_csv",
+                "Parse downloaded report",
                 1740.,
                 220.,
-                json!({"title":"Daily report downloaded","message":"Saved {{nodes.download.output.filename}}"}),
+                json!({"path":"{{nodes.download.output.path}}","content":"","delimiter":",","hasHeaders":true,"trim":true}),
+            ),
+            node(
+                "condition",
+                "condition",
+                "Report contains rows",
+                2020.,
+                220.,
+                json!({"left":"{{nodes.parse.output.rowCount}}","operator":"greater_than","right":0}),
+            ),
+            node(
+                "notification",
+                "desktop_notification",
+                "Report ready",
+                2300.,
+                220.,
+                json!({"title":"Daily report ready","message":"Verified {{nodes.parse.output.rowCount}} rows in {{nodes.download.output.filename}}"}),
             ),
         ],
         vec![
@@ -324,7 +353,9 @@ pub fn download_daily_report() -> Workflow {
             edge("e3", "navigate", "output", "fill"),
             edge("e4", "fill", "output", "click"),
             edge("e5", "click", "output", "download"),
-            edge("e6", "download", "output", "notification"),
+            edge("e6", "download", "output", "parse"),
+            edge("e7", "parse", "output", "condition"),
+            edge("e8", "condition", "true", "notification"),
         ],
         "schedule",
         PermissionSummary {
@@ -448,6 +479,11 @@ pub fn by_key(key: &str, name: Option<String>) -> Workflow {
         "email-enquiry-draft" => email_enquiry_draft(),
         "website-status-discord" => website_status_discord(),
         "downloads-organiser" => downloads_organiser(),
+        "browser-automation" | "report-collection" => download_daily_report(),
+        "file-folder-automation" => downloads_organiser(),
+        "website-monitoring" => website_change_monitor(),
+        "developer-workflows" => website_health(),
+        "homelab-automation" => website_status_discord(),
         _ => blank(name),
     }
 }

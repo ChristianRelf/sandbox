@@ -1,10 +1,12 @@
-import { Bell, Blocks, Braces, Camera, Clock3, Code2, Download, FileClock, FileOutput, GitBranch, Globe2, Hand, Keyboard, LogIn, Mail, MailPlus, MessageSquare, MousePointerClick, Navigation, ScanSearch, Send, ShieldQuestion, Tag, Upload, X, type LucideIcon } from "lucide-react";
-import type { InstalledPlugin, NodeType, PluginManifestNode, WorkflowNode } from "./types";
+import { Bell, Blocks, Braces, Camera, Clock3, Code2, Copy, Database, Download, FileClock, FileInput, FileJson, FileOutput, FilePlus2, FileText, FolderOpen, GitBranch, GitCompare, Globe2, Hand, Keyboard, ListTree, LogIn, Mail, MailPlus, MessageSquare, MousePointerClick, Navigation, ScanSearch, Send, ShieldQuestion, TableProperties, Tag, Trash2, Upload, X, type LucideIcon } from "lucide-react";
+import type { BuiltInNodeType, InstalledPlugin, NodePortDefinition, NodeType, PluginManifestNode, WorkflowNode } from "./types";
 
 export type NodeGroup = "Triggers" | "Logic" | "Data" | "Browser" | "Network" | "Communication" | "System" | "Plugins";
-export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string }
+export type NodePlacement="local"|"paired_runner"|"hosted_runner"|"managed_browser";
+export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string; inputs:NodePortDefinition[]; outputs:NodePortDefinition[]; sideEffect:boolean; placements:NodePlacement[] }
+type NodeDefinitionInput=Omit<NodeDefinition,"inputs"|"outputs"|"sideEffect"|"placements">&Partial<Pick<NodeDefinition,"inputs"|"outputs"|"sideEffect"|"placements">>;
 export interface PluginNodeChoice { plugin:InstalledPlugin; node:PluginManifestNode }
-export const NODE_DEFINITIONS:NodeDefinition[] = [
+const BASE_NODE_DEFINITIONS:NodeDefinitionInput[] = [
   {type:"manual_trigger",name:"Manual Trigger",description:"Run from the toolbar",group:"Triggers",icon:Hand,defaults:{},summary:()=>"Starts on demand"},
   {type:"schedule_trigger",name:"Schedule Trigger",description:"Run on a local schedule",group:"Triggers",icon:Clock3,defaults:{scheduleType:"minutes",every:15,time:"09:00",cron:"0 */15 * * *"},summary:c=>c.scheduleType==="minutes"?`Every ${c.every ?? 15} minutes`:c.scheduleType==="daily"?`Daily at ${c.time ?? "09:00"}`:c.scheduleType==="hourly"?"Every hour":String(c.cron ?? "Advanced schedule")},
   {type:"file_watch_trigger",name:"File Watch Trigger",description:"Watch an approved folder",group:"Triggers",icon:FileClock,defaults:{folder:"",events:["created"],pattern:""},summary:c=>c.folder?`Watch ${String(c.folder).split(/[\\/]/).pop()}`:"Choose a folder"},
@@ -15,6 +17,17 @@ export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"http_request",name:"HTTP Request",description:"Call an HTTP endpoint",group:"Network",icon:Globe2,defaults:{method:"GET",url:"",query:{},headers:{},body:null,timeoutMs:30000,retryCount:0},summary:c=>c.url?`${c.method ?? "GET"} ${c.url}`:"Enter a URL"},
   {type:"desktop_notification",name:"Desktop Notification",description:"Show a native notification",group:"System",icon:Bell,defaults:{title:"Sandbox",message:"Workflow completed"},summary:c=>String(c.title || "Configure notification")},
   {type:"move_file",name:"Move File",description:"Move within approved folders",group:"System",icon:FileOutput,defaults:{source:"",destinationFolder:"",renameTo:"",overwrite:false},summary:c=>c.destinationFolder?`Move to ${String(c.destinationFolder).split(/[\\/]/).pop()}`:"Choose destination"},
+  {type:"read_file",name:"Read File",description:"Read text from an approved file",group:"Data",icon:FileInput,defaults:{path:"",encoding:"utf8",maximumBytes:10485760},summary:c=>c.path?String(c.path).split(/[\\/]/).pop()!:"Choose a file"},
+  {type:"write_file",name:"Write File",description:"Write text to an approved file",group:"System",icon:FilePlus2,defaults:{path:"",content:"",overwrite:false,createParents:false},summary:c=>c.path?String(c.path).split(/[\\/]/).pop()!:"Choose a file"},
+  {type:"copy_path",name:"Copy File or Folder",description:"Copy within approved folders",group:"System",icon:Copy,defaults:{source:"",destination:"",overwrite:false},summary:c=>c.destination?`Copy to ${String(c.destination).split(/[\\/]/).pop()}`:"Choose destination"},
+  {type:"delete_path",name:"Delete File or Folder",description:"Delete an explicitly approved path",group:"System",icon:Trash2,defaults:{path:"",recursive:false},summary:c=>c.path?`Delete ${String(c.path).split(/[\\/]/).pop()}`:"Choose a path"},
+  {type:"list_folder",name:"List Folder",description:"List files in an approved folder",group:"Data",icon:ListTree,defaults:{folder:"",recursive:false,pattern:"*"},summary:c=>c.folder?`List ${String(c.folder).split(/[\\/]/).pop()}`:"Choose a folder"},
+  {type:"parse_csv",name:"Parse CSV",description:"Parse CSV text or an approved file",group:"Data",icon:TableProperties,defaults:{path:"",content:"",delimiter:",",hasHeaders:true,trim:true},summary:c=>c.path?`Parse ${String(c.path).split(/[\\/]/).pop()}`:"Map CSV content or choose a file"},
+  {type:"parse_json",name:"Parse JSON",description:"Parse JSON text or an approved file",group:"Data",icon:FileJson,defaults:{path:"",content:""},summary:c=>c.path?`Parse ${String(c.path).split(/[\\/]/).pop()}`:"Map JSON content or choose a file"},
+  {type:"parse_text",name:"Parse Text",description:"Split text into lines and basic statistics",group:"Data",icon:FileText,defaults:{path:"",content:"",trim:true,removeEmptyLines:false},summary:c=>c.path?`Parse ${String(c.path).split(/[\\/]/).pop()}`:"Map text or choose a file"},
+  {type:"get_workflow_state",name:"Get Workflow State",description:"Read a value stored by this workflow",group:"Data",icon:Database,defaults:{key:"",defaultValue:null},summary:c=>c.key?`Read ${String(c.key)}`:"Choose a state key"},
+  {type:"set_workflow_state",name:"Set Workflow State",description:"Store a value after a successful run",group:"Data",icon:Database,defaults:{key:"",value:null},summary:c=>c.key?`Store ${String(c.key)}`:"Choose a state key"},
+  {type:"compare_previous",name:"Compare With Previous",description:"Detect a meaningful change and update state after success",group:"Logic",icon:GitCompare,defaults:{key:"",value:null,normalization:"trim"},summary:c=>c.key?`Compare ${String(c.key)}`:"Choose a state key"},
   {type:"run_command",name:"Run Command",description:"Execute an explicitly approved process",group:"System",icon:Code2,defaults:{executable:"",arguments:[],workingDirectory:"",timeoutMs:30000},summary:c=>String(c.executable || "Approval required")},
   {type:"open_browser",name:"Open Browser",description:"Start a managed Chromium session",group:"Browser",icon:Globe2,defaults:{profileId:"",headed:true,initialUrl:"",viewport:{width:1280,height:800},defaultTimeoutMs:30000,closeAutomatically:true,keepOpenAfterManualTest:false,maximumDurationMs:1800000},summary:c=>c.profileId?`${c.headed===false?"Headless":"Headed"} · managed profile`:"Choose a browser profile"},
   {type:"navigate",name:"Navigate",description:"Load a URL in the active session",group:"Browser",icon:Navigation,defaults:{url:"",waitCondition:"dom_ready",timeoutMs:30000},summary:c=>String(c.url||"Enter a URL")},
@@ -37,9 +50,35 @@ export const NODE_DEFINITIONS:NodeDefinition[] = [
   {type:"slack_webhook",name:"Slack Webhook",description:"Send an incoming webhook message",group:"Communication",icon:MessageSquare,defaults:{credentialId:"",content:""},summary:c=>c.credentialId?"Send Slack message":"Choose a connection"},
   {type:"approval",name:"Manual Approval",description:"Pause for local review",group:"Logic",icon:ShieldQuestion,defaults:{proposedAction:"",recipient:"",subject:"",messagePreview:"",attachments:[],expiresInMinutes:60},summary:c=>String(c.proposedAction||"Approval required")},
 ];
-const UNKNOWN_PLUGIN_DEFINITION:NodeDefinition={type:"unknown.plugin",name:"Plugin node",description:"Pinned third-party node",group:"Plugins",icon:Blocks,defaults:{},summary:()=>"Pinned sandbox plugin"};
+const NODE_PORTS:Partial<Record<BuiltInNodeType,{inputs:NodePortDefinition[];outputs:NodePortDefinition[]}>>={
+  manual_trigger:{inputs:[],outputs:[{key:"event",label:"Event",type:"object"}]},
+  schedule_trigger:{inputs:[],outputs:[{key:"event",label:"Schedule event",type:"object"}]},
+  file_watch_trigger:{inputs:[],outputs:[{key:"event",label:"File event",type:"object"}]},
+  gmail_new_email_trigger:{inputs:[],outputs:[{key:"email",label:"Email",type:"object"}]},
+  condition:{inputs:[{key:"left",label:"Value",type:"any",required:true},{key:"right",label:"Compare with",type:"any"}],outputs:[{key:"result",label:"Result",type:"boolean"}]},
+  set_data:{inputs:[{key:"values",label:"Object",type:"object"}],outputs:[{key:"value",label:"Object",type:"object"}]},
+  http_request:{inputs:[{key:"url",label:"URL",type:"string",required:true},{key:"body",label:"Body",type:"any"}],outputs:[{key:"status",label:"Status",type:"number"},{key:"body",label:"Body",type:"any"},{key:"finalUrl",label:"Final URL",type:"string"}]},
+  extract_data:{inputs:[],outputs:[{key:"value",label:"Extracted value",type:"any"}]},
+  download_file:{inputs:[],outputs:[{key:"path",label:"Downloaded path",type:"path"},{key:"bytes",label:"Bytes",type:"number"}]},
+  screenshot:{inputs:[],outputs:[{key:"path",label:"Screenshot path",type:"path"}]},
+  run_command:{inputs:[{key:"arguments",label:"Arguments",type:"array"}],outputs:[{key:"stdout",label:"Standard output",type:"string"},{key:"stderr",label:"Standard error",type:"string"},{key:"exitCode",label:"Exit code",type:"number"}]},
+  read_file:{inputs:[{key:"path",label:"File path",type:"path",required:true}],outputs:[{key:"content",label:"Content",type:"string"},{key:"path",label:"Path",type:"path"},{key:"bytes",label:"Bytes",type:"number"}]},
+  write_file:{inputs:[{key:"path",label:"File path",type:"path",required:true},{key:"content",label:"Content",type:"string",required:true}],outputs:[{key:"path",label:"Path",type:"path"},{key:"bytes",label:"Bytes",type:"number"}]},
+  list_folder:{inputs:[{key:"folder",label:"Folder",type:"path",required:true}],outputs:[{key:"entries",label:"Entries",type:"array"},{key:"count",label:"Count",type:"number"}]},
+  parse_csv:{inputs:[{key:"path",label:"CSV file",type:"path"},{key:"content",label:"CSV text",type:"string"}],outputs:[{key:"headers",label:"Headers",type:"array"},{key:"rows",label:"Rows",type:"array"},{key:"rowCount",label:"Row count",type:"number"}]},
+  parse_json:{inputs:[{key:"path",label:"JSON file",type:"path"},{key:"content",label:"JSON text",type:"string"}],outputs:[{key:"value",label:"Value",type:"any"}]},
+  parse_text:{inputs:[{key:"path",label:"Text file",type:"path"},{key:"content",label:"Text",type:"string"}],outputs:[{key:"text",label:"Text",type:"string"},{key:"lines",label:"Lines",type:"array"},{key:"lineCount",label:"Line count",type:"number"}]},
+  get_workflow_state:{inputs:[{key:"key",label:"Key",type:"string",required:true}],outputs:[{key:"value",label:"Value",type:"any"},{key:"found",label:"Found",type:"boolean"}]},
+  set_workflow_state:{inputs:[{key:"key",label:"Key",type:"string",required:true},{key:"value",label:"Value",type:"any",required:true}],outputs:[{key:"value",label:"Stored value",type:"any"}]},
+  compare_previous:{inputs:[{key:"key",label:"Key",type:"string",required:true},{key:"value",label:"Current value",type:"any",required:true}],outputs:[{key:"changed",label:"Changed",type:"boolean"},{key:"previous",label:"Previous",type:"any"},{key:"current",label:"Current",type:"any"}]},
+};
+const SIDE_EFFECTS=new Set<NodeType>(["desktop_notification","move_file","write_file","copy_path","delete_path","run_command","gmail_create_draft","gmail_send_email","gmail_add_label","discord_webhook","discord_embed","slack_webhook","approval","set_workflow_state","compare_previous"]);
+const BROWSER_TYPES=new Set<NodeType>(["open_browser","navigate","click_element","fill_field","select_option","press_key","wait_for","extract_data","screenshot","download_file","upload_file","close_browser"]);
+const normalizeDefinition=(definition:NodeDefinitionInput):NodeDefinition=>{const contract=NODE_PORTS[definition.type as BuiltInNodeType];return{...definition,inputs:definition.inputs??contract?.inputs??[],outputs:definition.outputs??contract?.outputs??[{key:"result",label:"Result",type:"any"}],sideEffect:definition.sideEffect??SIDE_EFFECTS.has(definition.type),placements:definition.placements??(BROWSER_TYPES.has(definition.type)?["local","paired_runner","managed_browser"]:["local","paired_runner","hosted_runner"])}};
+export const NODE_DEFINITIONS:NodeDefinition[]=BASE_NODE_DEFINITIONS.map(normalizeDefinition);
+const UNKNOWN_PLUGIN_DEFINITION:NodeDefinition={type:"unknown.plugin",name:"Plugin node",description:"Pinned third-party node",group:"Plugins",icon:Blocks,defaults:{},summary:()=>"Pinned sandbox plugin",inputs:[],outputs:[{key:"result",label:"Result",type:"any"}],sideEffect:true,placements:["local","paired_runner","hosted_runner"]};
 export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)??{...UNKNOWN_PLUGIN_DEFINITION,type};
-export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false}};
+export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false,inputBindings:{}}};
 export const createPluginNode=(choice:PluginNodeChoice,position:{x:number;y:number}):WorkflowNode=>({
   id:`plugin_${crypto.randomUUID().slice(0,8)}`,
   type:choice.node.nodeType,
@@ -48,6 +87,7 @@ export const createPluginNode=(choice:PluginNodeChoice,position:{x:number;y:numb
   position,
   configuration:defaultsFromSchema(choice.node.configurationSchema),
   disabled:false,
+  inputBindings:{},
   plugin:{pluginId:choice.plugin.pluginId,pluginVersion:choice.plugin.version,packageIntegrity:choice.plugin.packageIntegrity,publisherId:choice.plugin.publisherId,input:{},credentialReferences:{}},
 });
 export const enabledPluginNodes=(plugins:InstalledPlugin[]):PluginNodeChoice[]=>plugins.filter(plugin=>plugin.state==="enabled").flatMap(plugin=>plugin.manifest.nodes.map(node=>({plugin,node})));
