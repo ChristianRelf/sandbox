@@ -1,7 +1,8 @@
 import { Pool } from "pg";
-import { ActiveAccountSessionVerifier,OidcSessionVerifier } from "./auth.js";
+import { ActiveAccountSessionVerifier,OidcSessionVerifier,ProvisioningAccountSessionVerifier } from "./auth.js";
 import { HttpTransactionalEmail } from "./email.js";
 import { HttpImmutablePackageStorage, HttpPackageReviewScanner } from "./package_services.js";
+import { UnavailablePackageScanner,UnavailablePackageStorage,UnavailableTransactionalEmail } from "./beta_adapters.js";
 import { PostgresRepository } from "./postgres.js";
 import { createServer } from "./server.js";
 import { Ed25519RunnerCommandSigner } from "./runner_protocol.js";
@@ -26,6 +27,15 @@ const required = (name: string): string => {
   return value;
 };
 
+const betaMode=process.env.SANDBOX_BETA_MODE==="true";
+const integration=(names:string[],label:string):string[]|null=>{
+  const values=names.map(name=>process.env[name]?.trim()??"");
+  if(!betaMode)return names.map(required);
+  if(values.every(value=>!value))return null;
+  if(values.some(value=>!value))throw new Error(`${label} must either be fully configured or omitted in beta mode.`);
+  return values;
+};
+
 const pool = new Pool({
   connectionString: required("DATABASE_URL"),
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: true } : undefined,
@@ -36,10 +46,24 @@ const pool = new Pool({
 
 const controlPlanePublicUrl=required("CONTROL_PLANE_PUBLIC_URL").replace(/\/$/,"");
 const oidcSessions=new OidcSessionVerifier({ issuer: required("OIDC_ISSUER"), audience: required("OIDC_AUDIENCE"), jwksUrl: required("OIDC_JWKS_URL") });
+const provisionedOidcSessions=betaMode?new ProvisioningAccountSessionVerifier(oidcSessions,pool):oidcSessions;
 const credentialService=new PostgresCredentialService(pool,Buffer.from(required("ACCESS_TOKEN_PEPPER_BASE64"),"base64"),`${controlPlanePublicUrl}/v1/service-account-assertions/token`);
 const webhookProtector=new WebhookProtector(Buffer.from(required("WEBHOOK_ENCRYPTION_KEY_BASE64"),"base64"));
 const idempotencyProtector=new WebhookProtector(Buffer.from(required("API_IDEMPOTENCY_ENCRYPTION_KEY_BASE64"),"base64"));
-const email=new HttpTransactionalEmail(required("EMAIL_API_URL"),required("EMAIL_API_KEY"),required("EMAIL_SENDER"));
+const emailConfiguration=integration(["EMAIL_API_URL","EMAIL_API_KEY","EMAIL_SENDER"],"Transactional email");
+const email=emailConfiguration
+  ?new HttpTransactionalEmail(emailConfiguration[0],emailConfiguration[1],emailConfiguration[2])
+  :new UnavailableTransactionalEmail();
+const packageConfiguration=integration(["OBJECT_STORAGE_SIGNER_URL","OBJECT_STORAGE_SIGNER_TOKEN","PACKAGE_SCANNER_URL","PACKAGE_SCANNER_TOKEN"],"Package publishing");
+const packageStorage=packageConfiguration
+  ?new HttpImmutablePackageStorage(packageConfiguration[0],packageConfiguration[1])
+  :new UnavailablePackageStorage();
+const packageScanner=packageConfiguration
+  ?new HttpPackageReviewScanner(packageConfiguration[2],packageConfiguration[3])
+  :new UnavailablePackageScanner();
+const runnerSigningConfiguration=integration(["RUNNER_COMMAND_SIGNING_KEY_ID","RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM"],"Runner command signing");
+const entitlementSigningConfiguration=integration(["ENTITLEMENT_SIGNING_KEY_ID","ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM"],"Entitlement signing");
+const usageProducerConfiguration=integration(["USAGE_PRODUCER_SECRETS_JSON"],"Usage ingestion");
 const credentialExpiryNotifier=new PostgresCredentialExpiryNotifier(pool,email);
 const accessReviews=new PostgresServiceAccountAccessReviews(pool);
 const privacy=new PostgresPrivacyService(pool);
@@ -59,22 +83,22 @@ const readiness=new ReadinessService([
 
 const server = await createServer({
   repository: new PostgresRepository(pool),
-  sessions: new ActiveAccountSessionVerifier(new CompositeSessionVerifier(oidcSessions,credentialService),pool),
+  sessions: new ActiveAccountSessionVerifier(new CompositeSessionVerifier(provisionedOidcSessions,credentialService),pool),
   credentialService,
   accessReviews,
   supportAccess:new PostgresSupportAccess(pool),
   privacy,
   productCommerce:new PostgresProductCommerce(pool),
   email,
-  packageStorage: new HttpImmutablePackageStorage(required("OBJECT_STORAGE_SIGNER_URL"), required("OBJECT_STORAGE_SIGNER_TOKEN")),
-  packageScanner: new HttpPackageReviewScanner(required("PACKAGE_SCANNER_URL"), required("PACKAGE_SCANNER_TOKEN")),
-  runnerCommandSigner: new Ed25519RunnerCommandSigner(required("RUNNER_COMMAND_SIGNING_KEY_ID"), required("RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
+  packageStorage,
+  packageScanner,
+  runnerCommandSigner: runnerSigningConfiguration?new Ed25519RunnerCommandSigner(runnerSigningConfiguration[0],runnerSigningConfiguration[1].replace(/\\n/g, "\n")):undefined,
   billing: new StripeBillingProvider(required("STRIPE_SECRET_KEY"), required("STRIPE_WEBHOOK_SECRET")),
-  entitlementSigner: new Ed25519EntitlementClaimSigner(required("ENTITLEMENT_SIGNING_KEY_ID"), controlPlanePublicUrl, required("ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM").replace(/\\n/g, "\n")),
+  entitlementSigner: entitlementSigningConfiguration?new Ed25519EntitlementClaimSigner(entitlementSigningConfiguration[0],controlPlanePublicUrl,entitlementSigningConfiguration[1].replace(/\\n/g, "\n")):undefined,
   webhookProtector,
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   usageLedger: new PostgresUsageLedger(pool),
-  usageProducerAuthenticator: new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(required("USAGE_PRODUCER_SECRETS_JSON"))),
+  usageProducerAuthenticator: usageProducerConfiguration?new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(usageProducerConfiguration[0])):undefined,
   executionCoordinator: new PostgresExecutionCoordinator(pool),
   readiness,
   metrics,
@@ -100,6 +124,7 @@ process.once("SIGINT", () => void shutdown());
 process.once("SIGTERM", () => void shutdown());
 
 await server.listen({ host: process.env.HOST ?? "127.0.0.1", port: Number(process.env.PORT ?? 4100) });
+if(betaMode)server.log.warn("SANDBOX_BETA_MODE is enabled; new verified Auth0 identities are provisioned on first API access and unconfigured beta integrations return HTTP 503.");
 void runCredentialNotifications();
 void runAccessReviews();
 void runPrivacyRetention();

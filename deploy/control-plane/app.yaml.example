@@ -1,0 +1,43 @@
+name: sandbox-control-plane-beta
+region: lon
+domains:
+  - domain: api.sndbox.app
+    type: PRIMARY
+    minimum_tls_version: "1.2"
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+services:
+  - name: api
+    github:
+      repo: ChristianRelf/sandbox
+      branch: main
+      deploy_on_push: false
+    source_dir: /
+    dockerfile_path: services/control-plane/Dockerfile
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    http_port: 8080
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 8
+    envs:
+      - key: NODE_ENV
+        value: production
+        scope: RUN_TIME
+        type: GENERAL
+      - key: SANDBOX_BETA_MODE
+        value: "true"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: HOST
+        value: 0.0.0.0
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PORT
+        value: "8080"
+        scope: RUN_TIME
+        type: GENERAL

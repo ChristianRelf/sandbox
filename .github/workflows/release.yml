@@ -230,6 +230,9 @@ jobs:
           - name: browser-worker
             dockerfile: services/browser-worker/Dockerfile
             platforms: linux/amd64
+          - name: control-plane
+            dockerfile: services/control-plane/Dockerfile
+            platforms: linux/amd64,linux/arm64
           - name: marketing
             dockerfile: apps/marketing/Dockerfile
             platforms: linux/amd64,linux/arm64

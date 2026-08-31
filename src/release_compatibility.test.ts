@@ -80,6 +80,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(workflow).toContain("agents/server/Dockerfile");
     expect(workflow).toContain("services/hosted-runner/Dockerfile");
     expect(workflow).toContain("services/browser-worker/Dockerfile");
+    expect(workflow).toContain("services/control-plane/Dockerfile");
     expect(workflow).toContain("apps/docs/Dockerfile");
     expect(workflow).toContain("needs: [verify-release, desktop-windows, agent-linux, containers]");
     expect(workflow).toContain("generate-release-manifest.mjs");
@@ -115,6 +116,7 @@ describe("v0.7 beta release compatibility", () => {
       "apps/docs/Dockerfile",
       "apps/marketing/Dockerfile",
       "services/browser-worker/Dockerfile",
+      "services/control-plane/Dockerfile",
       "services/hosted-runner/Dockerfile",
     ];
     for (const file of dockerfiles) {
@@ -127,6 +129,9 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("apps/docs/Dockerfile")).not.toContain("COPY . .");
     expect(read("apps/marketing/Dockerfile")).toContain("FROM deps AS api-client-build");
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
+    expect(read("services/control-plane/Dockerfile")).toContain("npm ci --omit=dev");
+    expect(read("services/control-plane/Dockerfile")).toContain("/source/services/control-plane/node_modules ./services/control-plane/node_modules");
+    expect(read("services/control-plane/Dockerfile")).toContain("services/control-plane/db ./services/control-plane/db");
   });
 
   it("keeps the beta Droplet deployment repeatable and health-gated", () => {
