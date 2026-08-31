@@ -3,11 +3,11 @@
 This deploys the beta API at `https://api.sndbox.app` with:
 
 - Auth0 for tester login (`sndbox.uk.auth0.com`)
-- Supabase Free Postgres for beta data
+- Neon Launch Postgres for beta data
 - Stripe sandbox mode for checkout and billing webhooks
 - One DigitalOcean App Platform service for the API
 
-The expected infrastructure cost is **$5 per month** for the smallest App Platform service. Auth0, Supabase, and Stripe can remain free for a small test, although Stripe charges its normal fees if live payments are enabled later. DigitalOcean bills the service once it is created, so creating that resource is the one chargeable step in this guide.
+The fixed infrastructure cost is **$5 per month** for the smallest App Platform service, plus Neon's metered database usage. Neon describes an intermittent 1 GB Launch database as typically around $15 per month, but scale-to-zero can make a lightly used invite-only beta cheaper. Auth0 and Stripe can remain free for a small test, although Stripe charges its normal fees if live payments are enabled later.
 
 Do not put any database password, Stripe key, webhook secret, or generated Sandbox key into Git, chat, the desktop application, or a public environment variable.
 
@@ -33,25 +33,22 @@ The Auth0 public configuration is already fixed to:
 
 The native client ID is public configuration, not a secret. Do not add a client secret to the desktop application.
 
-## 1. Create the Supabase database
+## 1. Create the Neon database
 
-1. Sign in to [Supabase](https://supabase.com/dashboard) and create a Free project named `sandbox-beta`.
-2. Choose the London or nearest available region.
-3. Save the database password in your password manager.
-4. Wait for the project to finish provisioning, then select **Connect** at the top of the project.
-5. Select **Session pooler** and copy the URI using port `5432`. It has this shape:
+1. Sign in to [Neon](https://console.neon.tech/) and create a project named `sandbox-beta`.
+2. Choose **AWS Europe (London) — `eu-west-2`**.
+3. Select the paid **Launch** plan.
+4. For this invite-only beta, keep scale-to-zero enabled and set a conservative autoscaling range such as `0.25–1 CU`. This controls cost while still allowing short migration or query bursts.
+5. Set the restore window to seven days.
+6. On the project dashboard, select **Connect**.
+7. Select the `main` branch, the `neondb` database, and its generated owner role.
+8. Turn **Connection pooling off** and copy the direct connection string. It has this shape:
 
    ```text
-   postgresql://postgres.PROJECT_REF:PASSWORD@aws-REGION.pooler.supabase.com:5432/postgres
+   postgresql://OWNER:PASSWORD@ep-NAME.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
    ```
 
-6. If the password contains URI-reserved characters, percent-encode only the password portion. PowerShell can encode it without changing the rest of the URI:
-
-   ```powershell
-   [uri]::EscapeDataString('YOUR_DATABASE_PASSWORD')
-   ```
-
-Use Session pooler rather than transaction pooler because the API is a persistent Node process and runs PostgreSQL migrations at startup. Supabase's free tier is appropriate for this beta, but it has no automatic backups and low-activity projects can pause. Do not treat it as the final production database.
+Use the direct connection rather than the hostname containing `-pooler`. The control plane is a persistent Node process, already maintains a small five-connection application pool, and runs PostgreSQL migrations at startup. Neon's pooled endpoint uses transaction-mode PgBouncer, which Neon does not recommend for migrations.
 
 ## 2. Get the Stripe sandbox secret key
 
@@ -96,7 +93,7 @@ notepad .\deploy\control-plane\.env
 Replace:
 
 ```dotenv
-DATABASE_URL=REPLACE_WITH_SUPABASE_SESSION_POOLER_URL
+DATABASE_URL=REPLACE_WITH_NEON_DIRECT_DATABASE_URL
 STRIPE_SECRET_KEY=REPLACE_WITH_STRIPE_TEST_SECRET_KEY
 ```
 
@@ -215,7 +212,7 @@ The webhook signing secret and `sk_test_` secret key are different values. Do no
 4. Return to the desktop application. Its first authenticated API call should create the matching beta account automatically.
 5. In Auth0, open **Monitoring → Logs** and confirm the login's Action execution succeeded.
 6. In DigitalOcean, inspect the API runtime logs. There should be no migration, OIDC, or database errors.
-7. In Supabase, open the Table Editor and confirm an `accounts` row exists only after the first successful authenticated API call.
+7. In Neon, open the SQL Editor and run `SELECT id, primary_email, created_at FROM accounts;`. Confirm a row exists only after the first successful authenticated API call.
 8. Exercise checkout only with Stripe test cards. Never enter real card details in sandbox mode.
 
 Stripe is connected at this point, but the repository intentionally publishes no prices by default. Before testers can buy a plan, you must make a commercial choice about price and currency, create the matching recurring Price in the Stripe sandbox, deploy the account portal at `app.sndbox.app`, and synchronize the reviewed plan document as described in `docs/product-commerce-v0.6.md`. Those choices are not generated automatically because changing them has product and billing consequences.
@@ -228,7 +225,7 @@ Compare DigitalOcean's runtime variable names against every line in `deploy/cont
 
 ### Database connection fails
 
-Use Supabase **Connect → Session pooler**, port `5432`, and verify that the password portion is percent-encoded. Do not use the direct IPv6 hostname from an IPv4-only service and do not use transaction pooler port `6543` for this deployment.
+Use Neon **Connect** with connection pooling disabled. The hostname must not contain `-pooler`, and the copied URI should retain `sslmode=require&channel_binding=require`. Confirm that the Neon project is in AWS London and has not reached a usage or spending limit.
 
 ### Auth0 login succeeds but the API returns `invalid_session`
 
