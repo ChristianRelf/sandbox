@@ -1,0 +1,55 @@
+---
+title: "Build your first workflow"
+description: "Create, validate, run, and inspect a three-node workflow."
+icon: "play"
+---
+
+Build a workflow that starts on demand, creates structured data, and shows a native desktop notification. No connection or secret is required.
+
+<Steps>
+  <Step title="Create a blank workflow">
+    From **Workflows**, choose **New workflow**, select the blank starting point, and name it `First notification`.
+  </Step>
+  <Step title="Add Manual Trigger">
+    Open the node picker and add **Manual Trigger**. A workflow has one trigger node; this trigger starts only when you select **Run**.
+  </Step>
+  <Step title="Create the data">
+    Add **Set Data** and connect the trigger to it. In **Object**, enter:
+
+    ```json
+    {
+      "title": "sndbox",
+      "message": "My first workflow completed."
+    }
+    ```
+  </Step>
+  <Step title="Show a notification">
+    Add **Desktop Notification** after Set Data. Enter `sndbox` for **Title** and map or paste `My first workflow completed.` into **Message**.
+  </Step>
+  <Step title="Review and run">
+    Select **Run**. If permission or validation review appears, read every item before continuing. The run succeeds after the notification is handed to the operating system.
+  </Step>
+  <Step title="Inspect the execution">
+    Open the execution drawer or **Run history**. Select each node to review its resolved input, output, logs, duration, and retry count.
+  </Step>
+</Steps>
+
+<Check>
+  The workflow row now shows its latest successful run, and the execution inspector contains one successful entry for each of the three nodes.
+</Check>
+
+## Use mapped output
+
+To make the data flow explicit, open **Desktop Notification → Data bindings** and bind **Message** to the Set Data output. The stored binding is typed rather than inferred from the visual edge:
+
+```json title="Input binding"
+{
+  "message": {
+    "kind": "node_output",
+    "nodeId": "set_data",
+    "path": ["message"]
+  }
+}
+```
+
+See [Variables and data mapping](/workflows/variables-and-data) for every binding kind.

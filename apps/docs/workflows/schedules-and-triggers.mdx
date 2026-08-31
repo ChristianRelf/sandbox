@@ -1,0 +1,26 @@
+---
+title: "Schedules and triggers"
+description: "Start work manually, on a schedule, from file changes, or from matching Gmail messages."
+icon: "timer"
+---
+
+Every workflow starts with one implemented trigger.
+
+| Trigger | Starts when |
+| --- | --- |
+| [Manual Trigger](/nodes/manual-trigger) | You select **Run**. |
+| [Schedule Trigger](/nodes/schedule-trigger) | A local interval, hourly, daily, or cron occurrence is due. |
+| [File Watch Trigger](/nodes/file-watch-trigger) | A created, modified, or deleted file matches inside an approved folder. |
+| [New Email](/nodes/gmail-new-email-trigger) | Gmail polling finds a message matching the configured filters. |
+
+## Local schedule behavior
+
+The desktop runner calculates local next-run times. Quitting sndbox stops those schedules. Schedule settings support every X minutes, hourly, daily local time, and five- or six-field cron expressions.
+
+## Avoid duplicate email runs
+
+The Gmail trigger stores processed message IDs per workflow. Polling can be set from 1 to 60 minutes and filtered by sender, recipient, subject text, label, and attachment presence.
+
+## Durable cloud schedules
+
+The control-plane scheduler persists occurrences and uses a durable at-least-once queue. It defines timezone, daylight-saving, misfire, jitter, concurrency, and no-runner behavior explicitly. See [Schedules and event queue](/execution/schedules-and-queue).

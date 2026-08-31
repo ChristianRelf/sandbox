@@ -1,0 +1,24 @@
+---
+title: "Approvals and publishing"
+description: "Review a precise workflow revision before changing the published pointer."
+icon: "badge-check"
+---
+
+Editing a workspace workflow advances its draft. Running or viewing a previously published revision does not cause the draft to become published.
+
+## Publication sequence
+
+1. Submit the exact current draft revision.
+2. Collect the workspace policy's required number of distinct approval votes.
+3. Verify every pinned plugin ID, version, and integrity is enabled in the workspace.
+4. Publish with a change summary.
+
+The approval record includes workflow, revision, status, required approvals, current count, and creation time. Rejection records a reason and returns the revision to a rejected state. An expired request cannot be treated as an approval.
+
+## Rollback
+
+Rollback selects an earlier published revision and creates an audit event naming both the previous and restored revision. It does not edit old content or erase the intervening history.
+
+## Local Manual Approval node
+
+Do not confuse workspace publication with the [Manual Approval node](/nodes/approval). That node pauses one execution locally for review of a proposed action. Publication approval governs which immutable workflow revision becomes the workspace's published definition.

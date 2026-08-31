@@ -1,0 +1,34 @@
+---
+title: "Idempotency and rate limits"
+description: "Reuse one logical mutation identity across safe retries and obey returned rate-limit timing."
+icon: "repeat-2"
+---
+
+Send `Idempotency-Key` on v1 POST, PUT, PATCH, and DELETE requests. Keys contain 16–200 letters, digits, `.`, `_`, `:`, or `-` and are scoped to the caller credential identity.
+
+## Server behavior
+
+- An identical request replays the original status/body and returns `idempotency-replayed: true`.
+- Reusing a key with a different method, URL, content type, or body returns `idempotency_key_reused`.
+- A concurrent duplicate returns `idempotency_request_in_progress` with `retry-after`.
+- Records remain for 24 hours and response bodies are encrypted.
+- HTTP 500 responses are not retained, allowing a safe retry decision.
+
+```bash
+curl -X POST https://api.sndbox.app/v1/workflows/WORKFLOW_ID/runs \
+  -H "Authorization: Bearer $SNDBOX_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: run-production-20260831-001" \
+  -H "X-Sandbox-Request-Time: 2026-08-31T12:00:00.000Z" \
+  --data '{"workspaceId":"...","deploymentId":"...","encryptedPayloadReference":"object://..."}'
+```
+
+## Client retries
+
+The TypeScript client defaults to at most two retries and permits 0–5. It retries 429, 502, 503, and 504. A mutation is retried only when it has an idempotency key, and the same key and correlation ID are reused.
+
+## Limits
+
+The default API budget is 240 requests per IP per minute. Health checks allow 60; invitation acceptance and runner pairing are narrower. Responses expose `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after` on 429.
+
+Back off. Do not rotate identities to evade a limit.

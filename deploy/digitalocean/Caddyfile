@@ -23,14 +23,3 @@ www.{$SANDBOX_DOMAIN:sndbox.app} {
 		X-Content-Type-Options "nosniff"
 	}
 }
-
-{$SANDBOX_DOCS_DOMAIN:docs.sndbox.app} {
-	encode zstd gzip
-	reverse_proxy docs:3200
-
-	header {
-		-Server
-		Referrer-Policy "strict-origin-when-cross-origin"
-		X-Content-Type-Options "nosniff"
-	}
-}

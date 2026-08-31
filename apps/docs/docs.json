@@ -1,0 +1,384 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "sndbox",
+  "description": "Build, run, inspect, and govern reliable desktop and browser automations.",
+  "colors": {
+    "primary": "#647600",
+    "light": "#d6ff4b",
+    "dark": "#465200"
+  },
+  "favicon": "/assets/sndbox-icon.svg",
+  "logo": {
+    "light": "/assets/sndbox-wordmark-dark.svg",
+    "dark": "/assets/sndbox-wordmark-light.svg",
+    "href": "https://sndbox.app"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": false
+  },
+  "fonts": {
+    "family": "Inter"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": "system"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Start",
+            "pages": [
+              "index",
+              "quickstart",
+              "getting-started/install",
+              "getting-started/first-workflow",
+              "getting-started/quick-tour",
+              "getting-started/run-locally",
+              "getting-started/understand-executions",
+              "getting-started/import-workflow"
+            ]
+          },
+          {
+            "group": "Workflows",
+            "pages": [
+              "workflows/dashboard",
+              "workflows/editor",
+              "workflows/variables-and-data",
+              "workflows/branches-and-conditions",
+              "workflows/schedules-and-triggers",
+              "workflows/testing",
+              "workflows/permissions",
+              "workflows/revisions-and-publishing",
+              "workflows/accessible-editor"
+            ]
+          },
+          {
+            "group": "Browser automation",
+            "pages": [
+              "browser-automation/overview",
+              "browser-automation/recorder",
+              "browser-automation/locators",
+              "browser-automation/profiles-and-sessions",
+              "browser-automation/navigation-and-waits",
+              "browser-automation/forms-and-uploads",
+              "browser-automation/downloads",
+              "browser-automation/screenshots",
+              "browser-automation/troubleshooting"
+            ]
+          },
+          {
+            "group": "Files and data",
+            "pages": [
+              "files-and-data/overview",
+              "files-and-data/files-and-folders",
+              "files-and-data/csv",
+              "files-and-data/json",
+              "files-and-data/http-requests",
+              "files-and-data/workflow-state",
+              "files-and-data/secrets-and-connections"
+            ]
+          },
+          {
+            "group": "Execution",
+            "pages": [
+              "execution/overview",
+              "execution/local-runner",
+              "execution/self-hosted-runner",
+              "execution/runner-pools",
+              "execution/schedules-and-queue",
+              "execution/retries-and-recovery",
+              "execution/concurrency-and-queues",
+              "execution/logs-and-evidence",
+              "execution/limits"
+            ]
+          },
+          {
+            "group": "Connections",
+            "pages": [
+              "connections/overview",
+              "connections/gmail",
+              "connections/discord",
+              "connections/slack"
+            ]
+          },
+          {
+            "group": "Settings",
+            "pages": [
+              "settings/overview",
+              "settings/general",
+              "settings/appearance",
+              "settings/accessibility",
+              "settings/node-editor",
+              "settings/connections",
+              "settings/browser",
+              "settings/beta-and-updates"
+            ]
+          },
+          {
+            "group": "Cloud and teams",
+            "pages": [
+              "cloud/overview",
+              "cloud/sync-and-conflicts",
+              "cloud/teams-and-roles",
+              "cloud/approvals-and-publishing",
+              "cloud/environments",
+              "cloud/audit-history",
+              "cloud/service-accounts",
+              "cloud/privacy-and-retention"
+            ]
+          },
+          {
+            "group": "Deploy",
+            "pages": [
+              "self-hosting/overview",
+              "self-hosting/networking",
+              "self-hosting/updates",
+              "self-hosting/mintlify-deployment"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/overview",
+              "troubleshooting/desktop",
+              "troubleshooting/browser",
+              "troubleshooting/runner",
+              "troubleshooting/permissions",
+              "troubleshooting/diagnostics"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/workflow-schema",
+              "reference/data-types",
+              "reference/expressions",
+              "reference/execution-states",
+              "reference/limits",
+              "reference/keyboard-shortcuts",
+              "reference/security",
+              "reference/glossary"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Nodes",
+        "icon": "blocks",
+        "groups": [
+          {
+            "group": "Node reference",
+            "pages": ["nodes/index"]
+          },
+          {
+            "group": "Triggers",
+            "pages": [
+              "nodes/manual-trigger",
+              "nodes/schedule-trigger",
+              "nodes/file-watch-trigger",
+              "nodes/gmail-new-email-trigger"
+            ]
+          },
+          {
+            "group": "Logic",
+            "pages": [
+              "nodes/condition",
+              "nodes/delay",
+              "nodes/compare-previous",
+              "nodes/approval"
+            ]
+          },
+          {
+            "group": "Data",
+            "pages": [
+              "nodes/set-data",
+              "nodes/read-file",
+              "nodes/list-folder",
+              "nodes/parse-csv",
+              "nodes/parse-json",
+              "nodes/parse-text",
+              "nodes/get-workflow-state",
+              "nodes/set-workflow-state"
+            ]
+          },
+          {
+            "group": "Network",
+            "pages": ["nodes/http-request"]
+          },
+          {
+            "group": "Browser",
+            "pages": [
+              "nodes/open-browser",
+              "nodes/navigate",
+              "nodes/click-element",
+              "nodes/fill-field",
+              "nodes/select-option",
+              "nodes/press-key",
+              "nodes/wait-for",
+              "nodes/extract-data",
+              "nodes/screenshot",
+              "nodes/download-file",
+              "nodes/upload-file",
+              "nodes/close-browser"
+            ]
+          },
+          {
+            "group": "Communication",
+            "pages": [
+              "nodes/gmail-get-email",
+              "nodes/gmail-create-draft",
+              "nodes/gmail-send-email",
+              "nodes/gmail-add-label",
+              "nodes/discord-webhook",
+              "nodes/discord-embed",
+              "nodes/slack-webhook"
+            ]
+          },
+          {
+            "group": "System",
+            "pages": [
+              "nodes/desktop-notification",
+              "nodes/move-file",
+              "nodes/write-file",
+              "nodes/copy-path",
+              "nodes/delete-path",
+              "nodes/run-command"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "icon": "code-2",
+        "groups": [
+          {
+            "group": "Plugins",
+            "pages": [
+              "plugins/overview",
+              "plugins/sdk-setup",
+              "plugins/manifest",
+              "plugins/capabilities-and-permissions",
+              "plugins/host-api",
+              "plugins/testing",
+              "plugins/packaging-and-signing",
+              "plugins/publishing",
+              "plugins/cli-reference"
+            ]
+          },
+          {
+            "group": "Control-plane API",
+            "pages": [
+              "developers/api",
+              "developers/authentication",
+              "developers/typescript-client",
+              "developers/idempotency-and-rate-limits",
+              "developers/errors",
+              "developers/service-accounts",
+              "developers/openapi"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API reference",
+        "icon": "square-terminal",
+        "groups": [
+          {
+            "group": "Start",
+            "pages": ["api-reference/index"]
+          },
+          {
+            "group": "Control plane v1",
+            "openapi": {
+              "source": "api-reference/openapi.json",
+              "directory": "api-reference/endpoints"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Product",
+        "href": "https://sndbox.app"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/ChristianRelf/sandbox"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://sndbox.app/downloads"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ChristianRelf/sandbox",
+      "website": "https://sndbox.app"
+    },
+    "links": [
+      {
+        "header": "Product",
+        "items": [
+          { "label": "Download", "href": "https://sndbox.app/downloads" },
+          { "label": "Changelog", "href": "https://sndbox.app/changelog" },
+          { "label": "Security", "href": "https://sndbox.app/security" }
+        ]
+      },
+      {
+        "header": "Documentation",
+        "items": [
+          { "label": "Quickstart", "href": "/quickstart" },
+          { "label": "Node reference", "href": "/nodes" },
+          { "label": "API reference", "href": "/api-reference" }
+        ]
+      },
+      {
+        "header": "Help",
+        "items": [
+          { "label": "Troubleshooting", "href": "/troubleshooting/overview" },
+          { "label": "Support", "href": "https://sndbox.app/support" },
+          { "label": "GitHub", "href": "https://github.com/ChristianRelf/sandbox" }
+        ]
+      }
+    ]
+  },
+  "redirects": [
+    { "source": "/getting-started", "destination": "/" },
+    { "source": "/workflows", "destination": "/workflows/dashboard" },
+    { "source": "/browser-automation", "destination": "/browser-automation/overview" },
+    { "source": "/browser-automation/frames-and-tabs", "destination": "/browser-automation/navigation-and-waits" },
+    { "source": "/files-and-data", "destination": "/files-and-data/overview" },
+    { "source": "/execution", "destination": "/execution/overview" },
+    { "source": "/execution/retries", "destination": "/execution/retries-and-recovery" },
+    { "source": "/execution/failure-recovery", "destination": "/execution/retries-and-recovery" },
+    { "source": "/plugins", "destination": "/plugins/overview" },
+    { "source": "/plugins/permissions", "destination": "/plugins/capabilities-and-permissions" },
+    { "source": "/developers", "destination": "/developers/api" },
+    { "source": "/developers/cli", "destination": "/plugins/cli-reference" },
+    { "source": "/developers/api/reference", "destination": "/api-reference" },
+    { "source": "/teams-and-governance/roles", "destination": "/cloud/teams-and-roles" },
+    { "source": "/teams-and-governance/approvals", "destination": "/cloud/approvals-and-publishing" },
+    { "source": "/teams-and-governance/environments", "destination": "/cloud/environments" },
+    { "source": "/teams-and-governance/audit-history", "destination": "/cloud/audit-history" },
+    { "source": "/troubleshooting", "destination": "/troubleshooting/overview" },
+    { "source": "/troubleshooting/diagnostic-bundles", "destination": "/troubleshooting/diagnostics" },
+    { "source": "/support/diagnostic-bundles", "destination": "/troubleshooting/diagnostics" },
+    { "source": "/reference/errors", "destination": "/developers/errors" },
+    { "source": "/nodes/reference", "destination": "/nodes" },
+    { "source": "/nodes/system", "destination": "/nodes" }
+  ]
+}

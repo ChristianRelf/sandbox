@@ -1,0 +1,26 @@
+---
+title: "Discord"
+description: "Send a plain webhook message or a structured embed through a vault-owned webhook connection."
+icon: "message-circle"
+---
+
+Add a Discord incoming webhook in **Settings → Connections**. The URL is resolved inside the Rust host and never enters workflow data or logs.
+
+## Plain message
+
+Discord Webhook accepts mapped `content` plus optional username and avatar URL overrides.
+
+```json title="Node configuration without the secret URL"
+{
+  "credentialId": "discord-connection-reference",
+  "content": "Website check failed with HTTP {{nodes.request.output.status}}.",
+  "username": "sndbox monitor",
+  "avatarUrl": ""
+}
+```
+
+## Embed
+
+Discord Embed accepts message content, title, description, structured `fields`, decimal color, link, and image URL. Test the exact payload against the destination channel before approving unattended delivery.
+
+Both nodes declare external side effects. Changing the connection or material message logic can require another workflow permission review.

@@ -1,0 +1,33 @@
+---
+title: "Organize workflows"
+description: "Search, sort, tag, folder, favorite, archive, duplicate, import, and export workflows."
+icon: "layout-list"
+---
+
+The Workflows view is the local library and starting point for every definition.
+
+## Find work
+
+Search uses workflow metadata and visible names. Filters and sorting let you separate active and archived work and prioritize recently opened or executed workflows. Favorites, folder names, and tags are local organization metadata; they do not change an exported workflow definition.
+
+## Row actions
+
+Each workflow row exposes the actions implemented for that definition:
+
+- run or open the editor;
+- favorite or unfavorite;
+- move into a folder and edit tags;
+- duplicate into an independent workflow;
+- export a sanitized `.sandbox-workflow.json` file;
+- archive and later restore; or
+- permanently purge after confirmation.
+
+Duplicate and import create new workflow identities. Historical executions remain attached to the workflow that originally ran.
+
+## Templates
+
+Built-in templates create editable workflows from repository definitions. A template imported through a `sandbox://templates/import` deep link is created locally and disabled. It contains no credential or protected value; review every required connection and permission before enabling it.
+
+## Next run
+
+Scheduled workflows can show a computed next-run time. That time belongs to the runner that owns the schedule and changes when the schedule, timezone policy, enabled state, or runner availability changes.

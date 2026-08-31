@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 40" role="img" aria-label="sndbox">
+  <rect width="40" height="40" rx="9" fill="#d6ff4b"/>
+  <path d="M7 12h26l3 19H4l3-19Z" fill="#10130a"/>
+  <path d="M10.5 15.5h19l2 9h-23l2-9Z" fill="#d6ff4b"/>
+  <path d="M15.5 20.5c.5-3.7 2.5-5.5 4.5-5.5s4 1.8 4.5 5.5h-9Z" fill="#10130a"/>
+  <text x="52" y="28" fill="#f5f7ef" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="24" font-weight="650" letter-spacing="-1">sndbox</text>
+</svg>

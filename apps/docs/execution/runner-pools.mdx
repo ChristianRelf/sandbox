@@ -1,0 +1,25 @@
+---
+title: "Runner pools"
+description: "Route work to compatible runners without broadening workspace or environment authority."
+icon: "network"
+---
+
+A runner pool belongs to one workspace and environment. Membership does not grant a runner access to another workspace or environment.
+
+## Candidate checks
+
+Before strategy selection, a runner must pass protocol-v2 compatibility and be online, recently heartbeating, below its own concurrency limit, in the configured region, enabled, not draining, and tagged with every required pool tag. Pool concurrency is an aggregate ceiling and reserves the assignment's requested capacity.
+
+## Strategies
+
+| Strategy | Selection rule |
+| --- | --- |
+| `least_loaded` | Lowest workload-to-capacity ratio, then member priority and runner ID. |
+| `round_robin` | Stable runner-ID order with a durable cursor. |
+| `priority_failover` | Lowest member priority first, then proportional load. |
+
+All tie-breaking is deterministic. Rejected candidates remain available in routing diagnostics but cannot receive the work.
+
+## Pause and drain
+
+A paused or draining pool accepts no new claims. Existing leases continue through renewal, graceful drain, or expiry. Drain before maintenance so the recovery system does not have to classify an interrupted side effect.

@@ -1,0 +1,41 @@
+---
+title: "Expressions and bindings"
+description: "Reference the template paths and typed binding records used to resolve workflow values."
+icon: "variable"
+---
+
+The editor stores typed `InputBinding` records. Template strings are available where the inspector exposes a mapped text control.
+
+## Node output
+
+```text
+{{nodes.http_request.output.status}}
+{{nodes.download.output.path}}
+{{nodes.extract.output.data.heading}}
+```
+
+The identifier after `nodes` is the source node ID, not its display label. Later segments select the output value.
+
+## Trigger data
+
+```text
+{{trigger.email.messageId}}
+```
+
+Trigger paths depend on the trigger output. New Email returns an `email` object; inspect a real trigger or test result before selecting nested fields.
+
+## Structured binding
+
+```json
+{
+  "kind": "node_output",
+  "nodeId": "parse",
+  "path": ["rowCount"]
+}
+```
+
+Use `protected_variable` for secrets and `connection` for provider credentials. Do not embed a secret inside a template: the rendered string can become ordinary output.
+
+## Resolution order
+
+For CSV, JSON, and text parsers, mapped/pasted `content` takes precedence over the optional file `path`. For general node fields, the explicit input binding supplies the resolved value used by execution.

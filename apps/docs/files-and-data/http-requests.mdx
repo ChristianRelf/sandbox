@@ -1,0 +1,35 @@
+---
+title: "HTTP requests"
+description: "Call an endpoint with explicit transport settings and inspect status, body, and final URL."
+icon: "globe-2"
+---
+
+HTTP Request supports GET, POST, PUT, PATCH, and DELETE. URL and body can be mapped; headers and query parameters are JSON objects.
+
+```json title="Request configuration"
+{
+  "method": "POST",
+  "url": "https://api.example.com/events",
+  "query": {},
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": {
+    "status": "ready"
+  },
+  "timeoutMs": 30000,
+  "retryCount": 0
+}
+```
+
+The outputs are numeric `status`, parsed or raw `body`, and `finalUrl`. Body configuration is hidden for GET and DELETE in the editor.
+
+## Credentials and redaction
+
+Authorization and cookie header values are redacted from execution data. Do not paste a long-lived token into workflow JSON. Use a protected variable, provider connection, or plugin credential operation where appropriate.
+
+## Retry deliberately
+
+The node exposes a bounded retry count and timeout. Only retry an external mutation when the endpoint provides an idempotency mechanism you actually use; a repeated POST can produce a second side effect.
+
+For calls to the sndbox control plane, use the typed [TypeScript client](/developers/typescript-client), which adds correlation, freshness, idempotency, and bounded transport retries.

@@ -3,26 +3,17 @@
   "version": "0.7.1-beta.3",
   "private": true,
   "scripts": {
-    "generate:references": "tsx ../../scripts/generate-node-reference.ts",
+    "generate:references": "tsx ../../scripts/generate-docs-reference.ts",
     "predev": "npm run generate:references",
-    "dev": "next dev -p 3200",
+    "dev": "mint dev --port 3200 --no-open",
     "prebuild": "npm run generate:references",
-    "build": "next build",
-    "start": "next start -p 3200"
-  },
-  "dependencies": {
-    "@sandbox/brand": "*",
-    "@sandbox/product-ui": "*",
-    "@sandbox/ui": "*",
-    "lucide-react": "^0.468.0",
-    "next": "16.3.3",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "build": "mint validate",
+    "check:links": "mint broken-links --check-anchors --check-redirects",
+    "check:a11y": "mint a11y",
+    "start": "mint dev --port 3200 --no-open"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "mint": "4.2.851",
     "tsx": "^4.20.5",
     "typescript": "~5.9.3"
   }

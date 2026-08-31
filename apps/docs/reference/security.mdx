@@ -1,0 +1,29 @@
+---
+title: "Security model"
+description: "Understand the boundaries around local privileges, secrets, plugins, managed browsers, runners, and cloud data."
+icon: "shield-check"
+---
+
+sndbox treats the desktop host, browser sidecar, plugin runtime, remote runner, and control plane as distinct trust boundaries.
+
+## Local workflows
+
+File pickers establish path approval. Network domains, browser profiles, background execution, commands, and communications are tied to the workflow revision. Secrets stay in the OS vault or protected store and are redacted from ordinary evidence.
+
+## Plugins
+
+Signed immutable packages run as WebAssembly without general WASI. Host calls are typed and require declaration, node reference, user/workspace approval, and live policy. Package integrity and exact node version are pinned into the workflow.
+
+## Managed browsers
+
+Each cloud execution receives a new Chromium process/context and temporary directory. Private/metadata network destinations are rejected, uploads use approved artifact roots, downloads are scanned, sensitive fields are masked, and the workload is destroyed after completion or failure.
+
+## Runners
+
+Self-hosted runners create local Ed25519 device keys, sign fresh nonced requests, verify control-plane command signatures and content hashes, enforce environment/path/network policy locally, and use durable receipts to avoid redelivered completed command execution.
+
+## Cloud content
+
+Sync uses AES-256-GCM and a key envelope but is service-readable. Raw credentials, cookies, profiles, local files, detailed logs, and screenshots do not sync by default. PostgreSQL row-level and permission checks scope workspace resources.
+
+Security-sensitive operations retain correlation and append-only audit evidence.

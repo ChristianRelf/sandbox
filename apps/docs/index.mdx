@@ -1,0 +1,43 @@
+---
+title: "Build reliable automations with sndbox"
+description: "Connect browser actions, files, data, web requests, and human approvals in a visual workflow that you can inspect from start to finish."
+icon: "sandbox"
+---
+
+sndbox is a desktop workflow builder for repeatable browser and system automation. Build a workflow from typed nodes, run it with the local or self-hosted runner, and inspect the inputs, outputs, logs, and evidence produced by each execution.
+
+<Frame caption="The real Workflows view in sndbox 0.7 beta">
+  ![The sndbox Workflows view showing local workflows, triggers, last-run status, and direct run actions](/images/product/workflows-dashboard.jpg)
+</Frame>
+
+<CardGroup cols={2}>
+  <Card title="Create your first workflow" icon="play" href="/quickstart">
+    Install sndbox, connect real nodes, and inspect your first successful run.
+  </Card>
+  <Card title="Browse every built-in node" icon="blocks" href="/nodes">
+    See the exact settings, ports, defaults, and permissions for each implemented node.
+  </Card>
+</CardGroup>
+
+## One workflow, visible end to end
+
+The editor keeps the automation and its execution history together. Configure a node on the canvas, map data from earlier steps, test it, then open the run inspector to see what happened.
+
+<Steps>
+  <Step title="Choose a real trigger">
+    Start manually, on a schedule, when a file changes, or when matching Gmail messages arrive.
+  </Step>
+  <Step title="Connect the work">
+    Add browser, HTTP, file, data, notification, approval, or communication nodes. The editor only exposes settings the selected node implements.
+  </Step>
+  <Step title="Run with explicit permissions">
+    sndbox shows file-system, network, command, browser, and secret boundaries before execution.
+  </Step>
+  <Step title="Inspect the evidence">
+    Review node inputs and outputs, logs, retries, screenshots, downloads, and browser diagnostics from the execution inspector.
+  </Step>
+</Steps>
+
+<Note>
+  This documentation describes the current repository implementation. Generated node and API reference pages are sourced directly from the codebase so their field names and defaults stay accurate.
+</Note>

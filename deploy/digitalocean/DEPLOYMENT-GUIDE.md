@@ -4,7 +4,7 @@ This guide deploys the supported v0.7 beta server surface:
 
 - `https://sndbox.app` and `https://www.sndbox.app`
 - `https://app.sndbox.app`
-- `https://docs.sndbox.app`
+- `https://docs.sndbox.app`, deployed separately through Mintlify
 - Automatic HTTPS through Caddy
 - Optional Grafana Alloy observability
 - Optional headless sndbox runner
@@ -21,7 +21,7 @@ You need:
 - Administrator access to the sndbox GitHub repository
 - A local clone of this repository with the deployment changes pushed to `main`
 
-The website, account portal, docs service, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. Use at least 4 GB when the account portal is enabled.
+The website, account portal, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. Use at least 4 GB when the account portal is enabled.
 
 ## 2. Configure DNS
 
@@ -32,9 +32,8 @@ Open the DNS management page for `sndbox.app` and create:
 | `A` | `@` | `YOUR_DROPLET_IPV4` | `300` or automatic |
 | `CNAME` | `www` | `sndbox.app` | `300` or automatic |
 | `CNAME` | `app` | `sndbox.app` | `300` or automatic |
-| `CNAME` | `docs` | `sndbox.app` | `300` or automatic |
 
-Keep `api` on the separately deployed control plane. Do not create records for `identity` or `internal`, and do not add an `AAAA` record unless IPv6 is configured on the Droplet.
+Keep `api` on the separately deployed control plane. Configure `docs.sndbox.app` as a Mintlify custom domain using the CNAME target Mintlify provides; do not point it to the Droplet. Do not create records for `identity` or `internal`, and do not add an `AAAA` record unless IPv6 is configured on the Droplet.
 
 From PowerShell, check propagation:
 
@@ -42,10 +41,9 @@ From PowerShell, check propagation:
 Resolve-DnsName sndbox.app
 Resolve-DnsName www.sndbox.app
 Resolve-DnsName app.sndbox.app
-Resolve-DnsName docs.sndbox.app
 ```
 
-All four public-site names must eventually resolve to the Droplet.
+The apex, `www`, and `app` names must eventually resolve to the Droplet. Check `docs.sndbox.app` separately after Mintlify custom-domain verification succeeds.
 
 ## 3. Create a dedicated deployment SSH key
 
@@ -168,7 +166,7 @@ In **DigitalOcean > Networking > Firewalls**, attach a firewall to the Droplet w
 | TCP | `443` | All IPv4 and IPv6 |
 | UDP | `443` | All IPv4 and IPv6; optional HTTP/3 support |
 
-Allow normal outbound traffic. Do not expose ports `3100`, `3200`, `3300`, `12345`, `2375`, `2376`, or PostgreSQL.
+Allow normal outbound traffic. Do not expose ports `3100`, `3300`, `12345`, `2375`, `2376`, or PostgreSQL.
 
 If restricting SSH to fixed source addresses, remember that ordinary GitHub-hosted runners do not use one small permanent IP range. For this beta, allow SSH broadly and rely on key-only authentication, or use a self-hosted runner/VPN later.
 
@@ -277,7 +275,7 @@ Open **GitHub > Actions > Release**. Wait for every job to succeed. The workflow
 
 - An explicitly unsigned Windows NSIS test installer for this prerelease
 - Linux runner archives
-- Multi-architecture website, account, docs, and runner containers
+- Multi-architecture website, account, and runner containers
 - Checksums, Sigstore signatures, `release-manifest.json`, and GitHub artifact attestations when the repository supports them
 - A published GitHub prerelease
 
@@ -306,10 +304,10 @@ The workflow will:
 3. Upload only `deploy/digitalocean`.
 4. Preserve the existing `.env`, `runner.toml`, runner data, and Docker volumes.
 5. Authenticate to GHCR with a temporary token.
-6. Pull the immutable website, account, and docs versions and the pinned Caddy release.
-7. Start all four services and wait for their health checks.
-8. Test all three public services over the Droplet's loopback interface.
-9. Restore the previous website, account, and docs versions if deployment fails.
+6. Pull the immutable website and account versions and the pinned Caddy release.
+7. Start all three public services and wait for their health checks.
+8. Test the website and account portal over the Droplet's loopback interface.
+9. Restore the previous website and account versions if deployment fails.
 10. Remove the temporary GHCR and SSH credentials from the Actions runner.
 
 ## 12. Verify the deployment
@@ -325,25 +323,24 @@ Run:
 ```bash
 cd /opt/sandbox
 docker compose ps
-docker compose logs --tail=100 website account docs caddy
+docker compose logs --tail=100 website account caddy
 curl --fail http://127.0.0.1:3100/
-curl --fail http://127.0.0.1:3200/
 curl --fail http://127.0.0.1:3300/sign-in
 curl --fail --head https://sndbox.app/
 curl --fail --head https://www.sndbox.app/
 curl --fail --head https://app.sndbox.app/sign-in
-curl --fail --head https://docs.sndbox.app/
 ```
 
 Expected results:
 
-- `website`, `account`, `docs`, and `caddy` are running and healthy.
-- All three loopback requests succeed.
+- `website`, `account`, and `caddy` are running and healthy.
+- Both loopback requests succeed.
 - `https://sndbox.app` returns a successful response.
 - `https://www.sndbox.app` redirects to `https://sndbox.app`.
 - `https://app.sndbox.app/sign-in` returns the account login page.
-- `https://docs.sndbox.app` returns the documentation site.
 - The downloads page displays the published beta installer from `release-manifest.json`.
+
+Deploy the documentation by connecting the repository's `apps/docs` directory to Mintlify, configure `docs.sndbox.app` in Mintlify, and then verify `curl --fail --head https://docs.sndbox.app/` independently.
 
 Also install the downloaded NSIS package on a clean Windows test machine and verify the browser engine, update notice, settings, and one harmless local workflow.
 
@@ -359,7 +356,7 @@ Create this repository variable:
 DEPLOY_DIGITALOCEAN=true
 ```
 
-Future successful releases will automatically deploy the website, account portal, and docs. Observability and the runner remain manual profile choices.
+Future successful releases will automatically deploy the website and account portal. Mintlify deploys documentation changes from its connected branch. Observability and the runner remain manual profile choices.
 
 ## 14. Enable optional observability
 
@@ -422,7 +419,7 @@ Never deploy mutable tags such as `latest`.
 
 ## 17. Roll back
 
-Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls those immutable images and restarts the website, account portal, and docs.
+Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls those immutable images and restarts the website and account portal.
 
 The deployment script also attempts this rollback automatically when a new image fails its health checks.
 
@@ -444,7 +441,7 @@ The deployment script also attempts this rollback automatically when a new image
 
 ### Caddy cannot obtain a certificate
 
-- Confirm the apex, `www`, and `docs` DNS records point to this Droplet.
+- Confirm the apex, `www`, and `app` DNS records point to this Droplet.
 - Confirm TCP ports `80` and `443` are open.
 - Check `docker compose logs --tail=200 caddy`.
 - Remove incorrect `AAAA` records when the Droplet has no working IPv6 route.
@@ -458,14 +455,9 @@ docker compose logs --tail=200 website
 curl -v http://127.0.0.1:3100/
 ```
 
-### Docs is unhealthy
+### Docs is unavailable
 
-```bash
-cd /opt/sandbox
-docker compose ps
-docker compose logs --tail=200 docs
-curl -v http://127.0.0.1:3200/
-```
+Run `npm run docs:build` locally, inspect the Mintlify deployment log, and verify that the `docs.sndbox.app` CNAME matches the target shown in Mintlify. The Droplet does not serve or proxy documentation.
 
 ### The release workflow rejects the tag
 

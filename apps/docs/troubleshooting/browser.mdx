@@ -1,0 +1,20 @@
+---
+title: "Browser troubleshooting"
+description: "Read browser diagnostics before changing a locator, profile, wait, or approved file boundary."
+icon: "globe"
+---
+
+## Checklist
+
+1. Confirm Browser engine health in Settings.
+2. Confirm the Open Browser profile still exists.
+3. Open the failed node's diagnostics.
+4. Check current URL/page title and unexpected-navigation warning.
+5. Read locator attempts and match counts in order.
+6. Review console errors and failed network requests.
+7. Open the retained screenshot/trace when available.
+8. Retry headed or re-record only after identifying what changed.
+
+Zero matches usually means wrong page state or changed semantics. Multiple matches require a more specific accessible label or stable attribute. A timeout after a correct click usually needs an explicit Wait For condition, not a longer arbitrary delay.
+
+Uploads/downloads also require an approved file/folder and size limit. A trusted path must come from a picker or compatible path output.

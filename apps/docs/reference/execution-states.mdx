@@ -1,0 +1,27 @@
+---
+title: "Execution states"
+description: "Reference desktop node/run states and the extended durable remote state machine."
+icon: "activity"
+---
+
+## Desktop states
+
+Desktop run records use `queued`, `running`, `successful`, `failed`, `skipped`, and `cancelled`. Node records add `idle` and `waiting` while the workflow is active.
+
+## Durable remote states
+
+```text
+queued → waiting_for_runner → claimed → starting → running → succeeded
+                                 │          │          └→ waiting_for_approval
+                                 │          └───────────→ retrying
+                                 └──────────────────────→ lost
+waiting_for_runner ─────────────────────────────────────→ cancelling → cancelled
+```
+
+Applicable non-terminal states can also reach `failed`, `timed_out`, or `expired` through allowed transitions. `skipped` is terminal, and a runner cannot reopen a terminal state or mark itself lost.
+
+## Transition integrity
+
+The current execution projection has a monotonic state version. Append-only events use per-execution sequence and transition UUID. Database validation checks expected version/from-state, allowed transition, assigned runner, and unexpired lease atomically.
+
+Every transition records correlation ID, actor/account/runner, reason, metadata, and occurrence time. Runner events cannot rewrite terminal state.

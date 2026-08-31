@@ -1,0 +1,28 @@
+---
+title: "Control-plane API"
+description: "Use the stable `/v1` transport contract and its generated OpenAPI operation pages."
+icon: "code-xml"
+---
+
+The supported control-plane surface is `/v1`. The checked-in OpenAPI 3.1 document is copied into this Mintlify project during reference generation, and a running control plane serves the same contract at `GET /v1/openapi.json`.
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key-round" href="/developers/authentication">Use interactive sessions, scoped bearer credentials, or signed runner requests.</Card>
+  <Card title="TypeScript client" icon="braces" href="/developers/typescript-client">Use the repository client for correlation, freshness, idempotency, retries, and typed resources.</Card>
+  <Card title="Errors and correlation" icon="triangle-alert" href="/developers/errors">Branch on stable error codes and retain the correlation ID.</Card>
+  <Card title="All operations" icon="list-tree" href="/api-reference">Browse all 118 methods generated from OpenAPI.</Card>
+</CardGroup>
+
+## Compatibility
+
+Existing v1 fields and successful meanings remain backward compatible for the supported release line. Additive response fields and enum values can appear, so clients must ignore unknown object fields and handle unknown enums safely. A breaking request, response, authentication, or semantic change requires a new major path.
+
+Deprecations use release notes plus `Deprecation` and `Sunset` headers at least 180 days before removal, except a documented security or legal emergency. Preview endpoints do not use `/v1` and have no stable compatibility promise.
+
+## Base URL
+
+```text
+https://api.sndbox.app
+```
+
+All normal responses include `x-correlation-id`. Supply your own safe 8–128 character correlation value when you need to join application logs with sndbox audit and support evidence.

@@ -1,0 +1,26 @@
+---
+title: "Updates and rollback"
+description: "Deploy immutable release identities, verify health, drain runners, and preserve a known rollback target."
+icon: "refresh-cw"
+---
+
+Deploy an immutable semantic version or recorded container digest. Mutable tags are convenience references and should not be the only rollback identity.
+
+## Service update order
+
+1. Back up configuration and persistent data according to the service runbook.
+2. Apply compatible PostgreSQL migrations.
+3. Deploy control plane, scheduler, and workers as one release unit.
+4. Route only after `/ready` succeeds.
+5. Drain self-hosted runners, replace them, validate protocol compatibility, then resume claims.
+6. Run a synthetic workflow through authentication, queueing, execution, and evidence.
+
+## Public-site beta bundle
+
+`deploy/digitalocean/deploy.sh <version> website` pulls immutable website/account images and restores the prior images when health checks fail. Mintlify documentation is deployed independently from `/apps/docs` and is not a container in that Compose stack.
+
+## Release verification
+
+Windows artifacts publish a SHA-256 digest and, for signed releases, Authenticode. Linux runner archives publish deterministic checksums and a Sigstore bundle. Production OCI publication includes provenance, SBOM, signature, and recorded digest.
+
+Never replace signing or encryption keys as a routine update step; rotation needs an explicit overlap or migration plan.

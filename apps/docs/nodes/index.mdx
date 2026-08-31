@@ -1,0 +1,158 @@
+---
+title: "Built-in nodes"
+description: "Every node currently implemented in sndbox, generated from the product catalogue."
+icon: "blocks"
+---
+
+sndbox currently implements **42 built-in nodes** across triggers, logic, data, network, browser, communication, and system automation. These pages are generated from `src/catalogue.ts`; names, type IDs, defaults, typed ports, side-effect flags, and supported placements are not hand-copied.
+
+<Tip>
+  Start with a trigger, connect compatible ports, and map outputs into later node fields. The node inspector only shows settings implemented by that node.
+</Tip>
+
+## Triggers
+
+<Card title="Manual Trigger" icon="zap" href="/nodes/manual-trigger">
+  Run from the toolbar.
+</Card>
+<Card title="Schedule Trigger" icon="zap" href="/nodes/schedule-trigger">
+  Run on a local schedule.
+</Card>
+<Card title="File Watch Trigger" icon="zap" href="/nodes/file-watch-trigger">
+  Watch an approved folder.
+</Card>
+<Card title="New Email" icon="zap" href="/nodes/gmail-new-email-trigger">
+  Poll Gmail safely for matching messages.
+</Card>
+
+## Logic
+
+<Card title="Condition" icon="git-branch" href="/nodes/condition">
+  Follow a true or false branch.
+</Card>
+<Card title="Delay" icon="git-branch" href="/nodes/delay">
+  Wait without blocking the runner.
+</Card>
+<Card title="Compare With Previous" icon="git-branch" href="/nodes/compare-previous">
+  Detect a meaningful change and update state after success.
+</Card>
+<Card title="Manual Approval" icon="git-branch" href="/nodes/approval">
+  Pause for local review.
+</Card>
+
+## Data
+
+<Card title="Set Data" icon="braces" href="/nodes/set-data">
+  Construct a structured object.
+</Card>
+<Card title="Read File" icon="braces" href="/nodes/read-file">
+  Read text from an approved file.
+</Card>
+<Card title="List Folder" icon="braces" href="/nodes/list-folder">
+  List files in an approved folder.
+</Card>
+<Card title="Parse CSV" icon="braces" href="/nodes/parse-csv">
+  Parse CSV text or an approved file.
+</Card>
+<Card title="Parse JSON" icon="braces" href="/nodes/parse-json">
+  Parse JSON text or an approved file.
+</Card>
+<Card title="Parse Text" icon="braces" href="/nodes/parse-text">
+  Split text into lines and basic statistics.
+</Card>
+<Card title="Get Workflow State" icon="braces" href="/nodes/get-workflow-state">
+  Read a value stored by this workflow.
+</Card>
+<Card title="Set Workflow State" icon="braces" href="/nodes/set-workflow-state">
+  Store a value after a successful run.
+</Card>
+
+## Network
+
+<Card title="HTTP Request" icon="globe" href="/nodes/http-request">
+  Call an HTTP endpoint.
+</Card>
+
+## Browser
+
+<Card title="Open Browser" icon="mouse-pointer-click" href="/nodes/open-browser">
+  Start a managed Chromium session.
+</Card>
+<Card title="Navigate" icon="mouse-pointer-click" href="/nodes/navigate">
+  Load a URL in the active session.
+</Card>
+<Card title="Click Element" icon="mouse-pointer-click" href="/nodes/click-element">
+  Click a recorded element.
+</Card>
+<Card title="Fill Field" icon="mouse-pointer-click" href="/nodes/fill-field">
+  Enter static or protected data.
+</Card>
+<Card title="Select Option" icon="mouse-pointer-click" href="/nodes/select-option">
+  Choose an option by value, label or index.
+</Card>
+<Card title="Press Key" icon="mouse-pointer-click" href="/nodes/press-key">
+  Send a validated key combination.
+</Card>
+<Card title="Wait For" icon="mouse-pointer-click" href="/nodes/wait-for">
+  Wait for page state or an element.
+</Card>
+<Card title="Extract Data" icon="mouse-pointer-click" href="/nodes/extract-data">
+  Extract structured values from the page.
+</Card>
+<Card title="Screenshot" icon="mouse-pointer-click" href="/nodes/screenshot">
+  Capture viewport, page or element.
+</Card>
+<Card title="Download File" icon="mouse-pointer-click" href="/nodes/download-file">
+  Save a browser download safely.
+</Card>
+<Card title="Upload File" icon="mouse-pointer-click" href="/nodes/upload-file">
+  Upload an approved local file.
+</Card>
+<Card title="Close Browser" icon="mouse-pointer-click" href="/nodes/close-browser">
+  Close the active managed session.
+</Card>
+
+## Communication
+
+<Card title="Get Email" icon="send" href="/nodes/gmail-get-email">
+  Retrieve a Gmail message.
+</Card>
+<Card title="Create Gmail Draft" icon="send" href="/nodes/gmail-create-draft">
+  Create an editable draft without sending.
+</Card>
+<Card title="Send Email" icon="send" href="/nodes/gmail-send-email">
+  Send only after explicit workflow approval.
+</Card>
+<Card title="Add Gmail Label" icon="send" href="/nodes/gmail-add-label">
+  Add or remove message labels.
+</Card>
+<Card title="Discord Webhook" icon="send" href="/nodes/discord-webhook">
+  Send a webhook message.
+</Card>
+<Card title="Discord Embed" icon="send" href="/nodes/discord-embed">
+  Send a structured webhook embed.
+</Card>
+<Card title="Slack Webhook" icon="send" href="/nodes/slack-webhook">
+  Send an incoming webhook message.
+</Card>
+
+## System
+
+<Card title="Desktop Notification" icon="terminal" href="/nodes/desktop-notification">
+  Show a native notification.
+</Card>
+<Card title="Move File" icon="terminal" href="/nodes/move-file">
+  Move within approved folders.
+</Card>
+<Card title="Write File" icon="terminal" href="/nodes/write-file">
+  Write text to an approved file.
+</Card>
+<Card title="Copy File or Folder" icon="terminal" href="/nodes/copy-path">
+  Copy within approved folders.
+</Card>
+<Card title="Delete File or Folder" icon="terminal" href="/nodes/delete-path">
+  Delete an explicitly approved path.
+</Card>
+<Card title="Run Command" icon="terminal" href="/nodes/run-command">
+  Execute an explicitly approved process.
+</Card>

@@ -1,0 +1,32 @@
+---
+title: "Publish a plugin"
+description: "Submit one immutable signed package for automated and manual marketplace review."
+icon: "send"
+---
+
+Validate, test, sign, and inspect before submission. `publish` accepts a verified package and uses its package-integrity digest as the request idempotency key.
+
+```powershell
+$env:SANDBOX_API_URL = "https://api.sndbox.app"
+$env:SANDBOX_PUBLISH_TOKEN = "<publisher token>"
+sandbox plugin publish .\dist\com.example.plugin-0.1.0.sandbox-plugin
+```
+
+You can use `--api` and `--token` instead of environment variables, but avoid shell history and logs for the token.
+
+Submission creates a new review object; it does not overwrite an approved version. Review states are Draft, Submitted, Automated review, Manual review, Changes requested, Approved/Rejected, Published, Suspended, and Removed.
+
+## Publisher expectations
+
+- minimize capabilities and domains;
+- document data handling and external side effects;
+- provide a privacy policy when required;
+- inventory dependencies and reproduce builds where practical;
+- test migrations, idempotency, and provider errors; and
+- redact diagnostics.
+
+Publisher verification confirms identity/listing control; it is not an endorsement or safety guarantee.
+
+## Versions and migration
+
+Never reuse a published version. Patch releases are compatible fixes, minor releases are additive, and major releases can break behavior or storage isolation. A node contract change uses a new positive `nodeVersion` and explicit migration handler. Active published workflows do not migrate in place.

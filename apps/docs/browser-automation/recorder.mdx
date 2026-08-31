@@ -1,0 +1,37 @@
+---
+title: "Browser recorder"
+description: "Record a real managed Chromium session, review the captured steps, and add editable nodes."
+icon: "circle-dot"
+---
+
+The recorder captures supported interactions from a managed browser session. It does not create an opaque macro: every accepted step becomes an ordinary node you can inspect and edit.
+
+<Frame caption="Recorder setup uses an isolated managed Chromium profile">
+  ![The real sndbox recorder dialog with browser profile, starting URL, protected-input notice, and record action](/images/product/browser-recorder.jpg)
+</Frame>
+
+<Steps>
+  <Step title="Start from the editor">
+    Choose **Record browser**. Select an existing managed profile and enter the initial URL for the recording session.
+  </Step>
+  <Step title="Perform the routine">
+    Navigate, click, fill, select, and trigger downloads in the managed Chromium window. The sidecar records supported page events and structured locator candidates.
+  </Step>
+  <Step title="Stop and review">
+    Return to sndbox and stop recording. The review screen lists captured steps before they alter the workflow.
+  </Step>
+  <Step title="Clean the sequence">
+    Rename, reorder, remove, or combine input events. Mark inputs that must be supplied through a protected value instead of storing what was typed.
+  </Step>
+  <Step title="Add editable nodes">
+    Accept the review. sndbox adds browser nodes and control edges to the current workflow; use the regular inspector to test locators and finish configuration.
+  </Step>
+</Steps>
+
+## What recording preserves
+
+A captured locator can include a primary candidate, fallback candidates, accessible role and name, tag, stable attributes, recording URL, nearby text, and frame path. The current recorder records against the active main page and leaves `framePath` empty.
+
+<Warning>
+  Never accept a recorded password, token, one-time code, or card value as literal workflow configuration. Replace it with a protected variable or approved connection mapping during review.
+</Warning>

@@ -1,0 +1,46 @@
+---
+title: "Variables and data mapping"
+description: "Pass literal values, node outputs, templates, protected variables, and connections into node inputs."
+icon: "variable"
+---
+
+A control edge determines which node runs next. An input binding determines which value a field receives. Keeping those responsibilities separate makes a workflow reviewable.
+
+## Binding kinds
+
+```ts title="InputBinding"
+type InputBinding =
+  | { kind: "literal"; value: unknown }
+  | { kind: "node_output"; nodeId: string; path?: string[] }
+  | { kind: "template"; template: string }
+  | { kind: "protected_variable"; name: string }
+  | { kind: "connection"; connectionId: string };
+```
+
+| Kind | Use it for |
+| --- | --- |
+| `literal` | A fixed JSON-compatible value stored with the workflow. |
+| `node_output` | A typed output from an earlier node, optionally narrowed by a path. |
+| `template` | Text containing one or more workflow expressions. |
+| `protected_variable` | A named secret or protected value resolved by the host. |
+| `connection` | A vault-owned Gmail, Discord, Slack, or plugin credential reference. |
+
+## Template expressions
+
+Repository templates use expressions such as:
+
+```text
+{{nodes.http_request.output.status}}
+{{nodes.extract.output.data.heading}}
+{{trigger.email.messageId}}
+```
+
+Use the editor's mapping controls to insert paths instead of typing IDs from memory. The binding panel validates source-node availability and compatible port types.
+
+## Sensitive values
+
+Do not place passwords, tokens, cookies, or webhook URLs in a literal or template. Use a protected variable or connection. For Fill Field, enable **Sensitive** so the resolved value is redacted from logs and execution records.
+
+## JSON-compatible data
+
+Node data uses strings, numbers, booleans, objects, arrays, `null`, trusted path values, and connection references. A parser may return structured objects or arrays; inspect a successful test output before selecting a nested path.

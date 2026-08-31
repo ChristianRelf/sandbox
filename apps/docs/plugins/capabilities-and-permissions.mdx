@@ -1,0 +1,43 @@
+---
+title: "Capabilities and permissions"
+description: "Declare only the host operations, domains, credentials, file access, and storage the plugin needs."
+icon: "shield-check"
+---
+
+The SDK implements these capability declarations:
+
+```ts
+type Capability =
+  | { type: "workflow_input" }
+  | { type: "structured_logging" }
+  | { type: "time" }
+  | { type: "random_identifiers" }
+  | { type: "cryptography"; operations: string[] }
+  | { type: "network" }
+  | { type: "credential_operations"; credentialType: string; operations: string[] }
+  | { type: "temporary_storage"; maxBytes: number }
+  | { type: "persistent_storage"; maxBytes: number }
+  | { type: "external_communication" }
+  | { type: "file_picker_read"; maxBytes: number };
+```
+
+Network access also declares exact lowercase domains, HTTP methods, optional subdomains, and redirect behavior. Every redirect target is re-authorized.
+
+## Four checks for a host call
+
+An operation is permitted only when it is:
+
+1. declared at plugin level;
+2. referenced by the executing node;
+3. approved for the installation owner/workspace; and
+4. allowed by current host policy.
+
+Publisher prose can explain intent but cannot replace the structured host permission summary.
+
+## Updates
+
+Adding a domain/method, credential operation, storage quota, external action, or file access is a permission expansion. The installed version stays active until a user or administrator approves the update. Removing access does not require expansion approval.
+
+## Storage
+
+Temporary storage is execution-scoped. Persistent storage is isolated by publisher, plugin, owner/workspace, and usually major version. Keys are not filesystem paths. The stage-three maximum is 100 MB per temporary or persistent class.

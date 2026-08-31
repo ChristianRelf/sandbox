@@ -1,0 +1,29 @@
+---
+title: "Workflow state and change detection"
+description: "Store values per workflow and compare a run with the last successfully committed value."
+icon: "history"
+---
+
+Workflow state is scoped to one workflow. It is useful for cursors, last-seen values, and change detection that must survive separate runs.
+
+## State nodes
+
+- **Get Workflow State** returns `value` and `found`, using `defaultValue` when the key is absent.
+- **Set Workflow State** stages a value under one key.
+- **Compare With Previous** returns `changed`, `previous`, and `current`, then stages the current value.
+
+```json title="Normalize monitored text"
+{
+  "key": "website-heading",
+  "value": "{{nodes.extract.output.data.heading}}",
+  "normalization": "collapse_whitespace"
+}
+```
+
+Normalization options are exact (`none`), `trim`, `lowercase` (trim and lowercase), and `collapse_whitespace`.
+
+## Commit rule
+
+State changes commit only after the complete workflow succeeds. If a later node fails, a comparison value is not advanced. A node test previews state behavior without committing it.
+
+This rule prevents a failed notification or downstream action from causing the next run to believe the change was already processed.

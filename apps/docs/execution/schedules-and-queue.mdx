@@ -1,0 +1,23 @@
+---
+title: "Schedules and event queue"
+description: "Persist schedule occurrences and deliver events with explicit retry, expiry, and replay behavior."
+icon: "calendar-clock"
+---
+
+The durable scheduler is an independently deployable service. It calculates interval, calendar, and cron occurrences in an IANA timezone and persists an occurrence before a worker can claim it.
+
+## Duplicate prevention
+
+PostgreSQL advisory locking elects one scheduler transaction at a time. Row locks and the `(schedule_id, scheduled_for)` constraint prevent a restart or overlapping tick from emitting the same occurrence twice.
+
+Schedules define daylight-saving, misfire, jitter, concurrency, and no-runner behavior. A spring-forward wall time that does not exist is not silently shifted. Bounded backfill is explicit, and an existing occurrence is not re-emitted.
+
+## Queue delivery
+
+Events use at-least-once delivery. A claim carries a short hashed visibility token. An expired claim returns to the queue and adds immutable attempt history. Retries use exponential backoff with deterministic jitter; the event enters dead-letter state after its attempt bound or three identical failures.
+
+## Replay
+
+Administrative replay is audited and creates a new queue row, correlation ID, and idempotency key while preserving the original logical event identity. Replay does not prove an external side effect is safe; node recovery policy still applies.
+
+Payloads are referenced through encrypted storage rather than stored inline. Queue rows carry workspace, workflow revision, routing requirements, expiry, attempts, and correlation identity.

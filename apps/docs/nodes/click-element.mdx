@@ -1,0 +1,63 @@
+---
+title: "Click Element"
+description: "Click a recorded element. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `click_element` · **Version:** `1` · **Category:** Browser
+
+Click a recorded element. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `locator` | locator | `null` | Recorded locator bundle. sndbox prefers accessible role/name data and retains fallbacks. |
+| `clickType` | string | `"normal"` | Normal, double, or right click. Values: `normal`, `double`, `right`. |
+| `mouseButton` | string | `"left"` | Mouse button sent to the page. Values: `left`, `middle`, `right`. |
+| `modifiers` | array | `[]` | Keyboard modifiers held during the click. |
+| `waitAfterMs` | number | `0` | Optional delay after the click. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "click_element",
+  "version": 1,
+  "configuration": {
+    "locator": null,
+    "clickType": "normal",
+    "mouseButton": "left",
+    "modifiers": [],
+    "waitAfterMs": 0,
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

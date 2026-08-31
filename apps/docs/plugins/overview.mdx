@@ -1,0 +1,30 @@
+---
+title: "Plugins"
+description: "Install immutable, signed packages whose nodes run in a capability-controlled WebAssembly sandbox."
+icon: "blocks"
+---
+
+Plugins add publisher-defined node types without mounting publisher React code inside the editor. Configuration is rendered from JSON Schema using host controls, and execution uses the exact plugin/node version and package integrity pinned into the workflow.
+
+<Frame caption="The implemented plugin marketplace and its included integrations">
+  ![The sndbox plugin marketplace showing the real Gmail, Slack, and Discord integrations](/images/product/plugins-marketplace.jpg)
+</Frame>
+
+## In the product
+
+The Plugins area separates discovery from installed packages. Before installation, sndbox inspects identity, publisher key, archive integrity, node schemas, capabilities, network domains, credentials, storage, price metadata, and permission expansion.
+
+An installed package can be disabled, enabled after approval, updated, or revoked. Development packages carry a persistent Development label, remain disabled in production workspaces, and are excluded from exports unless explicitly included.
+
+## Execution boundary
+
+The Wasmtime host does not link general WASI, so guest code has no ambient filesystem, process, environment, or socket access. Its only import is the typed `sandbox_v1::host_call` broker. Every call must be declared by the plugin, referenced by the node, approved for the owner/workspace, and allowed by current policy.
+
+## Start developing
+
+Use the public `@sandbox/plugin-sdk` package and `sandbox plugin` CLI. The npm scope and compatibility class names keep the historical `sandbox` spelling, while the product and documentation use `sndbox`.
+
+<CardGroup cols={2}>
+  <Card title="Create a plugin" icon="hammer" href="/plugins/sdk-setup">Scaffold a Rust guest, manifest, icon, docs, and tests.</Card>
+  <Card title="Review the manifest" icon="file-json" href="/plugins/manifest">Define nodes, credentials, capabilities, domains, storage, migrations, and trust.</Card>
+</CardGroup>

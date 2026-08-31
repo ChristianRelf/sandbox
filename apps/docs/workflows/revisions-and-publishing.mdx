@@ -1,0 +1,26 @@
+---
+title: "Revisions and publishing"
+description: "Keep workflow history immutable and publish the exact revision that reviewers approved."
+icon: "git-commit-horizontal"
+---
+
+Every content-changing save creates an immutable revision with a content hash and parent relationship. Restoring history creates a new head revision; old runs and revisions are not rewritten.
+
+## Local revision history
+
+Open **Revisions** in the editor to review change summaries and restore an earlier definition. The current marker identifies the draft used for the next local run.
+
+## Workspace publication
+
+For a cloud workspace, editing advances the draft while the published pointer remains unchanged. Publication follows this sequence:
+
+1. Submit the exact current draft for approval.
+2. Collect the number of distinct approval votes required by workspace policy.
+3. Verify every pinned plugin ID, version, and package integrity is enabled.
+4. Publish with a change summary.
+
+Rejection returns the revision with a recorded reason. Rollback chooses a previously published revision and records both the previous and restored identities in the audit log.
+
+## Why the hash matters
+
+Runner commands include the approved revision identity and content hash. A runner hashes the executable workflow locally before it accepts the signed command. A changed definition cannot borrow another revision's approval.

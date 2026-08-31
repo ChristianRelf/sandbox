@@ -1,0 +1,72 @@
+---
+title: "Open Browser"
+description: "Start a managed Chromium session. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `open_browser` · **Version:** `1` · **Category:** Browser
+
+Start a managed Chromium session. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `profileId` | string | `""` | Managed browser profile selected in Settings. |
+| `headed` | boolean | `true` | Show the managed browser during a manual run. Scheduled runs default to headless. |
+| `initialUrl` | string | `""` | Optional first URL opened with the session. |
+| `viewport` | object | `{"width":1280,"height":800}` | Browser viewport width and height. The editor accepts 320–3840 by 240–2160 pixels. |
+| `defaultTimeoutMs` | number | `30000` | Default browser operation timeout, from 100 to 120000 milliseconds. |
+| `closeAutomatically` | boolean | `true` | Clean up the session when the workflow succeeds or fails. |
+| `keepOpenAfterManualTest` | boolean | `false` | Keep a manually tested session open for inspection. |
+| `maximumDurationMs` | number | `1800000` | Maximum managed browser session duration. |
+
+<Note>Create an isolated browser profile in Settings before running this node.</Note>
+
+<Note>Sessions are cleaned up after success or failure when `closeAutomatically` is enabled.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "open_browser",
+  "version": 1,
+  "configuration": {
+    "profileId": "",
+    "headed": true,
+    "initialUrl": "",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "defaultTimeoutMs": 30000,
+    "closeAutomatically": true,
+    "keepOpenAfterManualTest": false,
+    "maximumDurationMs": 1800000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

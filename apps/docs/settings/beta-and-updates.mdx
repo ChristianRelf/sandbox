@@ -1,0 +1,18 @@
+---
+title: "Beta and updates"
+description: "Check the installed build and choose stable or prerelease update discovery."
+icon: "refresh-cw"
+---
+
+The page shows the installed version and provides **Check for updates**.
+
+| Channel | Behavior |
+| --- | --- |
+| Stable | Ignores prerelease versions. |
+| Beta | Includes beta and release-candidate versions in addition to stable. |
+
+An update must come from the immutable repository release tag and published manifest. The downloads page shows artifact size, checksum, and the available verification mechanism.
+
+<Warning>
+  The current Windows beta can be an unsigned test build. Verify its SHA-256 digest and release source before installation; a channel preference does not authenticate a file copied from elsewhere.
+</Warning>

@@ -1,0 +1,38 @@
+---
+title: "Run locally"
+description: "Understand the desktop runner, permission boundaries, and what stops when sndbox closes."
+icon: "laptop"
+---
+
+The desktop app includes a local runner. It executes personal workflows on the current computer and owns local schedules, file watchers, managed browser sessions, and operating-system actions.
+
+## Runner control
+
+The runner control in the sidebar reports whether it is ready, paused, or actively executing workflows. Pausing prevents new local work from starting; it does not rewrite the workflow or its schedule.
+
+<Warning>
+  Local schedules and file/Gmail polling stop when sndbox quits. Use a paired self-hosted or hosted runner when work must continue without the desktop app.
+</Warning>
+
+## Permission review
+
+Before a workflow can perform bounded actions, sndbox derives a permission summary from its current revision. The summary covers:
+
+- approved network domains;
+- approved folders and browser profiles;
+- browser automation;
+- background execution;
+- command execution; and
+- external communication.
+
+A material workflow change can invalidate a previous approval. Local file pickers establish explicit path boundaries; choosing one file or folder does not grant arbitrary filesystem access.
+
+## Test versus run
+
+**Test node** previews one selected step with current configuration. It does not commit workflow state, and destructive actions can require another confirmation. **Run** validates the complete graph, resolves permissions, then executes from the trigger through the connected path.
+
+## Keep the app responsive
+
+Delay nodes wait without blocking the runner. Browser work runs through the managed sidecar. Node timeouts and the workflow concurrency setting bound work instead of leaving an operation open indefinitely.
+
+For unattended Linux execution, continue to [Self-hosted runner](/execution/self-hosted-runner).

@@ -1,0 +1,27 @@
+---
+title: "Privacy and retention"
+description: "Understand which workspace records expire, which evidence remains, and what account export/deletion omits."
+icon: "shield"
+---
+
+Workspace retention is stored as typed PostgreSQL policy and applied in bounded daily batches.
+
+| Data | Default | Allowed |
+| --- | ---: | ---: |
+| Execution events, checkpoints, payload references | 90 days | 1–3650 days |
+| Queue events and attempt history | 30 days | 1–365 days |
+| Encrypted webhook deliveries | 7 days | 1–30 days |
+| Completed runner commands | 30 days | 1–365 days |
+| Workspace audit events | 2555 days | 365–3650 days |
+
+Active executions, queued work, unresolved incidents, and active records are not purged by the retention worker. Billing and invoice reconciliation follow financial-record handling rather than customer-configurable purge.
+
+## Account export
+
+`GET /v1/account/export` returns versioned account metadata, memberships, sessions without device keys/IP metadata, invitation history, credential metadata without hashes/plaintext, personal workflow metadata without encrypted content, and attributable audit events. Secret values, token hashes, protected-variable ciphertext, and raw webhook payloads are excluded.
+
+## Account deletion
+
+`DELETE /v1/account` requires fresh interactive passkey/MFA and refuses while the account owns an organisation or is the sole human owner of an active service account. It revokes credentials/runners, removes sessions and memberships, pseudonymizes identity, and cryptographically erases personal workflow ciphertext/key envelopes while retaining required referential evidence.
+
+Object storage, worker disks, and backups must use limits no longer than the corresponding database data class.

@@ -1,0 +1,39 @@
+---
+title: "Plugin host API"
+description: "Call the only implemented guest import with typed HTTP, credential, log, storage, time, random, and hash requests."
+icon: "cable"
+---
+
+Guests export `memory`, `alloc(i32) -> i32`, and an execution function `(i32, i32) -> i64`. The only import is `sandbox_v1::host_call`, which carries a typed JSON request.
+
+## Operations
+
+| Operation | Purpose |
+| --- | --- |
+| `http_request` | Host-mediated HTTPS request inside declared domain/method policy. |
+| `credential_operation` | Provider adapter operation using a friendly credential reference. |
+| `log` | Structured debug, info, warning, or error record. |
+| `storage_get`, `storage_put`, `storage_delete` | Scoped temporary or persistent key/value storage. |
+| `time` | Host time value. |
+| `random_identifier` | Host-generated random identity. |
+| `crypto_sha256` | SHA-256 of supplied base64 input. |
+
+```json title="Credential operation"
+{
+  "operation": "credential_operation",
+  "credentialReference": "company-gmail",
+  "credentialType": "gmail",
+  "action": "gmail.messages.list",
+  "input": { "query": "is:unread" }
+}
+```
+
+The provider adapter injects or refreshes credentials in the host. OAuth tokens are never returned to guest memory, and secret-shaped provider output is blocked.
+
+## Network behavior
+
+Requests use platform TLS validation, bounded timeouts and response size, cancellation, rate limits, sensitive-header rejection, and re-authorization of every redirect. Declare the narrow provider API domain instead of a broad parent domain.
+
+## No ambient access
+
+Filesystem, process, environment, sockets, IPC, and undeclared WebAssembly imports are denied by the runtime. If a guest needs approved file content, use `file_picker_read`; it never grants a raw filesystem API.

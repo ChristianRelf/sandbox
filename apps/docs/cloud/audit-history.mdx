@@ -1,0 +1,21 @@
+---
+title: "Audit history"
+description: "Retain who changed governance state, which resource was affected, and the request correlation identity."
+icon: "history"
+---
+
+Workspace audit events are append-only security records. Governance operations record the actor, concrete workspace/resource, action, time, bounded metadata, and correlation ID.
+
+Audited workflows include:
+
+- invitation and membership decisions;
+- runner pairing, drain, revoke, and pool changes;
+- workflow approval, rejection, publication, and rollback;
+- plugin installation, permission expansion, enable/disable, and revocation;
+- service-account and token creation/revocation/access review;
+- support-access request, customer decision, diagnostic read, and revoke; and
+- privacy/retention and policy changes.
+
+Execution events and checkpoints have their own immutable sequence and retention class. Audit records default to a longer 2555-day workspace retention and cannot be removed through ordinary workflow deletion.
+
+Use the response `x-correlation-id` when tying an API call, audit row, support case, and runner diagnostic together.

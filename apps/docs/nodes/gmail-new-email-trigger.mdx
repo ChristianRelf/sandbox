@@ -1,0 +1,69 @@
+---
+title: "New Email"
+description: "Poll Gmail safely for matching messages. Exact configuration, ports, placement, and execution behavior."
+icon: "zap"
+---
+
+**Node type:** `gmail_new_email_trigger` · **Version:** `1` · **Category:** Triggers
+
+Poll Gmail safely for matching messages. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `credentialId` | string | `""` | Reference to a connection stored in the operating-system credential vault. |
+| `pollIntervalMinutes` | number | `5` | How often sndbox checks Gmail for matching messages. |
+| `sender` | string | `""` | Optional sender filter. |
+| `recipient` | string | `""` | Optional recipient filter. |
+| `subjectContains` | string | `""` | Optional text that must occur in the message subject. |
+| `hasAttachment` | boolean | `false` | Require at least one attachment. |
+| `label` | string | `""` | Optional Gmail label filter. |
+| `includeHtmlBody` | boolean | `false` | Include HTML in addition to the plain-text body. |
+| `markAsProcessed` | string | `"deduplicate"` | Persist message IDs per workflow so a message cannot trigger repeatedly. Values: `deduplicate`. |
+
+<Note>Message IDs are persisted per workflow to prevent the same email from starting repeated runs.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "gmail_new_email_trigger",
+  "version": 1,
+  "configuration": {
+    "credentialId": "",
+    "pollIntervalMinutes": 5,
+    "sender": "",
+    "recipient": "",
+    "subjectContains": "",
+    "hasAttachment": false,
+    "label": "",
+    "includeHtmlBody": false,
+    "markAsProcessed": "deduplicate"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `email` | `object` | No | Email |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

@@ -1,0 +1,19 @@
+---
+title: "Connection settings"
+description: "Create, test, rename, revoke, and audit the references used by communication nodes."
+icon: "plug-zap"
+---
+
+Gmail setup uses OAuth PKCE. Discord and Slack setup accept incoming webhook URLs, which are moved into the operating-system credential vault rather than stored in workflow JSON.
+
+## Manage a connection
+
+1. Add the provider and complete its setup.
+2. Give the connection a name that identifies its real account or destination.
+3. Use **Test** to verify current access.
+4. Select the named reference in a node.
+5. Review affected workflows before renaming or revoking.
+
+The status can be connected, expired, revoked, error, or setup required. Last-used and expiry metadata help diagnose access without revealing the credential.
+
+Revocation blocks future use immediately. An exported or synced workflow keeps only a requirement/reference and must be reconnected in its destination environment.

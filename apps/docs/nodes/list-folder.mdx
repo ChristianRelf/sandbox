@@ -1,0 +1,60 @@
+---
+title: "List Folder"
+description: "List files in an approved folder. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `list_folder` · **Version:** `1` · **Category:** Data
+
+List files in an approved folder. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `folder` | path | `""` | Folder selected through the operating-system picker and added to the workflow permission boundary. |
+| `recursive` | boolean | `false` | Include nested folders, or permit recursive deletion for Delete File or Folder. |
+| `pattern` | string | `"*"` | Optional glob used to filter names inside the approved folder. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "list_folder",
+  "version": 1,
+  "configuration": {
+    "folder": "",
+    "recursive": false,
+    "pattern": "*"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `folder` | `path` | Yes | Folder |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entries` | `array` | No | Entries |
+| `count` | `number` | No | Count |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

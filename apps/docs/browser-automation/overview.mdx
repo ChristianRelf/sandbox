@@ -1,0 +1,32 @@
+---
+title: "Browser automation"
+description: "Run inspectable Chromium sessions with managed profiles, recorded locators, downloads, uploads, and evidence."
+icon: "globe"
+---
+
+Browser workflows run through the bundled browser sidecar or a managed browser worker. A workflow opens one managed session, performs explicit browser nodes, and closes or cleans up that session at the end.
+
+## Implemented browser nodes
+
+<CardGroup cols={2}>
+  <Card title="Open and navigate" icon="navigation" href="/nodes/open-browser">Choose a profile, viewport, timeout, and first URL.</Card>
+  <Card title="Interact" icon="mouse-pointer-click" href="/nodes/click-element">Click, fill, select, press keys, and wait against recorded locators.</Card>
+  <Card title="Read and capture" icon="scan-search" href="/nodes/extract-data">Extract text, attributes, links, images, or tables and capture screenshots.</Card>
+  <Card title="Move files" icon="download" href="/nodes/download-file">Download into an approved folder or upload an approved local file.</Card>
+</CardGroup>
+
+## Typical sequence
+
+```text
+Trigger → Open Browser → Navigate → Wait For → Click/Fill → Extract/Screenshot → Close Browser
+```
+
+Open Browser establishes the session inherited by later browser nodes. Close Browser ends it deliberately; remaining sessions are cleaned up when the workflow finishes.
+
+## Real diagnostics
+
+When an interaction fails, the execution inspector can show the current URL, page title, every locator candidate and match count, the successful locator when one resolved, console errors, failed network requests, unexpected navigation, Playwright error text, and screenshot or trace paths.
+
+## Boundaries
+
+Browser profiles are isolated. Local profile data is not included in workflow export or cloud sync. Uploads and downloads use approved paths, protected form values can be redacted, and cloud-managed browser network policy rejects private and metadata destinations.

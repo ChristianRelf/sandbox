@@ -1,0 +1,21 @@
+---
+title: "Execution limits"
+description: "Know the implemented bounds that keep workflows, files, browser sessions, and plugins finite."
+icon: "gauge"
+---
+
+| Boundary | Implemented value |
+| --- | --- |
+| Desktop default node timeout | 30000 ms for new repository workflows |
+| Open Browser default timeout | 30000 ms; editor range 100–120000 ms |
+| Browser session default maximum | 1800000 ms; sidecar hard ceiling 4 hours |
+| Screenshot default maximum | 10 MB |
+| Download default maximum | 100 MB; editor range 1–2048 MB |
+| Read File default maximum | 10 MB; editor range 1–100 MB |
+| Workflow import/export | 2 MB definition envelope |
+| Manual approval expiry | 1–10080 minutes |
+| Gmail poll interval | 1–60 minutes |
+
+Plugin runtime defaults are 32 MB linear memory, 25 million fuel units, 30 seconds, 1 MB input/output, and 2 MB host responses. A plugin node can request a shorter timeout up to five minutes; host policy can impose a lower bound.
+
+Limits can differ for a configured hosted service or workspace policy. Treat a failure code and execution evidence as authoritative for the attempted run instead of assuming a larger deployment value.

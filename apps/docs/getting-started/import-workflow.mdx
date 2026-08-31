@@ -1,0 +1,42 @@
+---
+title: "Import and export workflows"
+description: "Move a workflow safely without exporting secrets, connections, or local paths."
+icon: "file-json"
+---
+
+From **Workflows**, use **Import** to select a sndbox JSON export. Use a workflow row's actions menu to export it.
+
+## What an export contains
+
+The current format is `sandbox-workflow` version 1. It includes the disabled workflow definition, required node types, connection and profile requirements, derived permission requirements, local-path requirements, warnings, and export time.
+
+```json title="Export envelope"
+{
+  "format": "sandbox-workflow",
+  "formatVersion": 1,
+  "schemaVersion": 4,
+  "workflow": {},
+  "requiredNodeTypes": [],
+  "requiredConnections": [],
+  "requiredBrowserProfiles": [],
+  "requiredPermissions": {},
+  "localPathRequirements": [],
+  "warnings": []
+}
+```
+
+`schemaVersion` in a real export is taken from the workflow; do not replace it manually.
+
+## Safety behavior
+
+- Exports are limited to 2 MB.
+- Local absolute paths are removed and reported as requirements.
+- Connection and browser-profile references become requirements, not copied credentials or profile data.
+- The exported workflow is disabled.
+- Imports containing raw tokens, passwords, cookies, or webhook URLs are rejected.
+- A compatible import receives a new workflow ID, the suffix `(imported)`, current timestamps, and the current schema version.
+- Imported workflows stay disabled until you review paths, connections, profiles, and permissions.
+
+<Warning>
+  An exported network-domain list is not blanket permission. Review the imported workflow before enabling it, especially command, browser, upload, deletion, and communication nodes.
+</Warning>

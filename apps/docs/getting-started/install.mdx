@@ -1,0 +1,46 @@
+---
+title: "Install sndbox"
+description: "Install the current Windows desktop beta and verify the release before opening it."
+icon: "download"
+---
+
+The current desktop release is a Windows x64 beta for Windows 10 or later. The Linux downloads are headless self-hosted runners; there is no signed macOS desktop build in the current beta.
+
+<Steps>
+  <Step title="Download the desktop build">
+    Open [sndbox downloads](https://sndbox.app/downloads), choose **Windows**, and download the artifact listed in the published release manifest.
+  </Step>
+  <Step title="Verify the file">
+    Compare the file's SHA-256 digest with the value on the download page or in the release files.
+
+    ```powershell title="PowerShell"
+    Get-FileHash .\sndbox-setup.exe -Algorithm SHA256
+    ```
+  </Step>
+  <Step title="Install the beta">
+    Run the installer. A beta marked **Unsigned test build** can trigger a Windows SmartScreen unknown-publisher warning. Continue only when the source and checksum match the published release.
+  </Step>
+  <Step title="Confirm the runner">
+    Open sndbox. The runner control at the bottom of the sidebar should show **Ready**. The managed Chromium runtime used by browser nodes is bundled with the desktop build.
+  </Step>
+</Steps>
+
+<Warning>
+  Do not install a beta copied from an unverified mirror. A checksum proves file identity, not its source; verify both.
+</Warning>
+
+## Updates
+
+Open **Settings → Beta & updates** to check for a release and choose **Stable** or **Beta**. Stable ignores prerelease builds. Beta includes beta and release-candidate builds. The installed version is shown on the same page.
+
+## Build from the repository
+
+For development, install Node.js and Rust with the Tauri prerequisites, then run:
+
+```powershell title="Development desktop"
+npm.cmd install
+npm.cmd run browser:prepare
+npm.cmd run desktop:dev
+```
+
+`browser:prepare` installs the repository's pinned browser sidecar and runtime. Production installers should come from the release pipeline rather than a local development build.

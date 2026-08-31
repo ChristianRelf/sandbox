@@ -1,0 +1,40 @@
+---
+title: "Data types"
+description: "Understand typed node ports, JSON-compatible values, trusted paths, and connection references."
+icon: "binary"
+---
+
+Built-in ports use these value types:
+
+```ts
+type ValueType =
+  | "any"
+  | "string"
+  | "number"
+  | "boolean"
+  | "object"
+  | "array"
+  | "path"
+  | "connection";
+```
+
+`any` means the node can accept a JSON-compatible runtime value; it does not grant a capability. `path` preserves trusted file provenance and approval. `connection` is a host-owned vault reference, not credential text.
+
+## Port definition
+
+```ts
+interface NodePortDefinition {
+  key: string;
+  label: string;
+  type: ValueType;
+  required?: boolean;
+  description?: string;
+  sensitive?: boolean;
+}
+```
+
+Input bindings are validated against the selected source node and path. The node pages are generated from the live catalogue, including each implemented port key and required flag.
+
+## Null and missing
+
+JSON `null`, an absent object field, and a missing workflow-state key are different. Get Workflow State returns a separate `found` boolean so a stored `null` can be distinguished from no value.

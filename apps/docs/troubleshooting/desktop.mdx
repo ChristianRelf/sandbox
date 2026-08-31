@@ -1,0 +1,29 @@
+---
+title: "Desktop troubleshooting"
+description: "Diagnose startup, local runner, workflow import, save, and update problems."
+icon: "monitor"
+---
+
+## Runner is not ready
+
+Check the sidebar runner status and whether it is paused. Restart the desktop app. Local schedules do not run while the app is closed.
+
+## Browser engine error
+
+Open **Settings → Browser** and restart the engine. In a development checkout, run `npm.cmd run browser:prepare` before `npm.cmd run desktop:dev`.
+
+## Workflow will not run
+
+Open validation results, select each error, and fix the named node/edge/field. Confirm one trigger exists, required configuration is present, typed bindings refer to available earlier nodes, and the current revision permissions are approved.
+
+## Import rejected
+
+The file must be valid JSON, `format: "sandbox-workflow"`, at most 2 MB, use schema 1–4, contain a complete workflow, and contain no raw token/password/cookie/webhook material. Import creates a disabled new workflow.
+
+## Update unavailable
+
+Check **Settings → Beta & updates**. Stable ignores prereleases. Confirm the release manifest is reachable and that the selected build exists for Windows x64. Verify checksum before installing an unsigned beta.
+
+## Development reset
+
+Do not delete application data as a first step. Preserve the local database and artifacts, reproduce with the preview API or a new workflow, and inspect the exact error before considering a reset.

@@ -1,0 +1,64 @@
+---
+title: "Download File"
+description: "Save a browser download safely. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `download_file` · **Version:** `1` · **Category:** Browser
+
+Save a browser download safely. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `locator` | locator | `null` | Recorded locator bundle. sndbox prefers accessible role/name data and retains fallbacks. |
+| `destinationFolder` | path | `""` | Approved folder that receives the output. |
+| `filename` | string | `""` | Optional destination filename. |
+| `collisionBehaviour` | string | `"rename"` | Create a unique name, overwrite, or fail when the filename exists. Values: `rename`, `overwrite`, `fail`. |
+| `maximumBytes` | number | `104857600` | Maximum accepted file, response, screenshot, or download size in bytes. |
+| `timeoutMs` | number | `60000` | Maximum time for this operation in milliseconds. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "download_file",
+  "version": 1,
+  "configuration": {
+    "locator": null,
+    "destinationFolder": "",
+    "filename": "",
+    "collisionBehaviour": "rename",
+    "maximumBytes": 104857600,
+    "timeoutMs": 60000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `path` | No | Downloaded path |
+| `bytes` | `number` | No | Bytes |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

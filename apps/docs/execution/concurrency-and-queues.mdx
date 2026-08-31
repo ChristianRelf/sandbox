@@ -1,0 +1,25 @@
+---
+title: "Concurrency and queues"
+description: "Bound parallel node work, runner capacity, event claims, and dead-letter behavior."
+icon: "list-start"
+---
+
+Concurrency exists at several independent layers.
+
+| Layer | Boundary |
+| --- | --- |
+| Workflow | `maxConcurrentNodes` bounds nodes eligible to run together. |
+| Runner | Reported concurrency and current workload bound local claims. |
+| Pool | Aggregate pool concurrency reserves assignment capacity. |
+| Event queue | Visibility claims stop two workers from owning the same current delivery. |
+| Scheduler | Advisory and row locking serialize occurrence emission. |
+
+Parallel graph branches still depend on typed inputs and control edges. Do not depend on incidental canvas order when two nodes are eligible together.
+
+## No available runner
+
+Remote schedules and queue events apply the configured no-runner and expiry behavior. An offline, stale, draining, incompatible, disabled, or capacity-exhausted runner is visible in rejection diagnostics but cannot claim work.
+
+## Poison events
+
+Repeated identical failures are bounded. After three identical failures or the configured attempt limit, the event moves to dead-letter state. Replay is a new audited delivery, not deletion of the failed evidence.

@@ -1,0 +1,33 @@
+---
+title: "Cloud and workspaces"
+description: "Add accounts, encrypted revision sync, workspace governance, and remote execution without removing local workflows."
+icon: "cloud"
+---
+
+Signing in adds organisations, workspaces, encrypted workflow sync, approval/publication, shared resources, and remote runners. Personal local execution remains available without an account.
+
+<Frame caption="Cloud is opt-in; local workflows continue without an account">
+  ![The sndbox Cloud workspace view explaining optional sync and operating-system vault storage](/images/product/cloud-workspace.jpg)
+</Frame>
+
+## Ownership stays explicit
+
+Every shared resource carries an `ownerType` and `ownerId`. A personal workflow is not inferred to belong to a workspace after sign-in. Import or sync it deliberately when you want workspace governance.
+
+## What the Cloud view handles
+
+- account and workspace selection;
+- local and cloud revision status;
+- upload/download of encrypted workflow revisions;
+- conflict resolution without silent graph merging;
+- approval requests and votes;
+- publication of an approved exact revision; and
+- workspace/runner context needed for remote work.
+
+## Local continuity
+
+During a control-plane outage, local edits and local executions continue. Sync, marketplace, remote command, and cloud status report unavailable or waiting instead of blocking a personal local workflow.
+
+<Note>
+  Workflow sync uses service-readable envelope encryption. It is not described as end-to-end encryption because the service can process the key envelope as implemented.
+</Note>

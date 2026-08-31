@@ -1,0 +1,18 @@
+---
+title: "Node editor settings"
+description: "Tune canvas guidance without hiding graph meaning or validation."
+icon: "workflow"
+---
+
+The node editor settings control:
+
+- minimap visibility;
+- snap-to-grid behavior;
+- grid size of 10, 20, or 40 pixels;
+- canvas hints;
+- node descriptions; and
+- confirmation before deleting a configured node.
+
+Grid and minimap changes are presentation aids. Execution uses stored nodes, edges, input bindings, and configuration, not canvas proximity. Hiding descriptions does not remove node type or accessible name from the graph.
+
+Keep configured-node delete confirmation enabled when workflows contain mapped values or high-impact actions; removing a node also removes its attached edges and can invalidate downstream bindings.

@@ -1,0 +1,58 @@
+---
+title: "TypeScript client"
+description: "Call the control-plane API from Node.js 20+ or a browser with typed results and bounded transport behavior."
+icon: "braces"
+---
+
+Install `@sandbox/api-client`. Its package and exported class names retain `Sandbox` for compatibility.
+
+```ts
+import { SandboxApiClient } from "@sandbox/api-client";
+
+const api = new SandboxApiClient({
+  baseUrl: "https://api.sndbox.app",
+  accessToken: () => process.env.SANDBOX_ACCESS_TOKEN ?? null
+});
+
+const result = await api.listPersonalAccessTokens();
+console.log(result.data.items, result.correlationId);
+```
+
+`baseUrl` must use HTTPS except for localhost and cannot contain credentials. The client rejects non-local paths outside `/v1` and `/health`, omits browser credentials, rejects redirects, and never inserts bearer credentials into thrown errors.
+
+## Result metadata
+
+```ts
+interface ApiResult<T> {
+  data: T;
+  statusCode: number;
+  correlationId: string;
+  idempotencyReplayed: boolean;
+  rateLimit: {
+    limit: number | null;
+    remaining: number | null;
+    resetSeconds: number | null;
+  };
+}
+```
+
+## Generic request with runtime validation
+
+Convenience methods provide stable compile-time types for account/workspace, encrypted sync, runners/pools, approvals/publication, marketplace, commerce, tokens, and service accounts. For another operation, supply a parser:
+
+```ts
+const response = await api.request({
+  path: "/v1/workspaces/workspace-id/audit",
+  query: { limit: 50 },
+  parse(value) {
+    if (!value || typeof value !== "object") throw new Error("Invalid response");
+    return value as { items: unknown[]; nextCursor: string | null };
+  }
+});
+```
+
+A parser failure throws `SandboxApiCompatibilityError` with the correlation ID.
+
+## Cancellation
+
+Pass an `AbortSignal` to a convenience method that accepts it or to `request`. Backoff sleep and the in-flight fetch honor cancellation.

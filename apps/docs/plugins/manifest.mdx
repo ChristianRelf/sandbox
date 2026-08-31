@@ -1,0 +1,57 @@
+---
+title: "Plugin manifest"
+description: "Reference the version 1 identity, compatibility, node, capability, storage, migration, and signature fields."
+icon: "file-json"
+---
+
+Manifest version 1 uses camelCase JSON. Plugin and publisher IDs are lowercase reverse-domain identifiers; package versions are semantic versions.
+
+## Top-level fields
+
+| Area | Fields |
+| --- | --- |
+| Identity | `manifestVersion`, `pluginId`, `name`, `description`, `version`, `publisherId` |
+| Compatibility | `minimumHostVersion`, optional `maximumHostVersion` |
+| Links | `homepage`, `documentation`, `supportUrl`, `licence`, optional `privacyPolicy` |
+| Discovery | `categories`, `keywords`, `icon` |
+| Behavior | `nodes`, `credentials`, `capabilities`, `networkDomains`, `storageRequirements`, `migrations`, `entrypoints` |
+| Trust/commerce | `packageIntegrity`, `signature`, `pricing` |
+
+Publisher links use HTTPS. Executable entrypoints are safe relative `.wasm` paths. A distributed package requires `sha256:<hex>` integrity and an Ed25519 signature.
+
+## Node definition
+
+Every node declares:
+
+```ts
+interface NodeDefinition {
+  nodeType: string;
+  nodeVersion: number;
+  displayName: string;
+  description: string;
+  category: string;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  configurationSchema: Record<string, unknown>;
+  credentialRequirements: string[];
+  capabilities: string[];
+  timeoutMs: number;
+  retryBehavior: "none" | "safe" | "idempotency_required";
+  idempotencySupport: "none" | "read_only" | "keyed";
+  documentation: string;
+  migrationHandlers: string[];
+  executionEntrypoint: string;
+}
+```
+
+Constrain strings and arrays where practical and set `additionalProperties: false` for configuration objects. A workflow pin contains plugin ID/version/integrity, publisher ID, and node type/version.
+
+## Validate
+
+```powershell
+sandbox plugin validate .
+sandbox plugin validate . --signed
+```
+
+Validation checks schemas, capability references, paths, integrity/signature requirements, and the host-generated permission summary.

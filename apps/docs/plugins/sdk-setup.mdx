@@ -1,0 +1,73 @@
+---
+title: "Plugin SDK setup"
+description: "Install the toolchain, scaffold a plugin, and build the same WebAssembly package used by production."
+icon: "hammer"
+---
+
+Prerequisites are Node.js 20 or later, Rust stable, and the `wasm32-unknown-unknown` target.
+
+```powershell title="Build the repository SDK"
+rustup target add wasm32-unknown-unknown
+npm.cmd install
+npm.cmd run build --workspace @sandbox/plugin-sdk
+```
+
+Create a plugin with lowercase reverse-domain plugin and publisher IDs:
+
+```powershell
+node packages/plugin-sdk/dist/cli.js plugin create my-plugin `
+  --plugin-id com.example.my-plugin `
+  --publisher-id com.example.publisher `
+  --name "My Plugin"
+```
+
+The scaffold writes:
+
+```text
+my-plugin/
+├─ manifest.json
+├─ guest/Cargo.toml
+├─ guest/src/lib.rs
+├─ components/
+├─ assets/icon.svg
+├─ docs/echo.md
+└─ README.md
+```
+
+Build once, validate, and run guest tests:
+
+```powershell
+node packages/plugin-sdk/dist/cli.js plugin dev my-plugin --once
+node packages/plugin-sdk/dist/cli.js plugin validate my-plugin
+node packages/plugin-sdk/dist/cli.js plugin test my-plugin
+```
+
+`plugin dev` compiles the production WebAssembly JSON ABI and packages it with a Development label. It does not add WASI or weaken capability approval.
+
+## SDK helpers
+
+```ts
+import { defineNode, definePlugin, schema } from "@sandbox/plugin-sdk";
+
+const echo = defineNode({
+  nodeType: "example.echo",
+  nodeVersion: 1,
+  displayName: "Echo",
+  description: "Returns typed input.",
+  category: "Data",
+  riskLevel: "low",
+  inputSchema: schema.object({}),
+  outputSchema: schema.object({ echo: {} }),
+  configurationSchema: schema.object({}),
+  credentialRequirements: [],
+  capabilities: ["workflow_input", "structured_logging"],
+  timeoutMs: 10000,
+  retryBehavior: "safe",
+  idempotencySupport: "read_only",
+  documentation: "docs/echo.md",
+  migrationHandlers: [],
+  executionEntrypoint: "main"
+});
+```
+
+The host remains authoritative even when local tests accept a value.

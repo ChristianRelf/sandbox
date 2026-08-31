@@ -1,0 +1,50 @@
+---
+title: "Close Browser"
+description: "Close the active managed session. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `close_browser` · **Version:** `1` · **Category:** Browser
+
+Close the active managed session. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+
+<Note>Any remaining managed sessions are cleaned up when the workflow ends.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "close_browser",
+  "version": 1,
+  "configuration": {}
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

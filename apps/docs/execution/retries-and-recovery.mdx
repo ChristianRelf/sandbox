@@ -1,0 +1,29 @@
+---
+title: "Retries and recovery"
+description: "Retry only when outcome certainty, node side effects, and idempotency make it safe."
+icon: "rotate-ccw"
+---
+
+A retry is not a promise that the previous attempt did nothing. Inspect the node result and its side-effect class before repeating work.
+
+## Local retries
+
+The execution inspector can retry a failed node or run, and browser failures may offer a headed retry. Existing completed-node evidence remains attached to the original attempt. Node reference pages identify whether a built-in node declares an external side effect.
+
+## Lost remote execution
+
+When a runner lease expires, the control plane releases the lease, marks the execution lost, records outcome certainty, and inspects the last immutable checkpoint and interrupted node.
+
+It may resume only when the interruption is side-effect-free, explicitly safe to retry, or idempotent with the same reusable key. If an external action may have completed, the disposition becomes review required and is not returned to the automatic claim query.
+
+An authorized operator can later choose resume, restart, or abandon; the decision is another audited transition.
+
+## Design for safe retry
+
+- Use provider idempotency keys for external mutations.
+- Reuse the same logical key across attempts.
+- Prefer Gmail drafts before sends when human review is appropriate.
+- Commit workflow state only after complete success.
+- Keep command and file boundaries explicit so a reviewer can assess the outcome.
+
+Never describe uncertain recovery as “exactly once.”

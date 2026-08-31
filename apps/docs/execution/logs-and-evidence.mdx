@@ -1,0 +1,39 @@
+---
+title: "Logs and evidence"
+description: "Inspect the values, timing, diagnostics, and artifacts attached to the exact run revision."
+icon: "scroll-text"
+---
+
+The execution inspector separates a run summary from the timeline of node attempts. Select a node to switch between input, output, logs, error/skip detail, and browser diagnostics.
+
+## Recorded node evidence
+
+```ts title="NodeExecution"
+interface NodeExecution {
+  nodeId: string;
+  status: "idle" | "waiting" | "running" | "successful" | "failed" | "skipped" | "cancelled";
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  input: unknown;
+  output: unknown;
+  logs: string[];
+  retryCount: number;
+  error?: { code: string; message: string; detail?: string; suggestion?: string };
+  skipReason?: string;
+  branchFollowed?: string;
+  browserDiagnostics?: BrowserDiagnostics;
+}
+```
+
+## Redaction
+
+Authorization, cookie, token, password, credential, and other protected fields are removed or redacted before ordinary logs and execution output. Webhook URLs and OAuth tokens remain inside host-owned connection handling.
+
+## Remote checkpoints
+
+The control plane appends a checkpoint after each completed node with execution/revision, node/version, attempt, result, input hash, output reference, side-effect class, idempotency key, completion time, and runner identity. `(execution, node, attempt)` is unique. Temporary browser session IDs are not resumable output references.
+
+## Retention
+
+Local evidence stays in the desktop database until the user removes it. Workspace execution detail follows the configured privacy and retention policy; outcome summary and audit evidence have separate handling rules.

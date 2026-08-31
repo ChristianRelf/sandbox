@@ -1,0 +1,40 @@
+---
+title: "Limits reference"
+description: "A consolidated reference for current desktop, API, runner, browser, import, and plugin bounds."
+icon: "gauge"
+---
+
+## Desktop and browser
+
+- Window minimum: 1040 × 680.
+- Open Browser viewport editor: 320–3840 × 240–2160.
+- Browser operation timeout editor: 100–120000 ms.
+- Browser session hard ceiling in the sidecar: 4 hours.
+- Screenshot default maximum: 10 MB.
+- Download default maximum: 100 MB; editor maximum 2048 MB.
+- Read File editor maximum: 100 MB.
+- Workflow import/export: 2 MB.
+- Gmail polling: 1–60 minutes.
+- Approval expiry: 1–10080 minutes.
+
+## API
+
+- Default budget: 240 requests per IP per minute.
+- Health budget: 60 per minute.
+- Idempotency key: 16–200 safe ASCII characters.
+- Idempotency retention: 24 hours.
+- TypeScript client retry count: 0–5, default 2.
+- Personal-token maximum expiry: 90 days.
+- Service-account policy: 1–365 days.
+
+## Plugins
+
+- Default memory: 32 MB.
+- Default fuel: 25 million.
+- Default timeout: 30 seconds.
+- Input/output: 1 MB.
+- Host response: 2 MB.
+- Manifest timeout request: no longer than five minutes; host may lower it.
+- Temporary and persistent storage class: at most 100 MB each.
+
+Deployment policy can impose stricter limits. The operation error and generated API schema are authoritative for a specific request.

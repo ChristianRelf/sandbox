@@ -1,0 +1,30 @@
+---
+title: "Local runner"
+description: "Run workflows on the desktop, pause new work, and understand local scheduling."
+icon: "laptop"
+---
+
+The local runner is bundled with the sndbox desktop app. It is the execution target for personal workflows and can access only the browser profiles, folders, connections, network domains, commands, and background behavior approved for the workflow.
+
+## Status
+
+The sidebar reports whether the runner is paused and lists active workflow IDs, scheduled workflow count, and next run when one is available. Pausing stops new claims; active work follows its normal completion or cancellation path.
+
+## Local-only responsibilities
+
+- compute and start local Schedule Trigger occurrences;
+- poll File Watch and Gmail triggers;
+- manage the bundled Chromium sidecar and local profiles;
+- resolve operating-system vault connections;
+- show native notifications; and
+- execute approved local file and command operations.
+
+<Warning>
+  Closing sndbox stops the local runner, schedules, file watchers, and Gmail polling. It does not move them to the cloud automatically.
+</Warning>
+
+## Default workflow settings
+
+New repository workflows use a 30000 ms default node timeout and a bounded `maxConcurrentNodes` setting. A node-specific timeout overrides the default where its inspector exposes one. Browser sessions also have a separate maximum duration.
+
+Use [Run locally](/getting-started/run-locally) for permission review and [Execution evidence](/execution/logs-and-evidence) for the recorded result.

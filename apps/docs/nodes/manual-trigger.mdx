@@ -1,0 +1,50 @@
+---
+title: "Manual Trigger"
+description: "Run from the toolbar. Exact configuration, ports, placement, and execution behavior."
+icon: "zap"
+---
+
+**Node type:** `manual_trigger` · **Version:** `1` · **Category:** Triggers
+
+Run from the toolbar. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "manual_trigger",
+  "version": 1,
+  "configuration": {}
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | `object` | No | Event |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

@@ -1,0 +1,36 @@
+---
+title: "Forms and uploads"
+description: "Fill text, choose options, press keys, and attach only approved files."
+icon: "text-cursor-input"
+---
+
+Form work uses four explicit node types so values, locator behavior, and file boundaries remain visible.
+
+## Fill Field
+
+Choose a structured locator and supply a literal, mapped, or protected value. **Clear existing value** is on by default. **Input delay** accepts 0–2000 ms between characters. Enable **Sensitive** for protected data so the resolved value is redacted from execution data.
+
+```json title="Protected input binding"
+{
+  "value": {
+    "kind": "protected_variable",
+    "name": "account-password"
+  }
+}
+```
+
+## Select Option
+
+Select by stored option `value`, visible `label`, or zero-based `index`. Prefer value or label when the page provides stable semantics; an index changes when options are reordered.
+
+## Press Key
+
+Enter a validated combination such as `Enter`, `Control+K`, or `Shift+Tab`. The key action targets the active page state and uses the configured timeout.
+
+## Upload File
+
+Choose a local file through the operating-system picker. A trusted path output from an earlier file or download node can be mapped after approval. The node never accepts an arbitrary unapproved path simply because it appears in text data.
+
+<Warning>
+  Browser autofill and a persistent profile can expose site state to the page. Use a dedicated profile with the narrowest permissions needed for the workflow.
+</Warning>

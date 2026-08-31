@@ -1,0 +1,22 @@
+---
+title: "JSON"
+description: "Parse JSON text or an approved file and map nested output safely."
+icon: "braces"
+---
+
+Parse JSON accepts mapped/pasted `content` and an optional approved file `path`. Mapped content wins when both are configured.
+
+```json title="Mapped HTTP body"
+{
+  "path": "",
+  "content": "{{nodes.http_request.output.body}}"
+}
+```
+
+The node returns one `value` output whose runtime type matches the parsed JSON: object, array, string, number, boolean, or null. Run a node test and inspect the real output before selecting a nested field.
+
+## Set Data versus Parse JSON
+
+Use [Set Data](/nodes/set-data) to construct an object already represented as JSON configuration. Use Parse JSON when the input is text from a file, page, request, or earlier node and must be validated as JSON first.
+
+Invalid JSON fails at the parser. Do not silently fall back to the raw string; branch from a successful parser or handle the failed run through the retry and recovery tools.

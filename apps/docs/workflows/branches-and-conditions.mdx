@@ -1,0 +1,29 @@
+---
+title: "Branches and conditions"
+description: "Route execution through explicit true and false paths."
+icon: "git-branch"
+---
+
+The Condition node compares a left value and, when required, a right value. Its result selects exactly one control branch.
+
+## Operators
+
+`equals`, `not_equals`, `contains`, `not_contains`, `greater_than`, `less_than`, `exists`, `not_exists`, `starts_with`, and `ends_with` are implemented. `exists` and `not_exists` hide the right-side field because no comparison value is needed.
+
+```json title="Check an HTTP response"
+{
+  "left": "{{nodes.http_request.output.status}}",
+  "operator": "equals",
+  "right": 200
+}
+```
+
+Connect the Condition node's **true** handle to the success path and **false** handle to the fallback or notification path. Nodes on the unselected branch receive the `skipped` state and a reason in the execution inspector.
+
+## Compare types deliberately
+
+Use numeric values for greater-than and less-than checks, booleans for boolean output, and strings for text operators. If input arrives as CSV, JSON text, or page text, parse or normalize it before comparing.
+
+## Detect change across runs
+
+For a value that must be compared with the last successful run, use [Compare With Previous](/nodes/compare-previous). It returns `changed`, `previous`, and `current`, and commits its state only after the entire workflow succeeds.

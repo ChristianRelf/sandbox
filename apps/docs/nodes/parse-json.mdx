@@ -1,0 +1,58 @@
+---
+title: "Parse JSON"
+description: "Parse JSON text or an approved file. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `parse_json` · **Version:** `1` · **Category:** Data
+
+Parse JSON text or an approved file. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `path` | path | `""` | Approved local file or folder path. |
+| `content` | string | `""` | Literal or mapped content. For parser nodes, mapped content takes precedence over the optional file. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "parse_json",
+  "version": 1,
+  "configuration": {
+    "path": "",
+    "content": ""
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `path` | No | JSON file |
+| `content` | `string` | No | JSON text |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `any` | No | Value |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

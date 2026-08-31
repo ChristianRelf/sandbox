@@ -1,0 +1,24 @@
+---
+title: "Execution"
+description: "Route a saved workflow revision to a compatible runner and retain evidence for every step."
+icon: "cpu"
+---
+
+Execution begins only after validation and permission review. The runner receives a concrete revision, resolves its trigger and input bindings, and records one node-execution result for every completed, failed, skipped, or cancelled step.
+
+## Choose a target
+
+<CardGroup cols={2}>
+  <Card title="Desktop local runner" icon="laptop" href="/execution/local-runner">Run personal workflows, local schedules, files, commands, and managed browser sessions on this computer.</Card>
+  <Card title="Self-hosted runner" icon="server" href="/execution/self-hosted-runner">Pair a Linux x86-64 or ARM64 runner inside infrastructure you control.</Card>
+  <Card title="Runner pools" icon="network" href="/execution/runner-pools">Route workspace work by environment, compatibility, capacity, tags, region, and strategy.</Card>
+  <Card title="Durable scheduling" icon="calendar-clock" href="/execution/schedules-and-queue">Persist occurrences and retry queue delivery without silently duplicating a scheduled event.</Card>
+</CardGroup>
+
+## Revision and permission identity
+
+The executable definition is not just a workflow ID. Local history records the workflow version; remote commands carry the approved revision identity and content hash. Runners apply the signed authorization context and their own path, network, environment, and capability restrictions before claiming work.
+
+## Inspect, then recover
+
+Use the execution timeline to understand what completed and whether a side effect may have occurred. Recovery distinguishes safe retry, reusable idempotency, uncertain outcome, and manual review instead of claiming every run is exactly once.

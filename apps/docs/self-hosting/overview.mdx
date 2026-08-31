@@ -1,0 +1,33 @@
+---
+title: "Deploy the sndbox services"
+description: "Separate the public site, account portal, control plane, workers, database, docs, and runners by trust boundary."
+icon: "server-cog"
+---
+
+The desktop app works without a control-plane deployment. Cloud workspaces require independently deployed services; the account portal does not own API authorization, billing, runner commands, or webhook logic.
+
+## Components
+
+| Component | Responsibility |
+| --- | --- |
+| Marketing site | Public product and download pages. |
+| Mintlify docs | This repository's `apps/docs` project, hosted from the Mintlify Git integration. |
+| Account portal | Browser sign-in and account/workspace user experience. |
+| Control plane | Identity, tenancy, sync, marketplace, policy, billing, runner coordination, webhooks, audit, and API. |
+| Scheduler | Durable schedule occurrence and event-queue emission. |
+| Hosted/browser workers | Sandboxed workflow and managed Chromium execution. |
+| PostgreSQL | Durable control-plane state and migrations. |
+| Self-hosted runners | Outbound-paired Linux execution inside customer infrastructure. |
+
+Production control-plane startup requires PostgreSQL, OIDC, transactional email, object-storage signing, package scanning, Stripe configuration, Ed25519 signing keys, a dedicated metrics token, and separate 32-byte encryption keys for each protected class.
+
+## Build and migrate
+
+```powershell
+npm.cmd run control-plane:build
+$env:DATABASE_URL = "postgresql://..."
+npm.cmd run migrate --workspace @sandbox/control-plane
+npm.cmd run start --workspace @sandbox/control-plane
+```
+
+Apply migrations before routing traffic. Deploy control plane, scheduler, browser worker, and hosted runner at compatible release versions; drain runners before replacement.

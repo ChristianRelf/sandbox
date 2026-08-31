@@ -1,1 +1,0 @@
-import type{MetadataRoute}from"next";import{brand}from"@sandbox/brand";export default function robots():MetadataRoute.Robots{return{rules:{userAgent:"*",allow:"/"},sitemap:`${brand.domains.docs}/sitemap.xml`,host:brand.domains.docs}}

@@ -1,0 +1,34 @@
+---
+title: "Profiles and sessions"
+description: "Create isolated persistent or ephemeral browser profiles and control each workflow session."
+icon: "user-round-cog"
+---
+
+Open **Settings → Browser** to inspect engine health and manage profiles. A profile contains a name, persistence mode, local data path, viewport, optional download folder, proxy, user agent, and permission list.
+
+## Persistent and ephemeral profiles
+
+A persistent profile can retain site state between local sessions. An ephemeral profile begins without retained state. Duplicate a profile when two workflows need independent browser identity or policy.
+
+Available profile actions are create, edit, duplicate, open, clear, and delete. Clearing removes retained local state; deleting also removes the profile reference, so review workflows that select it.
+
+## Open Browser settings
+
+The Open Browser node chooses one profile and supports:
+
+- optional initial URL;
+- viewport width 320–3840 and height 240–2160;
+- default timeout 100–120000 ms;
+- headed mode for manual runs;
+- automatic cleanup; and
+- a bounded maximum session duration.
+
+Scheduled runs default to headless. A browser profile must exist before the node can run.
+
+## Engine health
+
+The Browser settings page reports availability, protocol version, sidecar version, browser name/version, and an error when startup fails. Use **Restart engine** before changing a workflow when the runtime itself is unhealthy.
+
+## Cloud profile boundary
+
+Local profiles are never uploaded automatically. Cloud profile import is explicit, expiring, audited, and rejects saved-password content. Reauthentication is recommended after import.

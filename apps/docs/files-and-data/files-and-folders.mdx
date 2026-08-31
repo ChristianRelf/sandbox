@@ -1,0 +1,30 @@
+---
+title: "Files and folders"
+description: "Use approved local paths for read, write, move, copy, delete, and list operations."
+icon: "folder-open"
+---
+
+File-system nodes operate inside paths reviewed for the workflow. Select local files and folders with the operating-system picker or map a trusted `path` output from an earlier node.
+
+| Node | Result |
+| --- | --- |
+| [Read File](/nodes/read-file) | UTF-8 text, path, and byte count, with a configurable 1–100 MB limit. |
+| [Write File](/nodes/write-file) | Writes mapped text, optionally overwriting and creating parent folders. |
+| [Move File](/nodes/move-file) | Moves a source into an approved destination folder with optional rename. |
+| [Copy File or Folder](/nodes/copy-path) | Copies a source to an explicit destination. |
+| [Delete File or Folder](/nodes/delete-path) | Deletes an approved path; recursive folder deletion is an explicit option. |
+| [List Folder](/nodes/list-folder) | Returns matching entries and count, optionally including subfolders. |
+
+## Destructive operations
+
+Delete and overwrite settings are visible in permission and test review. Delete requires the path to stay inside an approved folder, and a test run requires an additional confirmation.
+
+## Map a downloaded path
+
+```text
+Download File.path → Parse CSV.path
+Read File.content   → Parse JSON.content
+List Folder.entries → Condition.left
+```
+
+Do not convert a path to an arbitrary template string to bypass approval. Keep it as the typed path output so the host can preserve provenance.

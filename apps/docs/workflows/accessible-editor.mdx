@@ -1,0 +1,25 @@
+---
+title: "Accessible editor"
+description: "Build and modify the same graph without dragging."
+icon: "accessibility"
+---
+
+Select **Accessible editor** in the workflow toolbar. Focus moves to the named **Accessible graph editor** region, which exposes native buttons and labelled selects for the same graph mutations as pointer gestures.
+
+## Available operations
+
+- add and inspect nodes;
+- move a node up, left, right, or down in 20-pixel increments;
+- connect valid source and target nodes;
+- choose an explicit true or false branch from a Condition node; and
+- review and remove every existing connection.
+
+Trigger nodes are omitted from connection targets. Self-connections and duplicates are rejected using the same rules as the visual canvas. Successful movement and connection changes are announced through a polite live region without moving focus.
+
+## Related settings
+
+Open **Settings → Accessibility** to enable reduced motion, increased contrast, or make the accessible editor the default. Focus indicators, accessible names, semantic regions, and keyboard order apply across the dashboard, editor, history, plugins, settings, connections, recorder, permissions, and approvals.
+
+<Note>
+  New graph actions must have a non-dragging operation. If a pointer action is unavailable in the Accessible editor, treat it as an accessibility defect rather than an expected limitation.
+</Note>

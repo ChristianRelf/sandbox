@@ -1,0 +1,43 @@
+---
+title: "Test plugins"
+description: "Validate schemas and permissions, unit-test host calls, then run compiled WebAssembly through the production sandbox."
+icon: "flask-conical"
+---
+
+## Guest tests
+
+```powershell
+sandbox plugin test .
+```
+
+The command runs `cargo test` against `guest/Cargo.toml`.
+
+## MockHost
+
+`MockHost` records calls and accepts typed handlers:
+
+```ts
+import { MockHost } from "@sandbox/plugin-sdk";
+
+const host = new MockHost().on("time", () => ({
+  value: "2026-08-31T12:00:00Z",
+  diagnostics: []
+}));
+
+const response = await host.call({ operation: "time" });
+console.log(response.value, host.calls);
+```
+
+The mock rejects secret-shaped credential output so unit tests do not normalize a behavior production blocks.
+
+## Coverage to include
+
+- valid and invalid input/config/output schemas;
+- provider errors and rate-limit diagnostics;
+- cancellation and timeout;
+- retry and idempotency behavior;
+- every migration handler;
+- absence of undeclared calls; and
+- redaction of logs and errors.
+
+Repository integration tests compile the example guests to `wasm32-unknown-unknown` and run them through `sandbox-plugin-runtime`, not a JavaScript replacement. Runtime tests enforce missing ambient imports, memory, fuel, time, network, storage, signature, tamper, and revocation controls.

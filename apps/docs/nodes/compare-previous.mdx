@@ -1,0 +1,62 @@
+---
+title: "Compare With Previous"
+description: "Detect a meaningful change and update state after success. Exact configuration, ports, placement, and execution behavior."
+icon: "git-branch"
+---
+
+**Node type:** `compare_previous` · **Version:** `1` · **Category:** Logic
+
+Detect a meaningful change and update state after success. This node can change external state or produce an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `key` | string | `""` | Workflow-scoped state key. |
+| `value` | any | `null` | Literal value, protected reference, or mapped output. |
+| `normalization` | string | `"trim"` | Text normalization applied before change comparison. Values: `trim`, `lowercase`, `collapse_whitespace`, `none`. |
+
+<Note>The new comparison value is committed only after the complete workflow succeeds.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "compare_previous",
+  "version": 1,
+  "configuration": {
+    "key": "",
+    "value": null,
+    "normalization": "trim"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes | Key |
+| `value` | `any` | Yes | Current value |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `changed` | `boolean` | No | Changed |
+| `previous` | `any` | No | Previous |
+| `current` | `any` | No | Current |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

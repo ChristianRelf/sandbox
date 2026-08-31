@@ -1,0 +1,24 @@
+---
+title: "Teams and roles"
+description: "Understand the default owner, administrator, developer, operator, and viewer permission bundles."
+icon: "users"
+---
+
+Roles are default permission bundles. Server routes authorize explicit permissions against a concrete workspace resource; hiding a UI control or comparing a role-name string is not the security boundary.
+
+| Permission area | Owner | Administrator | Developer | Operator | Viewer |
+| --- | --- | --- | --- | --- | --- |
+| Billing, deletion, owner/security control | Yes | No | No | No | No |
+| Members and invitations | Yes | Yes | No | No | No |
+| Plugins and runner administration | Yes | Yes | Private development/request only | No | No |
+| Shared connections | Manage/use | Manage/use | Use | Use | No |
+| Create, edit, test workflows | Yes | Yes | Yes | No | No |
+| Run and pause | Yes | Yes | Test only | Yes | No |
+| Approve/publish | Yes | Yes | No | Approvals only | No |
+| View summaries | Yes | Yes | Yes | Yes | Yes |
+| Detailed execution history | Yes | Yes | No | No | No |
+| Audit/webhook/governance admin | Yes | Yes | No | No | No |
+
+Owner assignment uses `organisation.owners.manage`, separate from member management. An owner must be transferred or removed through the organisation operation before ordinary membership removal.
+
+Invitations expose no workspace data until the one-time token is accepted by the invited email address.

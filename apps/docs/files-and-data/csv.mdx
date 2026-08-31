@@ -1,0 +1,27 @@
+---
+title: "CSV"
+description: "Parse a selected file or mapped CSV text into headers and structured rows."
+icon: "table"
+---
+
+Parse CSV accepts an optional approved `path` and a `content` string. Mapped content takes precedence over the file.
+
+```json title="Parser configuration"
+{
+  "path": "",
+  "content": "name,status\nAda,active",
+  "delimiter": ",",
+  "hasHeaders": true,
+  "trim": true
+}
+```
+
+Outputs are `headers` (array), `rows` (array), and `rowCount` (number). With headers enabled, each row can be addressed by its header name. Without headers, preserve the positional structure returned by the test output.
+
+## Common workflow
+
+```text
+Download File → Parse CSV → Condition(rowCount > 0) → Move File
+```
+
+The delimiter editor accepts one character. Enable trimming when surrounding whitespace is not meaningful. A malformed file fails the parser node and leaves its real input and error available in the execution inspector.

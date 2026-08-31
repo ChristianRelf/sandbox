@@ -1,0 +1,37 @@
+---
+title: "API authentication"
+description: "Authenticate human sessions, personal tokens, service accounts, and signed runners with the narrowest resource scope."
+icon: "key-round"
+---
+
+Most `/v1` operations use HTTP bearer authentication:
+
+```bash
+curl https://api.sndbox.app/v1/account/profile \
+  -H "Authorization: Bearer $SNDBOX_TOKEN" \
+  -H "Accept: application/json"
+```
+
+Bearer credentials include interactive sessions, personal access tokens, service-account tokens, and short-lived credentials exchanged from a registered Ed25519 client assertion.
+
+## Fresh mutating requests
+
+Sensitive mutations require `X-Sandbox-Request-Time` with the current ISO timestamp. The TypeScript client adds it to non-GET requests.
+
+```bash
+-H "X-Sandbox-Request-Time: 2026-08-31T12:00:00.000Z"
+```
+
+Some high-impact account and support decisions additionally require a recently step-up-authenticated human session; one API token cannot impersonate that interaction.
+
+## Personal and service credentials
+
+Tokens are visible once at creation and carry explicit scopes, organisation, workspace IDs, environment IDs, and expiry. Effective access is the intersection of these restrictions, the principal role, and the route's permission check. Revocation is immediate.
+
+## Runner requests
+
+Runner endpoints use `x-sandbox-signature` plus runner ID, key ID, request time, and nonce headers. The Ed25519 device key is created during pairing and never sent to the control plane.
+
+## Other dedicated schemes
+
+Stripe webhook endpoints verify `stripe-signature`. SCIM uses dedicated `sbx_scim_…` bearer tokens. Metrics use a separate high-entropy bearer credential and must not reuse an account, runner, webhook, or usage-producer secret.

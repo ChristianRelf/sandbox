@@ -1,0 +1,44 @@
+---
+title: "Understand executions"
+description: "Read run status, node evidence, failures, skips, and retries."
+icon: "activity"
+---
+
+Every run produces an execution record tied to the workflow revision that ran. The desktop experience uses the states **queued**, **running**, **successful**, **failed**, **skipped**, and **cancelled**.
+
+<Frame caption="The execution inspector preserves evidence for every node in the run">
+  ![The sndbox execution inspector showing a successful six-node timeline and structured node output](/images/product/execution-inspector.jpg)
+</Frame>
+
+## Read the timeline
+
+Select a node in the execution timeline to see:
+
+- resolved input and returned output;
+- start, completion, and duration;
+- structured logs and retry count;
+- error code, summary, detail, and suggested action;
+- branch followed or reason the node was skipped; and
+- browser locator attempts, console errors, failed requests, current URL, and screenshot/trace paths when present.
+
+Sensitive fields and authorization or cookie values are redacted before they enter execution data.
+
+## Failure does not erase evidence
+
+Completed node records remain available when a later node fails. Use **Retry failed node** when the inspector offers it, or retry the execution. A browser failure may also offer a headed retry or re-recording path so you can see the real page state.
+
+## Workflow revision matters
+
+An execution stores `workflowVersion`; a later edit does not change old evidence. Restoring a historical workflow creates a new revision rather than mutating the executed definition.
+
+```ts title="Desktop execution shape"
+type ExecutionStatus =
+  | "queued"
+  | "running"
+  | "successful"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+```
+
+Cloud orchestration uses a larger durable state machine for runner claims, approvals, retries, loss, and expiry. See [Execution states](/reference/execution-states).

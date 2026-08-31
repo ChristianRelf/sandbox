@@ -1,0 +1,19 @@
+---
+title: "Connections"
+description: "Create host-owned Gmail, Discord, and Slack credentials without placing secrets in workflow data."
+icon: "plug-zap"
+---
+
+Connections are stored by the host and referenced by ID from a workflow. Open **Settings → Connections** to add, test, rename, revoke, and inspect the workflows affected by a connection.
+
+| Provider | Setup | Implemented nodes |
+| --- | --- | --- |
+| Gmail | OAuth PKCE | New Email, Get Email, Create Gmail Draft, Send Email, Add Gmail Label |
+| Discord | Incoming webhook | Discord Webhook, Discord Embed |
+| Slack | Incoming webhook | Slack Webhook |
+
+Connection metadata includes provider, display name, optional account identifier, scopes, creation/last-used/expiry time, and status (`connected`, `expired`, `revoked`, `error`, or `setup_required`). Secret values are not displayed.
+
+<Warning>
+  Revocation is immediate for future use. Review affected workflows before revoking, then replace their references rather than pasting the credential into node configuration.
+</Warning>

@@ -1,0 +1,27 @@
+---
+title: "Permission troubleshooting"
+description: "Find whether a revision, path, domain, profile, connection, plugin, environment, or role blocks the action."
+icon: "shield-alert"
+---
+
+## Local workflow permission
+
+Open the editor permission review and compare it with the saved revision. A material edit can invalidate earlier approval. Re-select removed local files/folders and browser profiles after import.
+
+## Connection unavailable
+
+Open **Settings → Connections**. Test the named reference and check connected/expired/revoked/error status. OAuth or webhook secrets cannot be repaired by pasting them into node configuration.
+
+## Plugin host call denied
+
+The plugin, executing node, installation approval, and current policy must all allow the capability. Check permission expansion after an update, exact package integrity, credential requirement, domain/method, and storage limit.
+
+## Workspace API denied
+
+Verify the concrete permission, workspace ID, environment ID, token scopes/restrictions, principal role, and credential state. A role name alone does not authorize the route.
+
+## Remote runner denied
+
+Signed authorization context is applied again by the runner. Confirm the required permission and every resource restriction match local runner configuration.
+
+Record the stable error code and correlation ID before asking an administrator to broaden access.

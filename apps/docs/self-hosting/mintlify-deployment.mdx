@@ -1,0 +1,36 @@
+---
+title: "Deploy the Mintlify docs"
+description: "Connect this monorepo's `/apps/docs` project and point the documentation domain at Mintlify."
+icon: "book-open-check"
+---
+
+The documentation source is a native Mintlify project. It is not a Next.js application and does not ship a standalone docs Docker image.
+
+## Repository settings
+
+When connecting the repository in Mintlify, set the documentation directory to:
+
+```text
+/apps/docs
+```
+
+Mintlify reads `docs.json`, MDX pages, `style.css`, images, and the copied OpenAPI document from that directory. Configure `docs.sndbox.app` as the custom domain in Mintlify, then apply the DNS record Mintlify supplies.
+
+## Validate before push
+
+```powershell
+npm.cmd run generate:references --workspace @sandbox/docs
+npm.cmd run build --workspace @sandbox/docs
+npm.cmd run check:links --workspace @sandbox/docs
+npm.cmd run check:a11y --workspace @sandbox/docs
+```
+
+The reference generator reads the product catalogue and copies `docs/api/openapi-v1.json`. Commit generated node MDX and the copied OpenAPI file so the hosted build sees the same validated source.
+
+## Local preview
+
+```powershell
+npm.cmd run docs:dev
+```
+
+The preview uses port 3200. Search in local preview requires Mintlify login, but the pages and navigation render without it.

@@ -1,0 +1,37 @@
+---
+title: "Self-hosted runner"
+description: "Pair and harden the implemented Linux x86-64 or ARM64 server runner."
+icon: "server"
+---
+
+The self-hosted server runner is available as a signed standalone Linux binary, an unprivileged container, or a hardened systemd service. It uses runner protocol v2 and reports its engine, plugin runtime, architecture, tags, environment, and concurrency before work can be routed to it.
+
+## Pair the runner
+
+Create a runner in the Operations area and copy the short-lived pairing token. Use it only for pairing:
+
+```sh
+sudo SANDBOX_PAIRING_TOKEN='short-lived-token' sandbox-runner \
+  --config /etc/sandbox-runner/config.toml pair
+```
+
+The runner creates an Ed25519 device key locally, sends only the public key with the one-time token, and prints a fingerprint for administrator confirmation. Do not put the token in the config, image, service unit, or shell history.
+
+## Validate and run
+
+```sh
+sandbox-runner --config /etc/sandbox-runner/config.toml validate
+sandbox-runner --config /etc/sandbox-runner/config.toml run
+```
+
+Configuration rejects unknown fields. Set both immutable `workspace_id` and `environment_id`; the human-readable environment must be `development`, `staging`, or `production`. HTTPS is required except for a localhost development control plane. Working directories and local-network targets are explicit allowlists, and command execution is disabled by default.
+
+## Lifecycle
+
+The runner sends health every 30 seconds and polls every two seconds while capacity is available. Draining stops new claims and permits bounded in-flight completion. Revocation invalidates the device key and prevents new claims.
+
+Every control-plane command is signature-, target-, expiry-, revision-hash-, permission-, and lease-checked. Command receipts are claimed atomically in `runner.sqlite3`; a redelivered completed command is acknowledged without executing it again.
+
+## Harden production
+
+Use a dedicated unprivileged account, read-only system view/root filesystem, private temporary storage, one approved writable data directory, dropped capabilities, resource limits, explicit mounts, and current plus next command-signing public keys during rotation.

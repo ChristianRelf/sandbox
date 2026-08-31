@@ -1,0 +1,67 @@
+---
+title: "Create Gmail Draft"
+description: "Create an editable draft without sending. Exact configuration, ports, placement, and execution behavior."
+icon: "send"
+---
+
+**Node type:** `gmail_create_draft` · **Version:** `1` · **Category:** Communication
+
+Create an editable draft without sending. This node can change external state or produce an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `credentialId` | string | `""` | Reference to a connection stored in the operating-system credential vault. |
+| `to` | string | `""` | Comma-separated or mapped recipient value. |
+| `cc` | string | `""` | Optional CC recipients. |
+| `bcc` | string | `""` | Optional BCC recipients. |
+| `subject` | string | `""` | Email subject or approval subject. |
+| `body` | string | `""` | JSON request body for POST, PUT, and PATCH requests. |
+| `htmlBody` | string | `""` | Optional HTML email body. |
+| `replyToMessage` | string | `""` | Optional Gmail message ID to reply to. |
+
+<Note>Drafts are the safer default because nothing is sent until a person reviews the message in Gmail.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "gmail_create_draft",
+  "version": 1,
+  "configuration": {
+    "credentialId": "",
+    "to": "",
+    "cc": "",
+    "bcc": "",
+    "subject": "",
+    "body": "",
+    "htmlBody": "",
+    "replyToMessage": ""
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

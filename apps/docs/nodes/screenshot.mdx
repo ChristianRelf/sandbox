@@ -1,0 +1,60 @@
+---
+title: "Screenshot"
+description: "Capture viewport, page or element. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `screenshot` · **Version:** `1` · **Category:** Browser
+
+Capture viewport, page or element. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `mode` | string | `"viewport"` | Screenshot capture area. Values: `viewport`, `full_page`, `element`. |
+| `includeInHistory` | boolean | `true` | Attach the screenshot artifact to execution history. |
+| `maximumBytes` | number | `10485760` | Maximum accepted file, response, screenshot, or download size in bytes. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+| `locator` | locator | — | Recorded locator bundle. sndbox prefers accessible role/name data and retains fallbacks. Shown when `mode` is `element`. |
+
+<Note>History artifacts follow the configured screenshot retention policy.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "screenshot",
+  "version": 1,
+  "configuration": {
+    "mode": "viewport",
+    "includeInHistory": true,
+    "maximumBytes": 10485760,
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `path` | No | Screenshot path |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

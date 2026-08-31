@@ -4,7 +4,8 @@
   "version": "0.7.1-beta.3",
   "type": "module",
   "workspaces": [
-    "apps/*",
+    "apps/marketing",
+    "apps/web",
     "packages/*",
     "services/*",
     "examples/plugins/*"
@@ -33,8 +34,9 @@
     "web:build": "npm run build --workspace @sandbox/web",
     "marketing:dev": "npm run dev --workspace @sandbox/marketing",
     "marketing:build": "npm run build --workspace @sandbox/marketing",
-    "docs:dev": "npm run dev --workspace @sandbox/docs",
-    "docs:build": "npm run build --workspace @sandbox/docs",
+    "docs:install": "npm ci --prefix apps/docs --workspaces=false --install-strategy=nested",
+    "docs:dev": "npm run docs:install && npm --prefix apps/docs run dev --workspaces=false",
+    "docs:build": "npm run docs:install && npm --prefix apps/docs run build --workspaces=false",
     "services:build": "npm run control-plane:build && npm run build --workspace @sandbox/scheduler && npm run build --workspace @sandbox/browser-worker && npm run build --workspace @sandbox/plugin-sdk",
     "runners:build": "cargo build --release --manifest-path services/hosted-runner/Cargo.toml && cargo build --release --manifest-path agents/server/Cargo.toml",
     "build:all": "npm run build && npm run browser:build && npm run api-client:build && npm run web:build && npm run marketing:build && npm run docs:build && npm run services:build && npm run runners:build",

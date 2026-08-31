@@ -1,0 +1,63 @@
+---
+title: "Run Command"
+description: "Execute an explicitly approved process. Exact configuration, ports, placement, and execution behavior."
+icon: "terminal"
+---
+
+**Node type:** `run_command` · **Version:** `1` · **Category:** System
+
+Execute an explicitly approved process. This node can change external state or produce an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `executable` | string | `""` | Explicit executable path. It is passed separately from arguments. |
+| `arguments` | array | `[]` | Argument list. Each item is passed as one argument, without shell concatenation. |
+| `workingDirectory` | path | `""` | Approved working directory for the process. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+
+<Note>Automatic runs require explicit permission review. The executable and arguments are passed separately.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "run_command",
+  "version": 1,
+  "configuration": {
+    "executable": "",
+    "arguments": [],
+    "workingDirectory": "",
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `arguments` | `array` | No | Arguments |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `stdout` | `string` | No | Standard output |
+| `stderr` | `string` | No | Standard error |
+| `exitCode` | `number` | No | Exit code |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

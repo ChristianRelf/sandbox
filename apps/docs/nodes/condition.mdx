@@ -1,0 +1,60 @@
+---
+title: "Condition"
+description: "Follow a true or false branch. Exact configuration, ports, placement, and execution behavior."
+icon: "git-branch"
+---
+
+**Node type:** `condition` · **Version:** `1` · **Category:** Logic
+
+Follow a true or false branch. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `left` | string | `""` | Value or mapped output on the left side of the comparison. |
+| `operator` | string | `"equals"` | Comparison operation. Values: `equals`, `not_equals`, `contains`, `not_contains`, `greater_than`, `less_than`, `exists`, `not_exists`, `starts_with`, `ends_with`. |
+| `right` | string | `""` | Comparison value; hidden for `exists` and `not_exists`. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "condition",
+  "version": 1,
+  "configuration": {
+    "left": "",
+    "operator": "equals",
+    "right": ""
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `left` | `any` | Yes | Value |
+| `right` | `any` | No | Compare with |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `boolean` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

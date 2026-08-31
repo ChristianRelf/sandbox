@@ -1,0 +1,30 @@
+---
+title: "Screenshots"
+description: "Capture the viewport, full page, or one selected element as execution evidence."
+icon: "camera"
+---
+
+Screenshot supports `viewport`, `full_page`, and `element` capture. Element mode adds a structured locator. **Include in execution history** is enabled by default and stores the artifact according to screenshot retention.
+
+```json title="Full-page capture"
+{
+  "mode": "full_page",
+  "includeInHistory": true,
+  "maximumBytes": 10485760,
+  "timeoutMs": 30000
+}
+```
+
+The node returns the trusted local or artifact `path`. Use the execution inspector to associate the capture with the exact workflow revision and node attempt that produced it.
+
+## Evidence and privacy
+
+- Capture only what is needed to diagnose or prove the workflow outcome.
+- Password fields and elements marked sensitive are masked by managed browser capture.
+- Diagnostic URLs omit credentials, query strings, and fragments.
+- Detailed screenshots are not included in cloud sync by default.
+- Workspace retention policy controls stored cloud execution artifacts.
+
+<Warning>
+  A screenshot can contain personal or confidential page content even when input values are redacted. Treat retained screenshots as customer content and set the narrowest practical retention period.
+</Warning>

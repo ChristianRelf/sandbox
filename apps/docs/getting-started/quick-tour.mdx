@@ -1,0 +1,33 @@
+---
+title: "Product tour"
+description: "Know where to build, run, connect, govern, and troubleshoot sndbox."
+icon: "map"
+---
+
+The sidebar keeps the product's main surfaces available without separating local work from its evidence.
+
+| Area | What you do there |
+| --- | --- |
+| **Workflows** | Search, filter, sort, favorite, folder, tag, duplicate, archive, import, export, create, and run workflows. |
+| **Run history** | Filter executions and inspect node inputs, outputs, logs, errors, retries, and browser evidence. |
+| **Plugins** | Discover compatible packages, inspect permissions and signatures, install, enable, disable, and update plugins. |
+| **Cloud** | Sign in, select workspaces, sync encrypted revisions, resolve conflicts, request approval, and publish. |
+| **Settings** | Change appearance and accessibility, manage browser profiles and connections, and check updates. |
+| **Pending approvals** | Review local actions paused by a Manual Approval node. |
+
+## Inside a workflow
+
+The editor has four working regions:
+
+- The toolbar names the workflow and exposes save, test, run, recorder, permission, revision, and accessible-editor actions.
+- The canvas shows nodes and control connections. Condition nodes expose separate true and false branches.
+- The inspector shows only the settings and data bindings implemented by the selected node.
+- The execution drawer keeps validation results and the latest execution beside the graph.
+
+## Command palette
+
+Open the command palette from the sidebar or keyboard shortcut. It provides named navigation and workflow actions without requiring pointer navigation. Commands remain unavailable when their underlying action is not valid.
+
+## Local-first behavior
+
+Personal workflows and local runs do not require an account. Signing in adds cloud workspaces and sync but does not silently transfer ownership of an existing local workflow. Connections, browser profile data, local files, detailed logs, screenshots, cookies, and raw credentials are not synced by default.

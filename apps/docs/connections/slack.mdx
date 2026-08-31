@@ -1,0 +1,18 @@
+---
+title: "Slack"
+description: "Send mapped content through a host-owned Slack incoming webhook."
+icon: "message-square"
+---
+
+Create a Slack incoming webhook connection from **Settings → Connections**, then select it in the Slack Webhook node. The workflow stores the connection reference and mapped message content, not the webhook URL.
+
+```json title="Slack Webhook"
+{
+  "credentialId": "slack-connection-reference",
+  "content": "Report contains {{nodes.parse.output.rowCount}} rows."
+}
+```
+
+The webhook URL is resolved inside Rust and is excluded from workflow data and logs. Test the message in the intended channel, review its mapped values, and approve external communication for the saved revision before enabling unattended runs.
+
+To change the secret URL, update or replace the connection. Do not paste it into the node's message, a protected template that later becomes output, or a workflow export.

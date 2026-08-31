@@ -1,0 +1,47 @@
+---
+title: "API errors"
+description: "Handle stable machine codes, human messages, validation detail, correlation, and retry timing."
+icon: "triangle-alert"
+---
+
+Non-success JSON responses use this envelope:
+
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Human-readable summary",
+    "details": []
+  },
+  "correlationId": "request-id"
+}
+```
+
+Branch on `error.code`, not the prose message. Validation detail is additive and does not replace the published request schema.
+
+## TypeScript handling
+
+```ts
+import { SandboxApiError } from "@sandbox/api-client";
+
+try {
+  await api.startWorkflowRun(workflowId, input);
+} catch (error) {
+  if (error instanceof SandboxApiError) {
+    console.error({
+      status: error.statusCode,
+      code: error.code,
+      correlationId: error.correlationId,
+      retryAfterSeconds: error.retryAfterSeconds
+    });
+  }
+}
+```
+
+The error object includes HTTP status, code, message, correlation ID, details, and parsed `retry-after`. It does not include the bearer credential.
+
+## Retry decision
+
+Authentication, authorization, validation, idempotency-key reuse, and resource-state errors require a caller change. Rate-limit and temporary gateway/service errors can be retried within policy. For a mutation, reuse the original idempotency key; do not manufacture a second logical action.
+
+Use the generated OpenAPI operation page to see the documented response schemas for a particular route.

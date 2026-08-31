@@ -1,0 +1,25 @@
+---
+title: "Runner troubleshooting"
+description: "Diagnose pairing, presence, compatibility, environment, signatures, capacity, leases, and restart receipts."
+icon: "server"
+---
+
+## Pairing fails
+
+Use a fresh one-time token only in `SANDBOX_PAIRING_TOKEN`. Confirm the printed device fingerprint in the control plane. Verify HTTPS and runner clock before retrying.
+
+## Runner is online but rejected
+
+Routing diagnostics identify stale heartbeat, disabled/draining status, protocol or engine incompatibility, missing tag, wrong region, environment mismatch, runner capacity, or pool aggregate capacity. Do not remove a requirement merely to force selection.
+
+## Command rejected locally
+
+Check the control-plane signing key set, command expiry, nonce/time freshness, target runner/workspace/environment, revision content hash, required permission, connection restriction, and local allowlists. The human environment value must be development, staging, or production.
+
+## Restart during work
+
+The runner marks unfinished local execution failed and reports `runner_restarted_before_completion`. A previously completed durable receipt is acknowledged without re-execution. Lost-execution recovery may require manual review when an external side effect has uncertain outcome.
+
+## Maintenance
+
+Drain first and give the service manager at least the configured `drain_timeout_seconds` before killing the process.

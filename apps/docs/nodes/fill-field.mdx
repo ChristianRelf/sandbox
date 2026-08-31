@@ -1,0 +1,63 @@
+---
+title: "Fill Field"
+description: "Enter static or protected data. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `fill_field` · **Version:** `1` · **Category:** Browser
+
+Enter static or protected data. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `locator` | locator | `null` | Recorded locator bundle. sndbox prefers accessible role/name data and retains fallbacks. |
+| `value` | string | `""` | Literal value, protected reference, or mapped output. |
+| `clearExisting` | boolean | `true` | Clear the field before entering the value. |
+| `inputDelayMs` | number | `0` | Delay between entered characters, from 0 to 2000 milliseconds. |
+| `sensitive` | boolean | `false` | Treat the mapped value as protected and redact it from execution data. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+
+<Note>Enable `sensitive` for protected mappings so entered values are redacted from logs and execution data.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "fill_field",
+  "version": 1,
+  "configuration": {
+    "locator": null,
+    "value": "",
+    "clearExisting": true,
+    "inputDelayMs": 0,
+    "sensitive": false,
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

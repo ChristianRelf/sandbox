@@ -239,9 +239,6 @@ jobs:
           - name: account
             dockerfile: apps/web/Dockerfile
             platforms: linux/amd64,linux/arm64
-          - name: docs
-            dockerfile: apps/docs/Dockerfile
-            platforms: linux/amd64,linux/arm64
     permissions:
       contents: read
       packages: write

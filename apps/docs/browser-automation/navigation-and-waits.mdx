@@ -1,0 +1,37 @@
+---
+title: "Navigation and waits"
+description: "Wait for the page state your next interaction actually needs."
+icon: "timer-reset"
+---
+
+Navigate loads a URL in the active browser session and waits for one selected condition: **DOM ready**, **Page loaded**, **Network idle**, or **Specific element visible**.
+
+```json title="Navigate"
+{
+  "url": "https://example.com",
+  "waitCondition": "dom_ready",
+  "timeoutMs": 30000
+}
+```
+
+Use **Specific element visible** when the page shell loads before the content needed by the next node. This condition adds the regular structured locator editor.
+
+## Wait For modes
+
+Wait For handles states that occur after navigation or an interaction:
+
+| Mode | Additional setting |
+| --- | --- |
+| `time` | Delay in milliseconds |
+| `element_visible` / `element_hidden` | Locator |
+| `text_present` | Text value |
+| `url_matches` | URL pattern |
+| `download_begins` | None |
+| `network_response` | URL pattern |
+| `page_load_state` | DOM ready, page loaded, or network idle |
+
+Each wait has its own timeout. Prefer a page signal to a fixed delay; a delay cannot distinguish a slow page from a failed one.
+
+## Click timing
+
+Click Element also exposes **Wait after click** from 0 to 120000 ms. Use it only for a short intentional buffer. For meaningful navigation, response, or element state, follow the click with Wait For so failure evidence names the missing condition.

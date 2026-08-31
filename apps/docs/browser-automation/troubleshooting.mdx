@@ -1,0 +1,31 @@
+---
+title: "Troubleshoot browser runs"
+description: "Separate engine, profile, navigation, locator, network, and file-boundary failures."
+icon: "wrench"
+---
+
+Start with the failure evidence instead of re-recording the entire workflow.
+
+## Engine unavailable
+
+Open **Settings → Browser** and inspect engine availability, protocol, sidecar, and browser version. Restart the engine. If the bundled runtime is missing in a development checkout, run `npm.cmd run browser:prepare` before starting the desktop app.
+
+## Profile cannot open
+
+Confirm the selected profile still exists and is not already held by an abandoned process. Open the profile from Settings, then clear or duplicate it only when you understand which retained session state will be lost.
+
+## Locator matched zero or many elements
+
+Read the ordered locator attempts and match counts. Wait for the real element state, prefer role/name or stable label data, and test the corrected locator against the active page. Re-record when the site's semantics changed.
+
+## Unexpected page or request failure
+
+Check current URL, page title, `unexpectedNavigation`, console errors, and failed network requests. Use Navigate or Wait For to make the expected transition explicit.
+
+## Upload or download rejected
+
+Choose the path through the picker, check the approved workflow boundary, maximum bytes, collision policy, and destination permissions. A plain string from an untrusted node is not automatically a trusted file path.
+
+## Reproduce visibly
+
+Use a headed manual retry when offered. The retry is still recorded; headed mode is a diagnostic aid, not a different execution contract.

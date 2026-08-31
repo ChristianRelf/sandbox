@@ -1,0 +1,36 @@
+---
+title: "Workflow permissions"
+description: "Review the concrete files, domains, browser profiles, commands, background work, and communications a revision needs."
+icon: "shield-check"
+---
+
+Permissions are derived from the saved workflow revision. They are not granted by hiding a button or trusting node prose.
+
+```ts title="Permission summary"
+interface PermissionSummary {
+  approvedFolders: string[];
+  approvedNetworkDomains: string[];
+  commandExecutionPermitted: boolean;
+  backgroundExecutionPermitted: boolean;
+  approvedBrowserProfileIds: string[];
+  browserAutomationPermitted: boolean;
+  externalCommunicationPermitted: boolean;
+}
+```
+
+## Review boundaries
+
+- File nodes and downloads use paths chosen through operating-system pickers.
+- HTTP and browser work declare network destinations.
+- Browser sessions use specific managed profile IDs.
+- Run Command declares the executable separately from its argument array.
+- Schedule, file-watch, and Gmail triggers require background execution.
+- Gmail, Discord, Slack, and plugin external actions require communication review.
+
+## Revision-bound approval
+
+Changing a material setting can revoke the matching approval. This prevents an approved harmless revision from being edited into a broader one without another review. Imports and templates remain disabled until their boundaries are chosen locally.
+
+<Warning>
+  A connection reference grants access only through the provider operations implemented for that node. It never exposes the underlying OAuth token or webhook URL to workflow data.
+</Warning>

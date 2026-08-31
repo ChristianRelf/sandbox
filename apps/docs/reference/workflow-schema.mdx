@@ -1,0 +1,59 @@
+---
+title: "Workflow schema"
+description: "Reference the current version 4 workflow, node, edge, settings, owner, and binding shapes."
+icon: "file-json"
+---
+
+The current engine workflow schema version is **4**. Imports reject schema 0 and versions newer than the running build; supported older definitions are migrated to the current version before storage.
+
+```ts title="Workflow"
+interface Workflow {
+  id: string;
+  schemaVersion: number;
+  owner?: { ownerType: "personal" | "workspace"; ownerId: string };
+  name: string;
+  description: string;
+  enabled: boolean;
+  triggerNodeId: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  settings: WorkflowSettings;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+```ts title="Node and edge"
+interface WorkflowNode {
+  id: string;
+  type: string;
+  version: number;
+  name: string;
+  position: { x: number; y: number };
+  configuration: Record<string, unknown>;
+  disabled: boolean;
+  inputBindings?: Record<string, InputBinding>;
+  plugin?: PluginNodePin;
+}
+
+interface WorkflowEdge {
+  id: string;
+  sourceNodeId: string;
+  sourceHandle: string;
+  targetNodeId: string;
+  targetHandle: string;
+  kind?: "control";
+  sourcePort?: string;
+  targetPort?: string;
+}
+```
+
+```ts title="Settings"
+interface WorkflowSettings {
+  defaultNodeTimeoutMs: number;
+  maxConcurrentNodes: number;
+  permissions: PermissionSummary;
+}
+```
+
+Use the editor, import/export envelope, or typed API rather than editing a stored database row. Generated node pages show the exact version 1 configuration defaults for all built-in node types.

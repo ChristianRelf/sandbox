@@ -1,0 +1,29 @@
+---
+title: "Gmail"
+description: "Connect Gmail through PKCE and use the implemented trigger, read, draft, send, and label actions."
+icon: "mail"
+---
+
+Create a Gmail connection from **Settings → Connections**. The OAuth PKCE flow stores the resulting credential in the host vault; workflows keep only `credentialId`.
+
+## Trigger and read
+
+**New Email** polls every 1–60 minutes and can filter sender, recipient, subject text, label, and attachment presence. Plain text is included by default; HTML is optional. Processed message IDs are persisted per workflow to prevent repeated triggering.
+
+**Get Email** retrieves a Gmail message from a mapped message or thread ID.
+
+## Draft and send
+
+Create Gmail Draft and Send Email expose To, CC, BCC, subject, plain text, optional HTML, and optional reply-to message ID. Send also supports approved attachment paths.
+
+<Note>
+  Draft is the recommended default: nothing is sent until a person reviews it in Gmail. Automatic sending is an external side effect and requires approval for the connection and recipient logic.
+</Note>
+
+## Labels
+
+Add Gmail Label maps a message ID and accepts label IDs to add and remove. Use label IDs, one per line in the editor, not display names guessed from the mailbox UI.
+
+## Keep messages private
+
+OAuth tokens are never returned to workflow output. Enable HTML bodies only when a later node needs them; they can contain more sensitive content than the plain-text representation.

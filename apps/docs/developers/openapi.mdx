@@ -1,0 +1,28 @@
+---
+title: "OpenAPI document"
+description: "Generate clients and inspect the same OpenAPI 3.1 contract served by the control plane."
+icon: "file-code-2"
+---
+
+The source contract is `docs/api/openapi-v1.json`. The docs generator copies it to `apps/docs/api-reference/openapi.json`, and Mintlify creates one interactive reference page per operation.
+
+## From a running service
+
+```bash
+curl https://api.sndbox.app/v1/openapi.json -o openapi.json
+```
+
+## Repository drift check
+
+After changing control-plane routes:
+
+```powershell
+npm.cmd run openapi:generate --workspace @sandbox/control-plane
+npm.cmd run openapi:check --workspace @sandbox/control-plane
+```
+
+Compatibility tests reject unresolved operation references and the removed broad `JsonValue` fallback. Every stable operation has named request and response schemas; several core resources also use closed field-level schemas.
+
+<Note>
+  Generated clients must still preserve unknown additive response fields and enum values safely within v1.
+</Note>

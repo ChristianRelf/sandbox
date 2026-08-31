@@ -1,0 +1,61 @@
+---
+title: "Read File"
+description: "Read text from an approved file. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `read_file` · **Version:** `1` · **Category:** Data
+
+Read text from an approved file. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `path` | path | `""` | Approved local file or folder path. |
+| `encoding` | string | `"utf8"` | Text encoding used to read the file. |
+| `maximumBytes` | number | `10485760` | Maximum accepted file, response, screenshot, or download size in bytes. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "read_file",
+  "version": 1,
+  "configuration": {
+    "path": "",
+    "encoding": "utf8",
+    "maximumBytes": 10485760
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `path` | Yes | File path |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `content` | `string` | No | Content |
+| `path` | `path` | No | Path |
+| `bytes` | `number` | No | Bytes |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

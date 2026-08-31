@@ -1,0 +1,57 @@
+---
+title: "Set Data"
+description: "Construct a structured object. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `set_data` · **Version:** `1` · **Category:** Data
+
+Construct a structured object. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `values` | object | `{"key":"value"}` | Structured JSON object produced by the node. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "set_data",
+  "version": 1,
+  "configuration": {
+    "values": {
+      "key": "value"
+    }
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `values` | `object` | No | Object |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `object` | No | Object |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

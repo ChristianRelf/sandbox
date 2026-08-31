@@ -1,0 +1,32 @@
+---
+title: "Browser settings"
+description: "Inspect the managed Chromium engine and create isolated browser profiles."
+icon: "globe"
+---
+
+<Frame caption="Managed Chromium health and isolated browser profiles">
+  ![The sndbox Browser settings page showing the managed Chromium version and a persistent browser profile](/images/product/browser-settings.jpg)
+</Frame>
+
+## Engine
+
+The health panel reports availability, protocol version, sidecar version, browser name/version, and startup error. Restart the engine from this page when the runtime is present but unhealthy.
+
+## Profiles
+
+Create, edit, duplicate, open, clear, or delete a profile. Each profile stores:
+
+```ts
+interface BrowserProfileSettings {
+  viewportWidth: number;
+  viewportHeight: number;
+  downloadFolder?: string;
+  proxy?: string;
+  userAgent?: string;
+  permissions: string[];
+}
+```
+
+Choose persistent storage when a workflow needs retained site state; choose ephemeral when every session should start clean. Use separate profiles for unrelated accounts or trust boundaries.
+
+Deleting a profile can leave an Open Browser node without a valid `profileId`. Review affected workflows and choose a replacement before the next run.

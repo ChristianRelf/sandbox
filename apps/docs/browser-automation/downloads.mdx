@@ -1,0 +1,30 @@
+---
+title: "Downloads"
+description: "Trigger a browser download, enforce a size limit, and save it inside an approved folder."
+icon: "download"
+---
+
+Download File clicks a recorded element and waits for the browser download. It writes only inside the folder selected in the inspector.
+
+## Configuration
+
+- **Locator** identifies the real download control.
+- **Destination folder** is selected through the operating-system picker.
+- **Filename** is optional and can be mapped.
+- **Collision behaviour** is `rename`, `overwrite`, or `fail`.
+- **Maximum size** is 1–2048 MB; the default is 100 MB.
+- **Timeout** defaults to 60000 ms.
+
+The output includes the trusted downloaded `path` and byte count. Map the path directly into Parse CSV, Parse JSON, Parse Text, Move File, or another compatible trusted path field.
+
+```text
+Click download → Download File → Parse CSV → Condition → Desktop Notification
+```
+
+## Managed browser downloads
+
+Cloud-managed downloads are size checked and malware scanned before they reach the durable artifact sink. An unavailable scanner is not treated as a clean result. The temporary browser filesystem is destroyed with the workload.
+
+## Troubleshooting
+
+Use Wait For `download_begins` when a separate click initiates a delayed download. If the node times out, inspect the locator attempts, unexpected navigation, failed network requests, and the page screenshot rather than increasing the timeout first.

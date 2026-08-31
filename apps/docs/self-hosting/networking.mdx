@@ -1,0 +1,27 @@
+---
+title: "Networking and health"
+description: "Expose only public HTTP surfaces, route traffic by readiness, and keep runner and observability endpoints private."
+icon: "network"
+---
+
+## Health endpoints
+
+- `GET /health` proves the HTTP process responds and does not inspect dependencies.
+- `GET /ready` succeeds only when PostgreSQL responds and required recurring governance sweeps are current.
+- `GET /metrics` exports bounded-cardinality Prometheus text and requires a dedicated metrics bearer token.
+
+Route traffic only to replicas returning 200 from `/ready`. Alert on sustained readiness failure, stale recurring probes, elevated 5xx ratio, and request-duration objectives.
+
+## Public boundaries
+
+Use HTTPS for the API and public sites. Keep PostgreSQL, Docker daemon, runner state, Alloy, OTLP, and internal worker ports off the public network. A self-hosted runner makes outbound control-plane connections and does not need a public listener.
+
+The beta DigitalOcean public-site bundle exposes only 80/443 through Caddy; application ports bind to loopback. The control plane and Chromium browser worker should not be co-hosted on that small public-site Droplet.
+
+## Managed browser egress
+
+Managed browser requests, subresources, and redirects pass a request-time network decision. Loopback, link-local, private, carrier-grade NAT, metadata, and cluster-internal targets are rejected. Private access requires a separate authenticated connector policy; it is not enabled by a URL allowlist shortcut.
+
+## Metrics secret
+
+Do not reuse an account, runner, webhook, or usage credential for `METRICS_BEARER_TOKEN`. The metrics endpoint fails closed when the service or token is absent.

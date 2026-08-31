@@ -1,0 +1,18 @@
+---
+title: "Environments"
+description: "Keep development, staging, and production routing and credentials explicit."
+icon: "layers-3"
+---
+
+Remote runners and service-account credentials are restricted to immutable environment IDs. Self-hosted runner configuration also carries a human-readable environment value that must be `development`, `staging`, or `production`.
+
+## Enforcement points
+
+- A runner is paired to one workspace/environment tuple.
+- A runner pool is scoped to the same tuple.
+- Signed commands repeat the target and authorization context.
+- The runner rejects a different environment locally even when the command signature is valid.
+- Service-account tokens can be limited to explicit environment IDs.
+- Effective access is the intersection of token scopes, resource restrictions, principal role, and normal route permission checks.
+
+Environment separation does not happen by naming a folder or adding a tag to a workflow. Use real environment IDs, separate connections where needed, and a publication policy that identifies the target revision.

@@ -1,0 +1,51 @@
+---
+title: "Quickstart"
+description: "Build and run a small workflow in the sndbox desktop app."
+icon: "rocket"
+---
+
+This walkthrough creates a manual workflow that shapes a JSON value and displays it in a desktop notification. It uses only built-in nodes and does not require a connection or secret.
+
+## Before you begin
+
+Install and open the sndbox desktop app. The local runner indicator in the sidebar should show **Ready** before you run the workflow.
+
+<Steps>
+  <Step title="Create a workflow">
+    From **Workflows**, select **New workflow** and give it a descriptive name such as `First notification`.
+  </Step>
+  <Step title="Add the trigger">
+    Add **Manual Trigger** to the canvas. Manual workflows run only when you choose **Run** in the editor.
+  </Step>
+  <Step title="Add Set Data">
+    Connect **Manual Trigger** to **Set Data**, then enter valid JSON:
+
+    ```json
+    {
+      "title": "sndbox",
+      "message": "My first workflow completed."
+    }
+    ```
+  </Step>
+  <Step title="Add Desktop Notification">
+    Connect **Set Data** to **Desktop Notification**. Set **Title** to `sndbox` and **Message** to `My first workflow completed.`
+  </Step>
+  <Step title="Run and inspect">
+    Select **Run**. When the execution finishes, open it from **Run history** and inspect each node's inputs, outputs, and logs.
+  </Step>
+</Steps>
+
+<Check>
+  A successful run ends in the **Succeeded** state and displays the configured desktop notification.
+</Check>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Learn the editor" icon="workflow" href="/workflows/editor">
+    Understand canvas editing, testing, mappings, and the accessible editor.
+  </Card>
+  <Card title="Choose another node" icon="blocks" href="/nodes">
+    Compare every built-in node and its exact configuration.
+  </Card>
+</CardGroup>

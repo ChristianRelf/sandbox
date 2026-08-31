@@ -1,0 +1,64 @@
+---
+title: "Extract Data"
+description: "Extract structured values from the page. Exact configuration, ports, placement, and execution behavior."
+icon: "mouse-pointer-click"
+---
+
+**Node type:** `extract_data` · **Version:** `1` · **Category:** Browser
+
+Extract structured values from the page. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `locator` | locator | `null` | Recorded locator bundle. sndbox prefers accessible role/name data and retains fallbacks. |
+| `extract` | string | `"text"` | Kind of value read from the selected page element. Values: `text`, `attribute`, `link`, `image_source`, `table`. |
+| `fieldName` | string | `"value"` | Name used for the extracted output value. |
+| `repeated` | boolean | `false` | Return all unique matches as a list instead of one value. |
+| `fields` | object | `{}` | Column mapping used for table extraction, or Discord embed field objects. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+| `attribute` | any | — | HTML attribute name when extracting an attribute. Shown when `extract` is `attribute`. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "extract_data",
+  "version": 1,
+  "configuration": {
+    "locator": null,
+    "extract": "text",
+    "fieldName": "value",
+    "repeated": false,
+    "fields": {},
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `any` | No | Extracted value |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Managed browser worker
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

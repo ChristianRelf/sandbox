@@ -1,0 +1,43 @@
+---
+title: "Locators"
+description: "Understand the structured locator bundle used by browser nodes and their diagnostics."
+icon: "crosshair"
+---
+
+sndbox stores a locator as structured evidence rather than one handwritten selector.
+
+```ts title="StructuredLocator"
+interface StructuredLocator {
+  primary: LocatorCandidate;
+  alternatives: LocatorCandidate[];
+  elementRole?: string;
+  accessibleName?: string;
+  tag: string;
+  stableAttributes: Record<string, string>;
+  framePath: string[];
+  recordingUrl: string;
+  nearbyText?: string;
+}
+
+type LocatorKind =
+  | "role" | "label" | "placeholder" | "test_id"
+  | "text" | "attribute" | "css" | "xpath";
+```
+
+The recorder prefers accessible role/name information, then retains label, placeholder, test ID, text, attribute, CSS, or XPath candidates as available. A locator test runs against the active managed session before you save the interaction.
+
+## Read a failure
+
+Browser diagnostics list every attempted `kind` and `value`, its match count, whether it succeeded, whether it was a weak fallback, and any error. Use that sequence to decide whether the page changed, the target became ambiguous, or navigation had not finished.
+
+## Keep locators resilient
+
+- Prefer a stable role and accessible name over a styling class.
+- Require a unique match before allowing a click, fill, or upload.
+- Add an explicit Wait For node when content loads asynchronously.
+- Re-record against the real current page when a semantic label changes.
+- Avoid weakening the locator until it matches multiple controls.
+
+<Note>
+  The model contains `framePath`, but the current recorder targets the active main page. Do not document or rely on cross-frame recording as an implemented interaction.
+</Note>

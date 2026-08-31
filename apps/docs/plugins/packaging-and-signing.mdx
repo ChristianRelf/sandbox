@@ -1,0 +1,42 @@
+---
+title: "Packaging and signing"
+description: "Build a deterministic archive, keep private keys outside it, and inspect the exact signed package."
+icon: "package-check"
+---
+
+Archives use deterministic stored ZIP entries with fixed timestamps and sorted paths. The digest covers a canonical unsigned manifest and every sorted package entry.
+
+## Development archive
+
+```powershell
+sandbox plugin pack .
+```
+
+The default output is `dist/<plugin-id>-<version>.unsigned.sandbox-plugin`. It is for development and cannot substitute for a marketplace signature.
+
+## Create a development key
+
+Generate the key outside the plugin directory:
+
+```powershell
+sandbox plugin keygen C:\secure\sndbox-keys --key-id development
+sandbox plugin sign . `
+  --key C:\secure\sndbox-keys\development.private.pem `
+  --key-id development
+```
+
+The private key is an Ed25519 PKCS#8 PEM with owner-only file mode where supported. The public key is SPKI PEM.
+
+<Warning>
+  Never place the private PEM in a plugin archive, repository, workflow export, or CI log. Marketplace signing should use an encrypted CI secret or managed signer and register only the public key.
+</Warning>
+
+## Inspect
+
+```powershell
+sandbox plugin inspect .\dist\com.example.plugin-0.1.0.sandbox-plugin
+```
+
+Inspection prints plugin/publisher identity, version, package integrity, files, permissions, and validation result.
+
+Only declared `.wasm` entrypoints may execute. JavaScript, native libraries, executables, shell files, and undeclared WebAssembly are rejected.

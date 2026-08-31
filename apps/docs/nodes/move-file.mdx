@@ -1,0 +1,59 @@
+---
+title: "Move File"
+description: "Move within approved folders. Exact configuration, ports, placement, and execution behavior."
+icon: "terminal"
+---
+
+**Node type:** `move_file` · **Version:** `1` · **Category:** System
+
+Move within approved folders. This node can change external state or produce an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `source` | path | `""` | Source file or folder inside an approved boundary. |
+| `destinationFolder` | path | `""` | Approved folder that receives the output. |
+| `renameTo` | string | `""` | Optional replacement filename. |
+| `overwrite` | boolean | `false` | Allow replacement when the destination already exists. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "move_file",
+  "version": 1,
+  "configuration": {
+    "source": "",
+    "destinationFolder": "",
+    "renameTo": "",
+    "overwrite": false
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+This node has no typed ports in this direction.
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `result` | `any` | No | Result |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

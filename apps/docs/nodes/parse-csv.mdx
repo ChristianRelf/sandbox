@@ -1,0 +1,66 @@
+---
+title: "Parse CSV"
+description: "Parse CSV text or an approved file. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `parse_csv` · **Version:** `1` · **Category:** Data
+
+Parse CSV text or an approved file. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `path` | path | `""` | Approved local file or folder path. |
+| `content` | string | `""` | Literal or mapped content. For parser nodes, mapped content takes precedence over the optional file. |
+| `delimiter` | string | `","` | Single character separating CSV fields. |
+| `hasHeaders` | boolean | `true` | Treat the first CSV row as field names. |
+| `trim` | boolean | `true` | Remove leading and trailing whitespace. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "parse_csv",
+  "version": 1,
+  "configuration": {
+    "path": "",
+    "content": "",
+    "delimiter": ",",
+    "hasHeaders": true,
+    "trim": true
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `path` | No | CSV file |
+| `content` | `string` | No | CSV text |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `headers` | `array` | No | Headers |
+| `rows` | `array` | No | Rows |
+| `rowCount` | `number` | No | Row count |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

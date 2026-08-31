@@ -1,0 +1,32 @@
+---
+title: "Plugin CLI reference"
+description: "Every implemented `sandbox plugin` command and its current purpose."
+icon: "terminal"
+---
+
+The CLI executable remains `sandbox` for package compatibility. All plugin commands live below `sandbox plugin`.
+
+| Command | Purpose |
+| --- | --- |
+| `create <directory>` | Scaffold manifest, Rust guest, docs, icon, and README. Requires `--plugin-id` and `--publisher-id`; optional `--name`. |
+| `dev [directory]` | Compile and rebuild a Development-labelled package. Use `--once` to exit after one build. |
+| `validate [directory]` | Validate manifest, schemas, capabilities, paths, and permissions. `--signed` requires signature fields. |
+| `test [directory]` | Run guest Cargo tests. |
+| `pack [directory]` | Produce a deterministic unsigned development archive. Optional `-o, --output`. |
+| `sign [directory]` | Hash, Ed25519-sign, and package. Requires `--key` and `--key-id`; optional output. |
+| `keygen <directory>` | Create an Ed25519 development key pair. Optional `--key-id`, default `development`. |
+| `inspect <package>` | Print identity, files, integrity, permissions, and validation. |
+| `docs [directory]` | Generate host-consistent Markdown reference. Optional output path. |
+| `publish <package>` | Submit to the publisher API. Uses flags or `SANDBOX_API_URL` and `SANDBOX_PUBLISH_TOKEN`. |
+
+## Examples
+
+```powershell
+sandbox plugin create weather --plugin-id com.example.weather --publisher-id com.example
+sandbox plugin dev weather --once
+sandbox plugin validate weather
+sandbox plugin docs weather -o weather\dist\PLUGIN.md
+sandbox plugin pack weather
+```
+
+Run `sandbox plugin <command> --help` for Commander-generated option help from the installed SDK version.

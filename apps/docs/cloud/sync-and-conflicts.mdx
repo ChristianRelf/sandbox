@@ -1,0 +1,30 @@
+---
+title: "Sync and conflicts"
+description: "Synchronize encrypted revisions while preserving divergent edits as separate immutable siblings."
+icon: "refresh-cw"
+---
+
+Each synced revision includes workflow and revision IDs, parent revision, schema version, SHA-256 content hash, editor device, update time, sync state, exact plugin requirements, permission requirements, and runner policy.
+
+Workflow content is encrypted with AES-256-GCM and a separately carried key envelope. The service stores ciphertext plus limited searchable metadata.
+
+## Data not synced by default
+
+- raw credentials and cookies;
+- browser profile data;
+- local files;
+- command output;
+- detailed logs; and
+- screenshots.
+
+## Conflict behavior
+
+When an uploaded revision's parent is not the current cloud draft, sndbox preserves both the uploaded sibling and existing draft. Nothing is overwritten and the graph is not automatically merged.
+
+Choose one of three explicit outcomes:
+
+1. keep the local revision;
+2. keep the remote revision; or
+3. import one side as a new copy and merge deliberately in the editor.
+
+Revision IDs cannot be reused with another content hash, and a parent must belong to the same workflow. Deleted workflow recovery uses version history rather than destructive mutation.

@@ -1,0 +1,17 @@
+---
+title: "Troubleshooting"
+description: "Use the narrowest evidence surface for desktop, browser, runner, permission, API, or support-access failures."
+icon: "life-buoy"
+---
+
+Start with the failing boundary, not a reinstall.
+
+<CardGroup cols={2}>
+  <Card title="Desktop" icon="monitor" href="/troubleshooting/desktop">Startup, local data, runner, update, and workflow validation.</Card>
+  <Card title="Browser" icon="globe" href="/troubleshooting/browser">Engine health, profiles, locators, navigation, and artifacts.</Card>
+  <Card title="Runner" icon="server" href="/troubleshooting/runner">Pairing, compatibility, signatures, environment, leases, and capacity.</Card>
+  <Card title="Permissions" icon="shield-alert" href="/troubleshooting/permissions">Revision approval, path, domain, profile, command, connection, and workspace authorization.</Card>
+  <Card title="Diagnostics and support" icon="stethoscope" href="/troubleshooting/diagnostics">Share redacted aggregate diagnostics only through an approved, time-boxed grant.</Card>
+</CardGroup>
+
+For API errors, record the HTTP status, stable `error.code`, and `correlationId`. For a run, record workflow revision, execution ID, failing node, attempt, and the redacted evidence already shown in the inspector.

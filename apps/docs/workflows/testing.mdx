@@ -1,0 +1,25 @@
+---
+title: "Test a workflow"
+description: "Use node tests, validation, manual runs, and execution evidence without hiding side effects."
+icon: "flask-conical"
+---
+
+Testing is layered so you can isolate configuration before running the full graph.
+
+## Test a node
+
+Select a node, provide any required mapped sample input, and choose **Test node**. The result appears beside the graph. Browser locator tests use the active managed session; workflow-state nodes preview changes without committing them.
+
+Side-effecting and destructive nodes do not become harmless in test mode. sndbox can require explicit confirmation for commands, deletion, upload, communication, or other bounded actions.
+
+## Validate the graph
+
+Validation checks required configuration, trigger and connection rules, typed bindings, permission state, and node-specific constraints. Fix errors before using **Run**. A warning should be reviewed; it is not silently treated as success.
+
+## Run the revision
+
+A manual run uses the saved workflow revision. Keep the execution drawer open to follow node state. After completion, inspect resolved values rather than assuming the canvas configuration is what reached an external service.
+
+## Browser failures
+
+Use locator attempts, current URL, page title, console errors, failed requests, screenshot, and trace references. When available, retry in headed mode or re-record the failed interaction.

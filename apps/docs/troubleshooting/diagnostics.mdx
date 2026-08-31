@@ -1,0 +1,24 @@
+---
+title: "Diagnostics and support access"
+description: "Share redacted aggregate workspace health through a customer-approved, time-boxed support grant."
+icon: "stethoscope"
+---
+
+The implemented support path does not offer a general log download or diagnostic bundle containing workflow payloads.
+
+## Grant flow
+
+1. A human support operator with `support_access.manage` requests `diagnostics.read` for one workspace, a reason, and 15–480 minutes.
+2. A different recently step-up-authenticated human with `members.manage` in the workspace approves or rejects it.
+3. The requesting operator can read diagnostics only while that exact grant remains active.
+4. The customer can revoke it immediately; expiry is checked on every read.
+
+## Returned diagnostics
+
+Only grouped counts are returned for runner status, execution status during the prior 24 hours, queue status, and webhook-delivery status. Recursive redaction removes fields whose names can carry secrets, tokens, passwords, credentials, authorization, cookies, payloads, or email addresses.
+
+Every request, decision, revocation, and diagnostic read is appended with actor, scope, bounded resource summary, time, and correlation ID. Support staff cannot approve their own request.
+
+<Warning>
+  Do not upload the local workflow database, browser profile, credential store, trace, screenshot, or raw execution JSON unless a separate explicit secure support process asks for that specific artifact.
+</Warning>
