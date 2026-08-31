@@ -4,9 +4,9 @@
   "name": "sndbox",
   "description": "Build, run, inspect, and govern reliable desktop and browser automations.",
   "colors": {
-    "primary": "#647600",
+    "primary": "#465200",
     "light": "#d6ff4b",
-    "dark": "#465200"
+    "dark": "#647600"
   },
   "favicon": "/assets/sndbox-icon.svg",
   "logo": {
