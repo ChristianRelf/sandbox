@@ -193,7 +193,7 @@ export function LiveWorkflowDemo() {
         </button>
       </header>
 
-      <div className={styles.desktopCanvas} aria-label="Interactive Sandbox workflow editor demonstration">
+      <div className={styles.desktopCanvas} aria-label="Interactive sndbox workflow editor demonstration">
         <ReactFlow<DemoNode, Edge>
           nodes={nodes}
           edges={workflowEdges}

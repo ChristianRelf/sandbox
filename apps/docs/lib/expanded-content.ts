@@ -15,7 +15,7 @@ export const expandedDocs: DocPage[] = [
     section: "Getting Started",
     title: "Take the product tour",
     description: "Learn the four surfaces you use to build, test, publish and explain an automation.",
-    prerequisites: ["Sandbox desktop app installed"],
+    prerequisites: ["sndbox desktop app installed"],
     concepts: [
       { title: "Canvas", body: "The editable graph where triggers, actions and branches become a workflow." },
       { title: "Inspector", body: "The configuration and run-data panel for the selected node." },
@@ -36,7 +36,7 @@ export const expandedDocs: DocPage[] = [
     section: "Getting Started",
     title: "Import a workflow",
     description: "Review an exported workflow before it can access connections, files or a runner.",
-    prerequisites: ["A Sandbox workflow export", "Permission to create workflows in the target workspace"],
+    prerequisites: ["A sndbox workflow export", "Permission to create workflows in the target workspace"],
     concepts: [
       { title: "Portable definition", body: "The graph and non-secret configuration can move between workspaces." },
       { title: "Local binding", body: "Connections, folders and runners must be selected again in the destination." },
@@ -150,7 +150,7 @@ export const expandedDocs: DocPage[] = [
       { title: "Test denied access", body: "Confirm the workflow fails safely when a resource is outside its approved boundary." },
     ],
     result: "The published revision has only the resources required by its reachable execution paths.",
-    errors: ["A plugin update can add capabilities and therefore require re-approval.", "Runner operating-system access does not override a missing Sandbox grant."],
+    errors: ["A plugin update can add capabilities and therefore require re-approval.", "Runner operating-system access does not override a missing sndbox grant."],
     related: ["teams-and-governance/approvals", "plugins/permissions", "troubleshooting/permissions"],
   }),
   guide({
@@ -181,7 +181,7 @@ export const expandedDocs: DocPage[] = [
     description: "Keep cookies and site sessions isolated from the personal browser on your computer.",
     prerequisites: ["Managed Chromium runtime installed"],
     concepts: [
-      { title: "Managed profile", body: "A Sandbox-owned browser data directory with a clear workspace purpose." },
+      { title: "Managed profile", body: "A sndbox-owned browser data directory with a clear workspace purpose." },
       { title: "Session boundary", body: "The point at which cookies, storage and authenticated state are reused or discarded." },
     ],
     notes: ["Use a dedicated site account when automation must sign in repeatedly; do not reuse a personal profile."],
@@ -385,7 +385,7 @@ export const expandedDocs: DocPage[] = [
     section: "Execution",
     title: "Local runner",
     description: "Understand availability, access and lifecycle when workflows run on this computer.",
-    prerequisites: ["Sandbox desktop app installed and signed in"],
+    prerequisites: ["sndbox desktop app installed and signed in"],
     concepts: [
       { title: "Execution boundary", body: "The device on which node code receives its approved file, application and network access." },
       { title: "Heartbeat", body: "The runner status signal used to decide whether scheduled work can be assigned." },
@@ -637,7 +637,7 @@ export const expandedDocs: DocPage[] = [
     section: "Developers",
     title: "TypeScript API client",
     description: "Create a typed client, propagate request identity and handle structured API errors.",
-    prerequisites: ["Node.js 20 or later", "A Sandbox API token"],
+    prerequisites: ["Node.js 20 or later", "A sndbox API token"],
     steps: [
       { title: "Install the package", body: "Pin a compatible client version in the application lockfile.", code: "npm install @sandbox/api-client" },
       { title: "Create one client", body: "Provide the HTTPS base URL and token through server-side configuration.", code: "const sandbox = new SandboxApiClient({\n  baseUrl: process.env.SANDBOX_API_URL,\n  accessToken: process.env.SANDBOX_TOKEN\n});" },
@@ -759,7 +759,7 @@ export const expandedDocs: DocPage[] = [
       { title: "Check before publishing", body: "Review node count, payload, artifact, duration and concurrency limits in workflow validation." },
       { title: "Bound collections", body: "Process large files and API responses in deliberate batches." },
       { title: "Bound retained evidence", body: "Capture only useful logs, screenshots and output fields." },
-      { title: "Plan for the boundary", body: "Confirm runner storage and external-service limits as well as Sandbox limits." },
+      { title: "Plan for the boundary", body: "Confirm runner storage and external-service limits as well as sndbox limits." },
     ],
     result: "The workflow validates within the limits displayed for its environment and plan.",
     errors: ["Increasing a timeout does not increase the workflow's overall deadline.", "A self-hosted runner does not remove control-plane contract or payload boundaries."],
@@ -829,7 +829,7 @@ export const expandedDocs: DocPage[] = [
     slug: "reference/glossary",
     section: "Reference",
     title: "Glossary",
-    description: "A compact map of the terms used throughout Sandbox documentation.",
+    description: "A compact map of the terms used throughout sndbox documentation.",
     concepts: [
       { title: "Workflow", body: "A graph of one trigger and the actions or decisions reachable from it." },
       { title: "Revision", body: "An immutable published snapshot of a workflow." },

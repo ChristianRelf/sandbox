@@ -67,7 +67,7 @@ export default function Page() {
           <label>Organisation<input name="organisation" /></label>
           <label>What do you need?<textarea name="message" required minLength={20} rows={6} /></label>
           <label className="honeypot" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off" /></label>
-          <label className="consent"><input type="checkbox" name="consent" value="yes" required /> I agree that Sandbox may use these details to respond to this enquiry.</label>
+          <label className="consent"><input type="checkbox" name="consent" value="yes" required /> I agree that sndbox may use these details to respond to this enquiry.</label>
           <button type="submit" disabled={state === "sending"} className="sb-button sb-button--primary">
             {state === "sending" ? "Sending…" : "Send enquiry"}
           </button>

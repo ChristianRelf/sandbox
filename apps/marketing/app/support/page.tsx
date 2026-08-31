@@ -9,7 +9,7 @@ import {
 export const metadata = {
   title: "Support",
   description:
-    "Find Sandbox documentation, downloads, troubleshooting and governed support access.",
+    "Find sndbox documentation, downloads, troubleshooting and governed support access.",
 };
 export default function Page() {
   return (

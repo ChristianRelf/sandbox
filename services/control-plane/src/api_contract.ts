@@ -172,7 +172,7 @@ export function buildOpenApiDocument(routes: ApiRouteDescription[]): Record<stri
   }
   return {
     openapi: "3.1.0",
-    info: { title: "Sandbox Control Plane API", version: "0.5.0", description: "Versioned v1 route and transport contract. Resource schemas remain additive during the v0.5 GA candidate." },
+    info: { title: "sndbox Control Plane API", version: "0.5.0", description: "Versioned v1 route and transport contract. Resource schemas remain additive during the v0.5 GA candidate." },
     servers: [{ url: "https://api.sndbox.app" }],
     paths,
     components: {

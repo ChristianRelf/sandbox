@@ -33,7 +33,7 @@ describe("v0.6 public content", () => {
     expect(transactionalEmails).toHaveLength(13);
     for (const template of transactionalEmails) {
       expect(template.html({})).toContain("<!doctype html>");
-      expect(template.text({})).toContain("SANDBOX");
+      expect(template.text({})).toContain("sndbox");
     }
   });
 

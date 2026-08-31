@@ -221,7 +221,7 @@ fn client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(30))
         .redirect(Policy::none())
-        .user_agent(format!("Sandbox/{}", sandbox_plugin_runtime::HOST_VERSION))
+        .user_agent(format!("sndbox/{}", sandbox_plugin_runtime::HOST_VERSION))
         .build()
         .map_err(|error| error.to_string())
 }

@@ -1,6 +1,6 @@
 # Team permission matrix
 
-Sandbox evaluates explicit permissions against a concrete workspace resource. Role names are only default permission bundles; API routes never authorize by hiding UI controls or comparing a role-name string.
+sndbox evaluates explicit permissions against a concrete workspace resource. Role names are only default permission bundles; API routes never authorize by hiding UI controls or comparing a role-name string.
 
 | Permission area | Owner | Administrator | Developer | Operator | Viewer |
 | --- | --- | --- | --- | --- | --- |

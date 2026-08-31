@@ -26,7 +26,7 @@ const artifacts = await Promise.all(files.map(async file => {
 artifacts.sort((left, right) => left.name.localeCompare(right.name));
 const manifest = {
   schemaVersion: 1,
-  product: "Sandbox",
+  product: "sndbox",
   version,
   tag,
   channel: version.includes("-") ? "beta" : "stable",

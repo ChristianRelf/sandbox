@@ -216,7 +216,7 @@ impl HostServices for TauriHost {
             .app
             .notification()
             .builder()
-            .title("Sandbox approval required")
+            .title("sndbox approval required")
             .body(action)
             .show();
         if let Some(window) = self.app.get_webview_window("main") {
@@ -431,7 +431,7 @@ pub fn run() {
             commands::take_deep_link_requests
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run Sandbox");
+        .expect("failed to run sndbox");
 }
 
 fn validate_deep_link(raw: &str) -> Option<String> {

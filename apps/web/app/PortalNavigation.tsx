@@ -87,7 +87,7 @@ export function PortalMobileNavigation() {
         <>
           <button className="portal-menu-backdrop" type="button" aria-label="Close navigation" onClick={() => setOpen(false)} />
           <aside id="portal-mobile-panel" className="portal-mobile-panel" role="dialog" aria-modal="true" aria-label="Account navigation">
-            <header><strong>Account</strong><span>Manage your Sandbox boundary.</span></header>
+            <header><strong>Account</strong><span>Manage your sndbox boundary.</span></header>
             <NavigationLinks onNavigate={() => setOpen(false)} />
           </aside>
         </>

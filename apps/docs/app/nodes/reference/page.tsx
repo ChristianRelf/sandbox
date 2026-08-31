@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Node reference",
-  description: "Generated reference for built-in Sandbox workflow nodes.",
+  description: "Generated reference for built-in sndbox workflow nodes.",
   openGraph: { images: [] },
   twitter: { images: [] },
 };

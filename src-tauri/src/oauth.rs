@@ -39,7 +39,7 @@ pub struct TokenResponse {
 
 pub fn gmail_client_id() -> Result<String, String> {
     std::env::var("SANDBOX_GMAIL_CLIENT_ID").ok().filter(|value| !value.trim().is_empty()).ok_or_else(||
-        "Gmail OAuth is not configured in this build. Set SANDBOX_GMAIL_CLIENT_ID to a Google Desktop OAuth client ID, then restart Sandbox.".into())
+        "Gmail OAuth is not configured in this build. Set SANDBOX_GMAIL_CLIENT_ID to a Google Desktop OAuth client ID, then restart sndbox.".into())
 }
 
 pub fn start_gmail(

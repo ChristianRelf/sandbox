@@ -28,7 +28,7 @@ impl EngineError {
             ),
             Self::Storage(_) => (
                 "storage_error",
-                "Retry the operation. If it continues, restart Sandbox.",
+                "Retry the operation. If it continues, restart sndbox.",
             ),
             Self::Node(_) => (
                 "node_failed",

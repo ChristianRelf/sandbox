@@ -8,7 +8,7 @@ The service never syncs raw credentials, cookies, browser profiles, local files,
 
 ## Conflict handling
 
-When an uploaded revision's parent is not the current draft, Sandbox preserves the uploaded sibling and the existing draft. Neither is overwritten. The UI/client may select the local revision, select the remote revision, or import one as a new merged copy. Stage three does not automatically merge workflow graphs.
+When an uploaded revision's parent is not the current draft, sndbox preserves the uploaded sibling and the existing draft. Neither is overwritten. The UI/client may select the local revision, select the remote revision, or import one as a new merged copy. Stage three does not automatically merge workflow graphs.
 
 Revision IDs are immutable: reusing an ID with another content hash is rejected. Parent revisions must belong to the same workflow. Deleted workflow recovery remains a version-history operation rather than destructive graph mutation.
 

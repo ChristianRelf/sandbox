@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Immutable Sandbox image version to deploy
+        description: Immutable sndbox image version to deploy
         required: true
         type: string
       deployment:

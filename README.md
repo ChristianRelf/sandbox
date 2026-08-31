@@ -1,6 +1,6 @@
-# Sandbox v0.7.1 beta
+# sndbox v0.7.1 beta
 
-Sandbox is a local-first visual desktop automation platform. The v0.7 beta aligns the Windows desktop app, workflow engine, plugin runtime, public web surfaces, and Linux runners on one prerelease version.
+sndbox is a local-first visual desktop automation platform. The v0.7 beta aligns the Windows desktop app, workflow engine, plugin runtime, public web surfaces, and Linux runners on one prerelease version.
 
 Public site: [sndbox.app](https://sndbox.app) · Account: [app.sndbox.app](https://app.sndbox.app) · Documentation: [docs.sndbox.app](https://docs.sndbox.app)
 

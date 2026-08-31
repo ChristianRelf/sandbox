@@ -1,4 +1,4 @@
-# Sandbox v0.5 architecture
+# sndbox v0.5 architecture
 
 Status: GA candidate under active development. The blocker register, not this diagram, determines release readiness.
 

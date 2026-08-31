@@ -21,7 +21,7 @@ export async function scaffold(directory: string, options: ScaffoldOptions): Pro
   await writeFile(path.join(directory, "guest", "Cargo.toml"), cargoToml(options.pluginId));
   await writeFile(path.join(directory, "guest", "src", "lib.rs"), rustGuest);
   await writeFile(path.join(directory, "assets", "icon.svg"), icon);
-  await writeFile(path.join(directory, "docs", "echo.md"), "# Echo\n\nReturns the JSON input using the production Sandbox JSON ABI.\n");
+  await writeFile(path.join(directory, "docs", "echo.md"), "# Echo\n\nReturns the JSON input using the production sndbox JSON ABI.\n");
   await writeFile(path.join(directory, "README.md"), `# ${options.name}\n\nBuild with \`sandbox plugin dev .\`. The development package still uses the production sandbox and requires permission approval.\n`);
 }
 

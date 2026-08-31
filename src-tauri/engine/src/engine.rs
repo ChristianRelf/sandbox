@@ -833,7 +833,7 @@ impl Engine {
                 let title = config
                     .get("title")
                     .and_then(Value::as_str)
-                    .unwrap_or("Sandbox");
+                    .unwrap_or("sndbox");
                 let message = config.get("message").and_then(Value::as_str).unwrap_or("");
                 self.host.desktop_notification(title, message).await?;
                 Ok(NodeResult::new(json!({"delivered":true,"title":title}))

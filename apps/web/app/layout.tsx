@@ -2,15 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { brand } from "@sandbox/brand";
-import { ArrowUpRight, Box, User } from "lucide-react";
+import { SndboxMark } from "@sandbox/product-ui/brand";
+import { ArrowUpRight, User } from "lucide-react";
 import { authenticatedClient } from "../lib/auth";
 import { PortalMobileNavigation, PortalNavigation } from "./PortalNavigation";
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(brand.domains.app),
-  title: { default: "Sandbox account", template: "%s · Sandbox" },
-  description: "Manage Sandbox releases, licences, purchases, usage, organisations and support.",
+  title: { default: "sndbox account", template: "%s · sndbox" },
+  description: "Manage sndbox releases, licences, purchases, usage, organisations and support.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -19,12 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <a href="#portal-main" className="skip-link">Skip to account content</a>
         <header className="portal-header">
-          <Link href="/" className="wordmark" aria-label="Sandbox account home">
-            <span><Box aria-hidden="true" size={16} /></span>
-            <strong>Sandbox</strong>
+          <Link href="/" className="wordmark" aria-label="sndbox account home">
+            <SndboxMark size={30} />
+            <strong>sndbox</strong>
           </Link>
           <i>Account</i>
-          <nav className="portal-destinations" aria-label="Sandbox destinations">
+          <nav className="portal-destinations" aria-label="sndbox destinations">
             <a href={brand.domains.marketing}>Product</a>
             <a href={brand.domains.docs}>Docs <ArrowUpRight aria-hidden="true" size={12} /></a>
           </nav>

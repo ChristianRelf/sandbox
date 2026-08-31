@@ -1,6 +1,6 @@
 # v0.5 compatibility and support matrix
 
-This matrix is the release contract for Sandbox 0.5.x. Components outside the
+This matrix is the release contract for sndbox 0.5.x. Components outside the
 combinations below are not supported for production use.
 
 | Component | Supported version | Compatibility boundary |

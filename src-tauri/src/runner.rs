@@ -17,7 +17,7 @@ use tauri::{
 use tokio_util::sync::CancellationToken;
 
 pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
-    let open = MenuItemBuilder::with_id("open", "Open Sandbox").build(app)?;
+    let open = MenuItemBuilder::with_id("open", "Open sndbox").build(app)?;
     let approvals = MenuItemBuilder::with_id("approvals", "Pending Approvals").build(app)?;
     let pause = CheckMenuItemBuilder::with_id("pause", "Pause Automations").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -29,7 +29,7 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
     let quitting = state.quitting.clone();
     let mut builder = TrayIconBuilder::with_id("runner")
         .menu(&menu)
-        .tooltip("Sandbox runner · Active")
+        .tooltip("sndbox runner · Active")
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "open" => {
                 if let Some(window) = app.get_webview_window("main") {
@@ -51,9 +51,9 @@ pub fn create_tray(app: &mut App, state: &AppState) -> tauri::Result<()> {
                 let _ = app.emit("runner-status-changed", json!({"paused":next}));
                 if let Some(tray) = app.tray_by_id("runner") {
                     let _ = tray.set_tooltip(Some(if next {
-                        "Sandbox runner · Paused"
+                        "sndbox runner · Paused"
                     } else {
-                        "Sandbox runner · Active"
+                        "sndbox runner · Active"
                     }));
                 }
             }

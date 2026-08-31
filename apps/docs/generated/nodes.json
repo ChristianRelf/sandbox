@@ -160,7 +160,7 @@
       "category": "System",
       "version": 1,
       "configurationDefaults": {
-        "title": "Sandbox",
+        "title": "sndbox",
         "message": "Workflow completed"
       },
       "risk": "low",

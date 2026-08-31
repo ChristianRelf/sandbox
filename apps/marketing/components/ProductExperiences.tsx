@@ -89,7 +89,7 @@ function BuilderPage({ page }: { page: ProductPage }) {
         <div className={styles.builderSummary}>
           <p>{page.summary}</p>
           <div className={styles.builderActions}>
-            <Link href="/downloads"><Download aria-hidden="true" size={15} /> Download Sandbox</Link>
+            <Link href="/downloads"><Download aria-hidden="true" size={15} /> Download sndbox</Link>
             <a href={documentationUrl(page.related[0])}>Open editor guide <ArrowUpRight aria-hidden="true" size={14} /></a>
           </div>
         </div>

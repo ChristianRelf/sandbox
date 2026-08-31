@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
-  Box,
   ChevronDown,
   Download,
   Menu,
   X,
 } from "lucide-react";
 import { brand } from "@sandbox/brand";
+import { SndboxMark } from "@sandbox/product-ui/brand";
 import styles from "./SiteHeader.module.css";
 
 type NavigationItem = {
@@ -303,9 +303,9 @@ export function SiteHeader() {
       data-mobile-open={mobileOpen ? "true" : "false"}
     >
       <div className={styles.inner}>
-        <Link className={styles.wordmark} href="/" aria-label="Sandbox home">
-          <span className={styles.mark}><Box aria-hidden="true" size={16} strokeWidth={2.2} /></span>
-          <span>Sandbox</span>
+        <Link className={styles.wordmark} href="/" aria-label="sndbox home">
+          <SndboxMark className={styles.mark} size={32} />
+          <span>sndbox</span>
         </Link>
 
         <nav className={styles.desktopNav} aria-label="Primary navigation" onMouseLeave={scheduleMenuClose}>
@@ -454,7 +454,7 @@ export function SiteHeader() {
             </nav>
             <footer>
               <a href={`${brand.domains.app}/sign-in`} onClick={() => closeMobile()}>Sign in</a>
-              <Link href="/downloads" onClick={() => closeMobile()}>Download Sandbox <Download aria-hidden="true" size={14} /></Link>
+              <Link href="/downloads" onClick={() => closeMobile()}>Download sndbox <Download aria-hidden="true" size={14} /></Link>
             </footer>
           </aside>
         </>

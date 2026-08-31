@@ -1,4 +1,4 @@
-# Sandbox v0.7.1 beta control-plane deployment
+# sndbox v0.7.1 beta control-plane deployment
 
 This deploys the beta API at `https://api.sndbox.app` with:
 
@@ -9,7 +9,7 @@ This deploys the beta API at `https://api.sndbox.app` with:
 
 The fixed infrastructure cost is **$5 per month** for the smallest App Platform service, plus Neon's metered database usage. Neon describes an intermittent 1 GB Launch database as typically around $15 per month, but scale-to-zero can make a lightly used invite-only beta cheaper. Auth0 and Stripe can remain free for a small test, although Stripe charges its normal fees if live payments are enabled later.
 
-Do not put any database password, Stripe key, webhook secret, or generated Sandbox key into Git, chat, the desktop application, or a public environment variable.
+Do not put any database password, Stripe key, webhook secret, or generated sndbox key into Git, chat, the desktop application, or a public environment variable.
 
 ## What is already configured in the code
 
@@ -61,16 +61,16 @@ The webhook secret is created later, after the public API is reachable.
 
 ## 3. Install the Auth0 token Action
 
-The API needs namespaced claims in its Auth0 access token. Replace any earlier `Add Sandbox API claims` draft with the exact contents of `deploy/control-plane/auth0-post-login-action.js`.
+The API needs namespaced claims in its Auth0 access token. Replace any earlier `Add sndbox API claims` draft with the exact contents of `deploy/control-plane/auth0-post-login-action.js`.
 
 1. In the Auth0 dashboard, open **Actions → Library**.
 2. Select **Build Custom** or **Build from scratch**.
-3. Name it `Add Sandbox API claims`, choose **Login / Post Login**, and use the recommended Node runtime.
+3. Name it `Add sndbox API claims`, choose **Login / Post Login**, and use the recommended Node runtime.
 4. Paste the complete contents of `deploy/control-plane/auth0-post-login-action.js` into the editor.
 5. Select **Deploy**.
 6. On the deployment confirmation, select **Add to Flow**. If that button is gone, use **Back to Flow**.
 7. If your dashboard navigation does not show **Flows**, open **Actions → Triggers → Post Login**. Older tenants show the same screen at **Actions → Flows → Login**.
-8. Drag `Add Sandbox API claims` into the Post Login pipeline and select **Apply**.
+8. Drag `Add sndbox API claims` into the Post Login pipeline and select **Apply**.
 
 No Action secret or dependency is required. The Action creates a stable UUID in each Auth0 user's `app_metadata`, then puts the UUID, verified email, session ID, and permissions into namespaced access-token claims.
 

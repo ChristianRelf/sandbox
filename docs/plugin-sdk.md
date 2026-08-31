@@ -1,4 +1,4 @@
-# Sandbox plugin SDK and CLI
+# sndbox plugin SDK and CLI
 
 The public SDK is `@sandbox/plugin-sdk`. The CLI executable is `sandbox` and all plugin commands live under `sandbox plugin`.
 

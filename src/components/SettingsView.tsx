@@ -182,11 +182,11 @@ export function SettingsView() {
           {section === "general" && (
             <PreferencePanel
               title="General"
-              description="Choose how Sandbox starts and how everyday workflow information is presented."
+              description="Choose how sndbox starts and how everyday workflow information is presented."
             >
               <SelectPreference
                 label="Start screen"
-                description="The view Sandbox opens after launch."
+                description="The view sndbox opens after launch."
                 value={preferences.startView}
                 onChange={(value) =>
                   preferences.update({
@@ -227,7 +227,7 @@ export function SettingsView() {
             >
               <SelectPreference
                 label="Colour scheme"
-                description="Follow Windows or keep Sandbox light or dark."
+                description="Follow Windows or keep sndbox light or dark."
                 value={preferences.colorScheme}
                 onChange={(value) =>
                   preferences.update({
@@ -263,7 +263,7 @@ export function SettingsView() {
                   })
                 }
               >
-                <option value="lime">Sandbox lime</option>
+                <option value="lime">sndbox lime</option>
                 <option value="violet">Violet</option>
                 <option value="blue">Electric blue</option>
               </SelectPreference>
@@ -387,7 +387,7 @@ export function SettingsView() {
                 <div>
                   <h2>Browser profiles</h2>
                   <p>
-                    Isolated Chromium identities. Sandbox never reads your
+                    Isolated Chromium identities. sndbox never reads your
                     personal browser profile.
                   </p>
                 </div>
@@ -506,7 +506,7 @@ export function SettingsView() {
             >
               <PreferenceToggle
                 label="Check for desktop updates"
-                description="Check the signed GitHub release feed when Sandbox starts."
+                description="Check the signed GitHub release feed when sndbox starts."
                 checked={preferences.checkForUpdates}
                 onChange={(checkForUpdates) =>
                   preferences.update({ checkForUpdates })
@@ -528,7 +528,7 @@ export function SettingsView() {
               </SelectPreference>
               <div className="settings-release-card">
                 <span>Installed version</span>
-                <strong>Sandbox 0.7.1-beta.3</strong>
+                <strong>sndbox 0.7.1-beta.3</strong>
                 <small>
                   Desktop installers and Linux runners are verified against the
                   same immutable release tag.

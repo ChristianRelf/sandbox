@@ -214,7 +214,7 @@ export default function App() {
           {
             id: "import-workflow",
             name: "Import workflow",
-            description: "Choose a Sandbox workflow file from this device.",
+            description: "Choose a sndbox workflow file from this device.",
             group: "Actions",
             action: () =>
               void api
@@ -295,7 +295,7 @@ export default function App() {
         onOpenChange={(open) => !open && dismissDeepLink()}
         title={deepLink?.kind === "marketplace" ? "Install marketplace plugin?" : "Import workflow template?"}
         description={deepLink?.kind === "marketplace"
-          ? "Sandbox verified the link format and will install only the exact signed package shown below."
+          ? "sndbox verified the link format and will install only the exact signed package shown below."
           : "The template contains no credentials and will remain disabled until you review its nodes and permissions."}
         confirmLabel={deepLink?.kind === "marketplace" ? "Install plugin" : "Import template"}
         busy={deepLinkBusy || (deepLink?.kind === "marketplace" && !deepLinkInspection && !deepLinkError)}

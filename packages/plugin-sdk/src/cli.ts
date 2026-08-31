@@ -10,13 +10,13 @@ import { inspectPackage, packDirectory, readManifest, signDirectory } from "./pa
 import { scaffold } from "./scaffold.js";
 import { permissionSummary, validateManifest } from "./validation.js";
 
-const program = new Command().name("sandbox").description("Sandbox developer CLI").version("0.5.0");
+const program = new Command().name("sandbox").description("sndbox developer CLI").version("0.5.0");
 const plugin = program.command("plugin").description("Build, validate, test, sign, and publish sandboxed plugins");
 
 plugin.command("create <directory>")
   .requiredOption("--plugin-id <id>", "Reverse-domain plugin ID")
   .requiredOption("--publisher-id <id>", "Publisher ID")
-  .option("--name <name>", "Display name", "Sandbox plugin")
+  .option("--name <name>", "Display name", "sndbox plugin")
   .action(async (directory, options) => {
     await scaffold(path.resolve(directory), { pluginId: options.pluginId, publisherId: options.publisherId, name: options.name });
     console.log(`Created ${options.name} in ${path.resolve(directory)}.`);
@@ -98,7 +98,7 @@ plugin.command("dev [directory]").option("--once", "Build once instead of watchi
     const output = path.join(root, "dist", `${filename(manifest.pluginId)}-${manifest.version}.development.sandbox-plugin`);
     await mkdir(path.dirname(output), { recursive: true });
     await packDirectory(root, output);
-    console.log(`Development package rebuilt: ${output}. Sandbox will still require capability approval and the production sandbox.`);
+    console.log(`Development package rebuilt: ${output}. sndbox will still require capability approval and the production sandbox.`);
   };
   await build();
   if (options.once) return;

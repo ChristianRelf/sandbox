@@ -105,7 +105,7 @@ pub async fn inspect_plugin_package(
         app.dialog()
             .file()
             .set_title("Inspect signed plugin package")
-            .add_filter("Sandbox plugin", &["sandbox-plugin"])
+            .add_filter("sndbox plugin", &["sandbox-plugin"])
             .blocking_pick_file()
     })
     .await
@@ -886,7 +886,7 @@ pub async fn export_workflow(
             .file()
             .set_title("Export workflow")
             .set_file_name(suggested)
-            .add_filter("Sandbox workflow", &["json"])
+            .add_filter("sndbox workflow", &["json"])
             .blocking_save_file()
     })
     .await
@@ -912,7 +912,7 @@ pub async fn import_workflow(
         app.dialog()
             .file()
             .set_title("Import workflow")
-            .add_filter("Sandbox workflow", &["json"])
+            .add_filter("sndbox workflow", &["json"])
             .blocking_pick_file()
     })
     .await
@@ -928,7 +928,7 @@ pub async fn import_workflow(
     let package: Value = serde_json::from_slice(&std::fs::read(&path).map_err(err)?)
         .map_err(|error| format!("The selected file is not valid workflow JSON: {error}"))?;
     if package.get("format").and_then(Value::as_str) != Some("sandbox-workflow") {
-        return Err("The selected file is not a Sandbox workflow export.".into());
+        return Err("The selected file is not a sndbox workflow export.".into());
     }
     if contains_secret_material(&package) {
         return Err("The import contains raw secret material. Remove tokens, passwords, cookies, and webhook URLs before importing.".into());
@@ -1852,7 +1852,7 @@ async fn control_plane_json(
     let response = request
         .send()
         .await
-        .map_err(|error| format!("Sandbox could not reach the account service: {error}"))?;
+        .map_err(|error| format!("sndbox could not reach the account service: {error}"))?;
     if response
         .content_length()
         .is_some_and(|length| length > 3 * 1024 * 1024)
@@ -1899,7 +1899,7 @@ pub async fn start_account_auth(
         .await
         .map_err(|error| {
             format!(
-                "Sandbox could not open its local account callback on port {ACCOUNT_AUTH_CALLBACK_PORT}: {error}"
+                "sndbox could not open its local account callback on port {ACCOUNT_AUTH_CALLBACK_PORT}: {error}"
             )
         })?;
     let address = listener.local_addr().map_err(err)?;
@@ -1959,7 +1959,7 @@ pub async fn start_account_auth(
             write_oauth_response(
                 &mut stream,
                 true,
-                "Sandbox is connected. You can close this tab and return to the desktop app.",
+                "sndbox is connected. You can close this tab and return to the desktop app.",
             )
             .await;
             Ok(metadata)
@@ -2074,7 +2074,7 @@ pub async fn start_gmail_oauth(
     let client_id = oauth::gmail_client_id()?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
-        .map_err(|error| format!("Sandbox could not open a local OAuth callback port: {error}"))?;
+        .map_err(|error| format!("sndbox could not open a local OAuth callback port: {error}"))?;
     let address = listener.local_addr().map_err(err)?;
     let redirect_uri = format!("http://127.0.0.1:{}/oauth/callback", address.port());
     let (attempt, start) = oauth::start_gmail(&client_id, redirect_uri.clone())?;
@@ -2160,7 +2160,7 @@ pub async fn start_gmail_oauth(
             write_oauth_response(
                 &mut stream,
                 true,
-                "Gmail is connected. You can close this tab and return to Sandbox.",
+                "Gmail is connected. You can close this tab and return to sndbox.",
             )
             .await;
             Ok(connection)

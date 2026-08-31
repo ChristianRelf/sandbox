@@ -114,4 +114,4 @@ fi
 
 trap - ERR
 "${compose[@]}" ps
-echo "Sandbox $version is healthy. Caddy will serve https://${SANDBOX_DOMAIN:-sndbox.app}, https://${SANDBOX_DOCS_DOMAIN:-docs.sndbox.app}, and https://${SANDBOX_APP_DOMAIN:-app.sndbox.app}."
+echo "sndbox $version is healthy. Caddy will serve https://${SANDBOX_DOMAIN:-sndbox.app}, https://${SANDBOX_DOCS_DOMAIN:-docs.sndbox.app}, and https://${SANDBOX_APP_DOMAIN:-app.sndbox.app}."

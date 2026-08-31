@@ -10,7 +10,7 @@ export interface ReleaseArtifact {
 
 export interface ReleaseManifest {
   schemaVersion: 1;
-  product: "Sandbox";
+  product: "sndbox";
   version: string;
   tag: string;
   channel: "beta" | "stable";
@@ -34,7 +34,7 @@ export async function loadReleaseManifest(): Promise<ReleaseManifest | undefined
 function validateManifest(value: unknown): ReleaseManifest | undefined {
   if (!value || typeof value !== "object") return undefined;
   const manifest = value as Partial<ReleaseManifest>;
-  if (manifest.schemaVersion !== 1 || manifest.product !== "Sandbox" || !manifest.version || !manifest.tag || !manifest.source || !Array.isArray(manifest.artifacts)) return undefined;
+  if (manifest.schemaVersion !== 1 || manifest.product !== "sndbox" || !manifest.version || !manifest.tag || !manifest.source || !Array.isArray(manifest.artifacts)) return undefined;
   const valid = manifest.artifacts.every(artifact => artifact
     && typeof artifact.name === "string"
     && typeof artifact.kind === "string"

@@ -2,7 +2,7 @@
 name = "sandbox-app"
 version = "0.7.1-beta.3"
 description = "Local-first visual workflow automation"
-authors = ["Sandbox"]
+authors = ["sndbox"]
 edition = "2021"
 
 [lib]

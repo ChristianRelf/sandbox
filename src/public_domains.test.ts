@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { brand } from "../packages/brand/src";
 
-describe("Sandbox public domains", () => {
+describe("sndbox public domains", () => {
   it("uses the sndbox.app production namespace", () => {
     expect(brand.domains).toEqual({
       marketing: "https://sndbox.app",

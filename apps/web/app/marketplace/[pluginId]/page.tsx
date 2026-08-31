@@ -25,12 +25,12 @@ export async function generateMetadata({
     title: plugin.name,
     description: plugin.summary,
     openGraph: {
-      title: `${plugin.name} · Sandbox`,
+      title: `${plugin.name} · sndbox`,
       description: plugin.summary,
       images: [],
     },
     twitter: {
-      title: `${plugin.name} · Sandbox`,
+      title: `${plugin.name} · sndbox`,
       description: plugin.summary,
       images: [],
     },
@@ -71,7 +71,7 @@ export default async function PluginPage({ params }: { params: Params }) {
             {plugin.maximumHostVersion ? ` · ${plugin.maximumHostVersion}` : ""}
           </span>
           <p className="action-note">
-            Install and approve this exact version from the Sandbox desktop marketplace.
+            Install and approve this exact version from the sndbox desktop marketplace.
           </p>
         </aside>
       </section>

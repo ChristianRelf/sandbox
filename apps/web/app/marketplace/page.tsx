@@ -50,7 +50,7 @@ export default async function MarketplacePage({
           integration.summary,
           integration.connection,
           ...integration.capabilities,
-          "Sandbox Official",
+          "sndbox Official",
         ]
           .join(" ")
           .toLowerCase()
@@ -102,7 +102,7 @@ export default async function MarketplacePage({
       <section className="listing-section">
         <header>
           <div>
-            <h2>Compatible with Sandbox {launchRelease.version}</h2>
+            <h2>Compatible with sndbox {launchRelease.version}</h2>
             <p>
               {resultCount} signed integration
               {resultCount === 1 ? "" : "s"} in this page

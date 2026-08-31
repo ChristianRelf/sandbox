@@ -54,7 +54,7 @@ export default async function Page({ params }: { params: Params }) {
         <article className="doc-article">
           <header className="doc-header">
             <div className="article-meta">
-              <span className="version">Sandbox {page.version}</span>
+              <span className="version">sndbox {page.version}</span>
               <span><Clock3 size={12}/>Reviewed {page.reviewed}</span>
               <span><BookOpen size={12}/>{readMinutes} min read</span>
             </div>

@@ -4,7 +4,7 @@ import { groupBy } from "../../../../lib/group-by";
 
 export const metadata: Metadata = {
   title: "API reference",
-  description: "Generated reference for the versioned Sandbox control-plane v1 beta API.",
+  description: "Generated reference for the versioned sndbox control-plane v1 beta API.",
   openGraph: { images: [] },
   twitter: { images: [] },
 };

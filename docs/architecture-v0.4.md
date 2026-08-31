@@ -1,4 +1,4 @@
-# Sandbox v0.4 architecture update
+# sndbox v0.4 architecture update
 
 ## Architectural direction
 

@@ -1686,7 +1686,7 @@ fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
             Ok(workflow)
         }
         version if version > crate::model::CURRENT_SCHEMA_VERSION => Err(EngineError::Validation(
-            format!("Workflow schema {version} was created by a newer version of Sandbox."),
+            format!("Workflow schema {version} was created by a newer version of sndbox."),
         )),
         version => Err(EngineError::Validation(format!(
             "Workflow schema {version} is not supported."

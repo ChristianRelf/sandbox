@@ -107,7 +107,7 @@ export function MarketplaceView() {
           integration.summary,
           integration.connection,
           ...integration.capabilities,
-          "Sandbox Official",
+          "sndbox Official",
         ]
           .join(" ")
           .toLowerCase()
@@ -120,7 +120,7 @@ export function MarketplaceView() {
         <div>
           <h1>Marketplace</h1>
           <p>
-            Discover immutable, signed plugins compatible with this Sandbox
+            Discover immutable, signed plugins compatible with this sndbox
             version.
           </p>
         </div>

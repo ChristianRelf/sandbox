@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowUpRight, Box, Download, KeyRound, ShieldCheck, Users } from "lucide-react";
+import { SndboxMark } from "@sandbox/product-ui/brand";
+import { ArrowUpRight, Download, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { safeReturnTo } from "../../lib/auth";
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -17,7 +18,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
     <main className="signin-page">
       <header className="signin-brand">
         <Link href="https://sndbox.app" className="wordmark">
-          <span><Box aria-hidden="true" size={16} /></span><strong>Sandbox</strong>
+          <SndboxMark size={30} /><strong>sndbox</strong>
         </Link>
         <a href="https://sndbox.app">Back to product <ArrowUpRight aria-hidden="true" size={12} /></a>
       </header>
@@ -32,9 +33,9 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
         </aside>
 
         <section className="signin-card">
-          <small>Sandbox account</small>
+          <small>sndbox account</small>
           <h1>Sign in to continue.</h1>
-          <p>Use the identity provider configured for your Sandbox account.</p>
+          <p>Use the identity provider configured for your sndbox account.</p>
           {configured ? (
             <a className="portal-primary" href={`/auth/start?returnTo=${encodeURIComponent(safe)}`}>
               <KeyRound aria-hidden="true" size={14} />Continue securely

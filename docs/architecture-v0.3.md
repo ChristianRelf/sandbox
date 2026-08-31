@@ -1,8 +1,8 @@
-# Sandbox v0.3 architecture
+# sndbox v0.3 architecture
 
 ## System boundary
 
-Sandbox remains a local workflow executor. The control plane coordinates identity, ownership, distribution, sync, commands, and summaries; it never runs workflow nodes.
+sndbox remains a local workflow executor. The control plane coordinates identity, ownership, distribution, sync, commands, and summaries; it never runs workflow nodes.
 
 ```text
                                       CONTROL PLANE
@@ -83,7 +83,7 @@ Tenant identifiers supplied by a client are selectors only. Every database query
 
 ## Desktop authentication
 
-Authentication is optional. Sandbox offers Continue locally, Sign in, and Create account.
+Authentication is optional. sndbox offers Continue locally, Sign in, and Create account.
 
 1. Desktop creates a PKCE verifier/challenge and high-entropy state.
 2. Desktop binds an ephemeral loopback callback and opens the system browser.

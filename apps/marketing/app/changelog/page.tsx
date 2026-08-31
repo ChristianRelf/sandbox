@@ -4,7 +4,7 @@ import { ArrowRight } from "lucide-react";
 
 export const metadata = {
   title: "Changelog",
-  description: "The version and release availability represented by this Sandbox repository.",
+  description: "The version and release availability represented by this sndbox repository.",
 };
 
 export default function Page() {
@@ -26,7 +26,7 @@ export default function Page() {
           <p>{launchRelease.summary}</p>
           <h3>Release availability</h3>
           <p>
-            No public artifact is attached to this source state. Sandbox therefore
+            No public artifact is attached to this source state. sndbox therefore
             does not present this version as a downloadable release.
           </p>
           <Link href="/downloads">Check available builds <ArrowRight size={13} /></Link>

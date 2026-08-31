@@ -292,7 +292,7 @@ export function NodeInspector({
               </Field>
             )}
             <Info>
-              Next runs are calculated by the local runner. Quitting Sandbox
+              Next runs are calculated by the local runner. Quitting sndbox
               stops schedules.
             </Info>
           </>

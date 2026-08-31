@@ -6,13 +6,13 @@
 }
 
 .cta {
-  min-height: 520px;
+  min-height: 480px;
   padding: clamp(85px, 10vw, 145px) max(20px, calc((100vw - 1312px) / 2));
   border-top: 1px solid #242925;
   border-bottom: 1px solid #242925;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.45fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.45fr);
   align-items: end;
   gap: clamp(50px, 10vw, 150px);
 }
@@ -58,19 +58,6 @@
 }
 
 .cta > div:last-child > a:hover { background: #e3ff78; transform: translateY(-2px); }
-
-.mascot {
-  position: absolute;
-  z-index: 1;
-  right: 28%;
-  bottom: -55px;
-  width: min(34vw, 490px);
-  height: auto;
-  opacity: 0.23;
-  filter: grayscale(0.25) saturate(0.7);
-  transform: rotate(-5deg);
-  pointer-events: none;
-}
 
 .directory {
   padding: 76px max(20px, calc((100vw - 1312px) / 2)) 80px;
@@ -177,7 +164,6 @@
 @media (max-width: 900px) {
   .cta { grid-template-columns: 1fr; }
   .cta > div:last-child { max-width: 570px; }
-  .mascot { right: -80px; bottom: -20px; width: 520px; opacity: 0.12; }
   .directory { grid-template-columns: 1.3fr repeat(2, 0.55fr); }
   .directory nav:last-child { grid-column: 2; }
 }
@@ -186,7 +172,7 @@
   .cta,
   .directory,
   .legal { padding-right: 16px; padding-left: 16px; }
-  .cta { min-height: 610px; }
+  .cta { min-height: 520px; }
   .cta h2 { font-size: clamp(50px, 15vw, 68px); }
   .directory { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brand { grid-column: 1 / -1; margin-bottom: 15px; }

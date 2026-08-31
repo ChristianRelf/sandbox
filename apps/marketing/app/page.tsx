@@ -85,7 +85,7 @@ export default function HomePage() {
           <div className={styles.productViewport}>
             <Image
               src="/product/workflow-editor.png"
-              alt="The real Sandbox desktop editor showing the built-in website change monitor workflow as connected nodes on a canvas."
+              alt="The real sndbox desktop editor showing the built-in website change monitor workflow as connected nodes on a canvas."
               width={1456}
               height={939}
               sizes="(max-width: 760px) 100vw, 1456px"
@@ -159,7 +159,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className={styles.runnerList} aria-label="Sandbox execution targets">
+        <div className={styles.runnerList} aria-label="sndbox execution targets">
           <article>
             <span><HardDrive aria-hidden="true" size={19} /></span>
             <div><strong>This computer</strong><p>Local files, private services and desktop schedules.</p></div>
@@ -210,7 +210,7 @@ export default function HomePage() {
         <div>
           <p>Download the current Windows beta, or read the setup guide before installing.</p>
           <div>
-            <Link href="/downloads">Download Sandbox <ArrowRight aria-hidden="true" size={15} /></Link>
+            <Link href="/downloads">Download sndbox <ArrowRight aria-hidden="true" size={15} /></Link>
             <a href={`${brand.domains.docs}/getting-started`}>Open documentation <ArrowUpRight aria-hidden="true" size={14} /></a>
           </div>
         </div>

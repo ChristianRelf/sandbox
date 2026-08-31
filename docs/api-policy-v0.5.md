@@ -1,4 +1,4 @@
-# Sandbox API policy for v0.5
+# sndbox API policy for v0.5
 
 The supported control-plane surface is `/v1`. The checked-in route contract is
 `docs/api/openapi-v1.json`; `GET /v1/openapi.json` serves the same document from a

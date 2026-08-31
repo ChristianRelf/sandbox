@@ -53,7 +53,7 @@ export class SandboxApiError extends Error {
 
 export class SandboxApiCompatibilityError extends Error {
   constructor(public readonly correlationId: string, options?: ErrorOptions) {
-    super("The Sandbox API response did not match the client contract.", options);
+    super("The sndbox API response did not match the client contract.", options);
     this.name = "SandboxApiCompatibilityError";
   }
 }
@@ -162,8 +162,8 @@ export class SandboxApiClient {
 
   constructor(private readonly options: SandboxApiClientOptions) {
     this.baseUrl = new URL(options.baseUrl);
-    if (this.baseUrl.username || this.baseUrl.password) throw new Error("Sandbox API baseUrl must not contain credentials.");
-    if (this.baseUrl.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(this.baseUrl.hostname)) throw new Error("Sandbox API baseUrl must use HTTPS except on localhost.");
+    if (this.baseUrl.username || this.baseUrl.password) throw new Error("sndbox API baseUrl must not contain credentials.");
+    if (this.baseUrl.protocol !== "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(this.baseUrl.hostname)) throw new Error("sndbox API baseUrl must use HTTPS except on localhost.");
     this.fetchImplementation = options.fetch ?? globalThis.fetch;
     if (!this.fetchImplementation) throw new Error("A Fetch API implementation is required.");
     this.maximumRetries = options.maximumRetries ?? 2;
@@ -430,7 +430,7 @@ function apiError(response: Response, payload: unknown, correlationId: string): 
   return new SandboxApiError(
     response.status,
     error && typeof error.code === "string" ? error.code : `http_${response.status}`,
-    error && typeof error.message === "string" ? error.message : "The Sandbox API request failed.",
+    error && typeof error.message === "string" ? error.message : "The sndbox API request failed.",
     typeof envelope?.correlationId === "string" ? envelope.correlationId : correlationId,
     error?.details,
     retryAfterSeconds(response.headers.get("retry-after"))

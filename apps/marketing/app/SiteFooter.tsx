@@ -1,7 +1,7 @@
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowRight, ArrowUpRight, Box } from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { brand } from "@sandbox/brand";
+import { SndboxMark } from "@sandbox/product-ui/brand";
 import styles from "./SiteFooter.module.css";
 
 const footerGroups = [
@@ -42,16 +42,15 @@ export function SiteFooter() {
           <p>Start with one useful routine</p>
           <h2>Put one routine<br />on a visible route.</h2>
         </div>
-        <Image className={styles.mascot} src="/brand/hermit-hero.png" alt="" width={1536} height={1024} />
         <div>
           <p>Build locally, inspect every step and choose another runner only when the job calls for it.</p>
-          <Link href="/downloads">Download Sandbox <ArrowRight aria-hidden="true" size={15} /></Link>
+          <Link href="/downloads">Download sndbox <ArrowRight aria-hidden="true" size={15} /></Link>
         </div>
       </div>
 
       <div className={styles.directory}>
         <div className={styles.brand}>
-          <Link href="/" aria-label="Sandbox home"><span><Box aria-hidden="true" size={15} /></span>Sandbox</Link>
+          <Link href="/" aria-label="sndbox home"><SndboxMark size={29} />sndbox</Link>
           <p>Visual automation with a machine boundary you control.</p>
           <a href={brand.domains.docs + "/getting-started"}>Documentation <ArrowUpRight aria-hidden="true" size={12} /></a>
         </div>
@@ -63,9 +62,9 @@ export function SiteFooter() {
         ))}
       </div>
 
-      <Link className={styles.display} href="/" aria-label="Sandbox home">SANDBOX</Link>
+      <Link className={styles.display} href="/" aria-label="sndbox home">sndbox</Link>
       <div className={styles.legal}>
-        <small>© 2026 Sandbox. Legal content requires professional review.</small>
+        <small>© 2026 sndbox. Legal content requires professional review.</small>
         <div>
           <Link href="/legal/privacy">Privacy</Link>
           <Link href="/legal/terms">Terms</Link>

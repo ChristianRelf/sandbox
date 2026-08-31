@@ -2,7 +2,7 @@ import { loadReleaseManifest } from "../../lib/release-manifest";
 import { DownloadsClient } from "./DownloadsClient";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Downloads", description: "Sandbox desktop and runner downloads with versions, requirements, checksums and signatures." };
+export const metadata = { title: "Downloads", description: "sndbox desktop and runner downloads with versions, requirements, checksums and signatures." };
 
 export default async function Page() {
   const manifest = await loadReleaseManifest();

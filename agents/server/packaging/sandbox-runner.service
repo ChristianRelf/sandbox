@@ -1,5 +1,5 @@
 [Unit]
-Description=Sandbox self-hosted workflow runner
+Description=sndbox self-hosted workflow runner
 After=network-online.target
 Wants=network-online.target
 

@@ -35,7 +35,7 @@ export class OidcSessionVerifier implements SessionVerifier {
         payload[`${sandboxClaimNamespace}/account_id`] ?? payload.sandbox_account_id,
         `${sandboxClaimNamespace}/account_id`
       );
-      if (!uuidPattern.test(accountId)) throw new Error("Sandbox account ID is not a UUID");
+      if (!uuidPattern.test(accountId)) throw new Error("sndbox account ID is not a UUID");
       const subject = stringClaim(payload.sub, "sub");
       const issuedAt = numberClaim(payload.iat, "iat");
       const sessionId = optionalStringClaim(
@@ -91,7 +91,7 @@ export class ProvisioningAccountSessionVerifier implements SessionVerifier {
       return session;
     } catch(error) {
       if(error instanceof DomainError)throw error;
-      if((error as {code?:string}).code==="23505")throw new DomainError("account_identity_conflict","The identity is already associated with another Sandbox account.",409);
+      if((error as {code?:string}).code==="23505")throw new DomainError("account_identity_conflict","The identity is already associated with another sndbox account.",409);
       throw error;
     }
   }

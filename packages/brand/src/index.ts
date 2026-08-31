@@ -1,5 +1,5 @@
 export const brand = {
-  name: "Sandbox",
+  name: "sndbox",
   tagline: "Automate anything. Run it anywhere.",
   description:
     "Build visual workflows for your browser, files, apps and private network, then run them locally, in the cloud or on infrastructure you control.",

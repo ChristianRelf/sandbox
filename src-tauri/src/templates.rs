@@ -455,7 +455,7 @@ pub fn website_status_discord() -> Workflow {
                 "Alert Discord",
                 900.,
                 330.,
-                json!({"credentialId":"","content":"Website check failed with HTTP {{nodes.request.output.status}}.","username":"Sandbox monitor","avatarUrl":""}),
+                json!({"credentialId":"","content":"Website check failed with HTTP {{nodes.request.output.status}}.","username":"sndbox monitor","avatarUrl":""}),
             ),
         ],
         vec![

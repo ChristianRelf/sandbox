@@ -1558,7 +1558,7 @@ function PermissionReview({
             />
           </label>
           <div className="quit-note">
-            Local schedules and polling stop when Sandbox is fully quit.
+            Local schedules and polling stop when sndbox is fully quit.
           </div>
         </section>
         <footer>

@@ -1,4 +1,4 @@
-# Sandbox beta: step-by-step DigitalOcean deployment
+# sndbox beta: step-by-step DigitalOcean deployment
 
 This guide deploys the supported v0.7 beta server surface:
 
@@ -7,7 +7,7 @@ This guide deploys the supported v0.7 beta server surface:
 - `https://docs.sndbox.app`
 - Automatic HTTPS through Caddy
 - Optional Grafana Alloy observability
-- Optional headless Sandbox runner
+- Optional headless sndbox runner
 
 It does **not** deploy identity, the control plane/API, PostgreSQL, or the managed browser worker. The Windows desktop application runs on each tester's computer.
 
@@ -18,7 +18,7 @@ You need:
 - An Ubuntu 24.04 DigitalOcean Droplet
 - The Droplet's public IPv4 address
 - Access to manage DNS for `sndbox.app`
-- Administrator access to the Sandbox GitHub repository
+- Administrator access to the sndbox GitHub repository
 - A local clone of this repository with the deployment changes pushed to `main`
 
 The website, account portal, docs service, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. Use at least 4 GB when the account portal is enabled.
@@ -253,7 +253,7 @@ Use a dedicated Auth0 **Regular Web Application**. Add `https://app.sndbox.app/a
 
 The deployment action signs in to GitHub Container Registry using its short-lived `GITHUB_TOKEN`; no long-lived registry token is copied to the Droplet.
 
-After the first container build, open each Sandbox package under your GitHub account or organisation. Under **Package settings > Manage Actions access**, ensure this repository has read access. Making the packages public is another option for a public beta.
+After the first container build, open each sndbox package under your GitHub account or organisation. Under **Package settings > Manage Actions access**, ensure this repository has read access. Making the packages public is another option for a public beta.
 
 ## 10. Publish `v0.7.1-beta.3`
 
@@ -269,7 +269,7 @@ Then run:
 git switch main
 git pull --ff-only origin main
 git status --short
-git tag -a v0.7.1-beta.3 -m "Sandbox v0.7.1 beta 3"
+git tag -a v0.7.1-beta.3 -m "sndbox v0.7.1 beta 3"
 git push origin v0.7.1-beta.3
 ```
 

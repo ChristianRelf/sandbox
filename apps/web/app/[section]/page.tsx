@@ -61,7 +61,7 @@ const staticSections: Record<
     title: "Releases",
     description: "Review release notes and update policy before installing.",
     items: [
-      `Sandbox ${launchRelease.version} · ${launchRelease.channel}`,
+      `sndbox ${launchRelease.version} · ${launchRelease.channel}`,
       launchRelease.summary,
       "Signed desktop, Linux agent and OCI-image pipeline",
     ],
@@ -899,7 +899,7 @@ async function SupportPage({
       <p className="support-fallback">
         For product questions, use{" "}
         <a href="https://docs.sndbox.app/troubleshooting">
-          Sandbox troubleshooting
+          sndbox troubleshooting
         </a>
         . Never send credentials or an unreviewed diagnostic bundle.
       </p>

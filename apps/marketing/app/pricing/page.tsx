@@ -4,7 +4,7 @@ import { ArrowRight, CircleAlert } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic="force-dynamic";
-export const metadata={title:"Pricing",description:"Sandbox plans with unmetered local execution and separately measured hosted usage."};
+export const metadata={title:"Pricing",description:"sndbox plans with unmetered local execution and separately measured hosted usage."};
 
 async function plans():Promise<ProductPlan[]> {
   const baseUrl=process.env.CONTROL_PLANE_URL;

@@ -15,6 +15,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { SndboxMark } from "@sandbox/product-ui/brand";
 import { api } from "../api";
 import { usePreferences } from "../preferences";
 import { useAppStore, type View } from "../store";
@@ -144,12 +145,10 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
       className={`sidebar ${collapsed ? "sidebar-collapsed" : ""} ${view === "editor" ? "editor-sidebar" : ""}`}
     >
       <div className="brand">
-        <span className="brand-mark">
-          <GitFork size={16} />
-        </span>
+        <SndboxMark className="brand-mark" size={26} />
         {!collapsed && (
           <span>
-            Sandbox <small>0.7 beta</small>
+            sndbox <small>0.7 beta</small>
           </span>
         )}
       </div>

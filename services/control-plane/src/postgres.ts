@@ -1243,7 +1243,7 @@ export class PostgresRepository implements ControlPlaneRepository {
         const checkout = await client.query<{ account_id: string; owner_type: "personal" | "workspace"; owner_id: string; plugin_id: string; plan_id: string; pricing: { plans?: Array<{ id?: string; offlineGraceDays?: number; seatAllowance?: number | null }> } }>(
           `SELECT c.account_id,c.owner_type,c.owner_id,c.plugin_id,c.plan_id,l.pricing FROM marketplace_checkout_sessions c JOIN plugin_listings l ON l.plugin_id=c.plugin_id WHERE c.id=$1 AND c.status='open' FOR UPDATE`, [event.checkoutId]
         );
-        if (!checkout.rowCount) throw new DomainError("checkout_not_found", "Completed checkout was not initiated by Sandbox or was already resolved.", 409);
+        if (!checkout.rowCount) throw new DomainError("checkout_not_found", "Completed checkout was not initiated by sndbox or was already resolved.", 409);
         const row = checkout.rows[0];
         const plan = row.pricing.plans?.find(candidate => candidate.id === row.plan_id);
         const graceDays = Number.isInteger(plan?.offlineGraceDays) && Number(plan?.offlineGraceDays) >= 1 && Number(plan?.offlineGraceDays) <= 30 ? Number(plan?.offlineGraceDays) : 7;

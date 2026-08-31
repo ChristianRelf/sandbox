@@ -1,6 +1,6 @@
 # @sandbox/api-client
 
-Typed browser and Node.js 20+ client for the Sandbox control-plane `/v1` beta
+Typed browser and Node.js 20+ client for the sndbox control-plane `/v1` beta
 transport contract.
 
 ```ts

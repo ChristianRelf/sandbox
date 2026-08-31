@@ -149,7 +149,7 @@ jobs:
             @(
               "UNSIGNED WINDOWS TEST BUILD",
               "",
-              "This installer is an invite-only Sandbox prerelease and is not Authenticode signed.",
+              "This installer is an invite-only sndbox prerelease and is not Authenticode signed.",
               "Windows SmartScreen may display an unknown publisher warning. Verify the SHA-256",
               "checksum and GitHub Actions release record before installing it. Do not redistribute it",
               "as a production release."
@@ -336,7 +336,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          release_flags=(--verify-tag --generate-notes --title "Sandbox $GITHUB_REF_NAME")
+          release_flags=(--verify-tag --generate-notes --title "sndbox $GITHUB_REF_NAME")
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             release_flags+=(--prerelease --notes $'> [!WARNING]\n> The Windows installer in this invite-only prerelease is not Authenticode signed. Windows may show an unknown publisher or SmartScreen warning. Verify its SHA-256 checksum and GitHub provenance before installation.')
           fi
