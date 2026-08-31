@@ -76,6 +76,8 @@ No Action secret or dependency is required. The Action creates a stable UUID in 
 
 ## 4. Finish the local deployment environment
 
+Complete this section on your Windows workstation in the repository checkout. Do not add these values to `/opt/sandbox/.env` on the existing website/docs Droplet: that Compose stack does not run the control plane and does not read its database or Stripe settings. If a control-plane secret was added there, copy it to the protected file below and then remove the unused line from the Droplet.
+
 From the repository root, run the generator once:
 
 ```powershell
