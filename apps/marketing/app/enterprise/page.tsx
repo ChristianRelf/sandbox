@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 const items = [
   "SSO configuration and SCIM provisioning",
   "Custom roles and separation of duties",
-  "Audit streaming",
+  "Audit history",
   "Self-hosted runners",
   "Private plugins",
   "Environment and policy controls",
@@ -42,9 +42,8 @@ export default function Page() {
         </a>
       </section>
       <section className="enterprise-list">
-        {items.map((item, index) => (
+        {items.map((item) => (
           <article key={item}>
-            <span>0{index + 1}</span>
             <h2>{item}</h2>
           </article>
         ))}

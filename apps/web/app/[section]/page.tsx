@@ -118,11 +118,10 @@ export default async function Page({
           </h2>
           <span>Verified product metadata</span>
         </header>
-        {page.items.map((item, index) => (
+        {page.items.map((item) => (
           <article key={item}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
+            <span>{section === "releases" ? <CheckCircle2 /> : <CircleAlert />}</span>
             <strong>{item}</strong>
-            {section === "releases" ? <CheckCircle2 /> : <CircleAlert />}
           </article>
         ))}
       </section>

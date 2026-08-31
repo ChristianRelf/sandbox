@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { productPages } from "@sandbox/content";
 import { ProductPageView } from "../../../components/ProductPageView";
 
@@ -25,6 +25,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 
 export default async function Page({ params }: { params: Params }) {
   const { slug } = await params;
+  if (slug === "developers") redirect("/developers");
   const page = productPages.find((item) => item.slug === slug);
   if (!page) notFound();
   return <ProductPageView page={page} />;

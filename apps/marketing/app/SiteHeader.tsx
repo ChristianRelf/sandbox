@@ -158,6 +158,7 @@ function NavigationLink({
 export function SiteHeader() {
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
+  const menuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const mobilePanelRef = useRef<HTMLElement>(null);
@@ -165,6 +166,30 @@ export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState<string | null>("product");
   const [scrolled, setScrolled] = useState(false);
+
+  const cancelMenuClose = () => {
+    if (menuCloseTimerRef.current === null) return;
+    clearTimeout(menuCloseTimerRef.current);
+    menuCloseTimerRef.current = null;
+  };
+
+  const openDesktopMenu = (groupId: string) => {
+    cancelMenuClose();
+    setOpenMenu(groupId);
+  };
+
+  const closeDesktopMenu = () => {
+    cancelMenuClose();
+    setOpenMenu(null);
+  };
+
+  const scheduleMenuClose = () => {
+    cancelMenuClose();
+    menuCloseTimerRef.current = setTimeout(() => {
+      setOpenMenu(null);
+      menuCloseTimerRef.current = null;
+    }, 240);
+  };
 
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 18);
@@ -174,6 +199,7 @@ export function SiteHeader() {
   }, []);
 
   useEffect(() => {
+    cancelMenuClose();
     setOpenMenu(null);
     setMobileOpen(false);
     const activeGroup = navigationGroups.find((group) =>
@@ -182,10 +208,12 @@ export function SiteHeader() {
     setMobileSection(activeGroup?.id ?? (pathname === "/" ? "product" : null));
   }, [pathname]);
 
+  useEffect(() => () => cancelMenuClose(), []);
+
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
-        setOpenMenu(null);
+        closeDesktopMenu();
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -268,14 +296,19 @@ export function SiteHeader() {
   };
 
   return (
-    <header ref={headerRef} className={styles.header} data-scrolled={scrolled ? "true" : "false"}>
+    <header
+      ref={headerRef}
+      className={styles.header}
+      data-scrolled={scrolled ? "true" : "false"}
+      data-mobile-open={mobileOpen ? "true" : "false"}
+    >
       <div className={styles.inner}>
         <Link className={styles.wordmark} href="/" aria-label="Sandbox home">
           <span className={styles.mark}><Box aria-hidden="true" size={16} strokeWidth={2.2} /></span>
           <span>Sandbox</span>
         </Link>
 
-        <nav className={styles.desktopNav} aria-label="Primary navigation" onMouseLeave={() => setOpenMenu(null)}>
+        <nav className={styles.desktopNav} aria-label="Primary navigation" onMouseLeave={scheduleMenuClose}>
           {navigationGroups.map((group) => {
             const active = group.sections.some((section) => section.items.some((item) => isPathActive(pathname, item.href)));
             const isOpen = openMenu === group.id;
@@ -285,9 +318,10 @@ export function SiteHeader() {
                 className={styles.navGroup}
                 data-open={isOpen ? "true" : "false"}
                 key={group.id}
-                onMouseEnter={() => setOpenMenu(group.id)}
+                onMouseEnter={() => openDesktopMenu(group.id)}
+                onMouseLeave={scheduleMenuClose}
                 onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpenMenu(null);
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) closeDesktopMenu();
                 }}
               >
                 <button
@@ -297,14 +331,18 @@ export function SiteHeader() {
                   aria-expanded={isOpen}
                   aria-controls={menuId}
                   data-active={active ? "true" : undefined}
-                  onClick={() => setOpenMenu(isOpen ? null : group.id)}
+                  onMouseEnter={() => openDesktopMenu(group.id)}
+                  onClick={() => {
+                    cancelMenuClose();
+                    setOpenMenu(isOpen ? null : group.id);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                       event.preventDefault();
-                      setOpenMenu(group.id);
+                      openDesktopMenu(group.id);
                       focusMenuItem(menuId, event.key === "ArrowDown" ? "first" : "last");
                     } else if (event.key === "Escape") {
-                      setOpenMenu(null);
+                      closeDesktopMenu();
                     }
                   }}
                 >
@@ -313,15 +351,14 @@ export function SiteHeader() {
                 <div
                   id={menuId}
                   className={styles.dropdown}
+                  data-count={group.sections.length}
                   role="menu"
                   aria-label={`${group.label} navigation`}
+                  onMouseEnter={cancelMenuClose}
+                  onMouseLeave={scheduleMenuClose}
                   onKeyDown={(event) => onMenuKeyDown(event, group.id)}
                 >
-                  <div className={styles.dropdownLead} aria-hidden="true">
-                    <small>EXPLORE / {group.id.toUpperCase()}</small>
-                    <p>{group.id === "product" ? "Build visibly. Choose where every run happens." : group.id === "solutions" ? "Start with the job, then shape the route." : "Learn, evaluate and bring Sandbox into your team."}</p>
-                  </div>
-                  <div className={styles.dropdownSections} role="none">
+                  <div className={styles.dropdownSections} data-count={group.sections.length} role="none">
                     {group.sections.map((section, sectionIndex) => (
                       <section key={section.label} role="group" aria-labelledby={`desktop-section-${group.id}-${sectionIndex}`}>
                         <h2 id={`desktop-section-${group.id}-${sectionIndex}`}>{section.label}</h2>
@@ -340,7 +377,7 @@ export function SiteHeader() {
             data-active={isPathActive(pathname, "/pricing") ? "true" : undefined}
             aria-current={isPathActive(pathname, "/pricing") ? "page" : undefined}
             href="/pricing"
-            onMouseEnter={() => setOpenMenu(null)}
+            onMouseEnter={closeDesktopMenu}
           >
             Pricing
           </Link>
@@ -375,11 +412,11 @@ export function SiteHeader() {
           <button className={styles.mobileBackdrop} type="button" aria-label="Close navigation" onClick={() => closeMobile(true)} />
           <aside ref={mobilePanelRef} id="mobile-navigation" className={styles.mobilePanel} role="dialog" aria-modal="true" aria-label="Mobile navigation">
             <header>
-              <div><small>SANDBOX / DIRECTORY</small><strong>Where do you want to go?</strong></div>
+              <strong>Menu</strong>
               <button ref={mobileCloseRef} type="button" aria-label="Close navigation" onClick={() => closeMobile(true)}><X aria-hidden="true" size={20} /></button>
             </header>
             <nav aria-label="Mobile navigation">
-              {navigationGroups.map((group, groupIndex) => {
+              {navigationGroups.map((group) => {
                 const expanded = mobileSection === group.id;
                 return (
                   <section className={styles.mobileGroup} key={group.id}>
@@ -390,7 +427,7 @@ export function SiteHeader() {
                       data-active={group.sections.some((section) => section.items.some((item) => isPathActive(pathname, item.href))) ? "true" : undefined}
                       onClick={() => setMobileSection(expanded ? null : group.id)}
                     >
-                      <span>0{groupIndex + 1}</span><strong>{group.label}</strong><ChevronDown aria-hidden="true" size={16} />
+                      <strong>{group.label}</strong><ChevronDown aria-hidden="true" size={16} />
                     </button>
                     <div id={`mobile-group-${group.id}`} hidden={!expanded}>
                       {group.sections.map((section) => (
@@ -412,7 +449,7 @@ export function SiteHeader() {
                 data-current={isPathActive(pathname, "/pricing") ? "true" : undefined}
                 onClick={() => closeMobile()}
               >
-                <span>04</span><strong>Pricing</strong><ArrowUpRight aria-hidden="true" size={16} />
+                <strong>Pricing</strong><ArrowUpRight aria-hidden="true" size={16} />
               </Link>
             </nav>
             <footer>

@@ -1,1 +1,37 @@
-import { launchRelease } from "@sandbox/content";import Link from "next/link";import { ArrowRight } from "lucide-react";export const metadata={title:"Changelog",description:"Sandbox release notes generated from versioned product release data."};export default function Page(){return <main id="content" className="index-page changelog-page"><header><p className="eyebrow"><span/>Changelog</p><h1>What changed,<br/>and what to check.</h1><p>Release entries follow the versioned repository and signed artifact pipeline.</p></header><article className="release"><aside><strong>{launchRelease.version}</strong><span>{launchRelease.channel}</span><time>{launchRelease.date}</time></aside><div><h2>Always-on execution</h2><p>{launchRelease.summary}</p><h3>New</h3><ul><li>Hosted runner isolation and checkpoint recovery</li><li>Durable schedules and event queues</li><li>Self-hosted Linux runner for x64 and ARM64</li><li>Runner pools with deterministic routing</li></ul><h3>Release integrity</h3><p>No downloadable artifact is attached to this repository state, so this entry does not expose a download action.</p><Link href="/downloads">View release availability <ArrowRight size={13}/></Link></div></article></main>}
+import { launchRelease } from "@sandbox/content";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+
+export const metadata = {
+  title: "Changelog",
+  description: "The version and release availability represented by this Sandbox repository.",
+};
+
+export default function Page() {
+  return (
+    <main id="content" className="index-page changelog-page">
+      <header>
+        <p className="eyebrow"><span />Changelog</p>
+        <h1>The state of<br />this build.</h1>
+        <p>This page reports only what the checked-out repository can verify.</p>
+      </header>
+      <article className="release">
+        <aside>
+          <strong>{launchRelease.version}</strong>
+          <span>{launchRelease.channel}</span>
+          <span>{launchRelease.date}</span>
+        </aside>
+        <div>
+          <h2>Current source snapshot</h2>
+          <p>{launchRelease.summary}</p>
+          <h3>Release availability</h3>
+          <p>
+            No public artifact is attached to this source state. Sandbox therefore
+            does not present this version as a downloadable release.
+          </p>
+          <Link href="/downloads">Check available builds <ArrowRight size={13} /></Link>
+        </div>
+      </article>
+    </main>
+  );
+}

@@ -73,8 +73,8 @@ export function Search({ pages }: { pages: DocPage[] }) {
 
   return (
     <>
-      <button className="search-button" onClick={() => setOpen(true)}>
-        <SearchIcon size={14} />
+      <button className="search-button" aria-label="Search documentation" onClick={() => setOpen(true)}>
+        <SearchIcon aria-hidden="true" size={14} />
         <span>Search documentation</span>
         <kbd>Ctrl K</kbd>
       </button>
@@ -93,7 +93,7 @@ export function Search({ pages }: { pages: DocPage[] }) {
           />
           <section>
             <header>
-              <SearchIcon size={16} />
+              <SearchIcon aria-hidden="true" size={16} />
               <input
                 autoFocus
                 value={query}
@@ -102,7 +102,7 @@ export function Search({ pages }: { pages: DocPage[] }) {
                 aria-label="Search query"
               />
               <button onClick={() => setOpen(false)} aria-label="Close">
-                <X size={16} />
+                <X aria-hidden="true" size={16} />
               </button>
             </header>
             <div className="results">

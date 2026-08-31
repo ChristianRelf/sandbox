@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, ArrowUpRight, Box } from "lucide-react";
 import { brand } from "@sandbox/brand";
 import styles from "./SiteFooter.module.css";
@@ -38,9 +39,10 @@ export function SiteFooter() {
     <footer className={styles.footer}>
       <div className={styles.cta}>
         <div>
-          <p><span /> READY WHEN YOU ARE</p>
+          <p>Start with one useful routine</p>
           <h2>Put one routine<br />on a visible route.</h2>
         </div>
+        <Image className={styles.mascot} src="/brand/hermit-hero.png" alt="" width={1536} height={1024} />
         <div>
           <p>Build locally, inspect every step and choose another runner only when the job calls for it.</p>
           <Link href="/downloads">Download Sandbox <ArrowRight aria-hidden="true" size={15} /></Link>

@@ -1,3 +1,28 @@
-import { notFound } from "next/navigation";import Link from "next/link";import { ArrowRight } from "lucide-react";import { useCases } from "@sandbox/content";
-type Params=Promise<{slug:string}>;export function generateStaticParams(){return useCases.map(({slug})=>({slug}))}
-export default async function Page({params}:{params:Params}){const {slug}=await params;const item=useCases.find(value=>value.slug===slug);if(!item)notFound();return <main id="content" className="detail-page use-case"><section className="detail-hero"><p className="eyebrow"><span/>Use case</p><h1>{item.title}</h1><p>{item.problem}</p><Link href={`/templates/${item.slug}`} className="sb-button sb-button--primary">View template <ArrowRight size={15}/></Link></section><section className="workflow-spec"><div><small>EXAMPLE WORKFLOW</small><p>{item.nodes}</p></div><dl><div><dt>Runs on</dt><dd>{item.target}</dd></div><div><dt>Setup</dt><dd>{item.difficulty}</dd></div><div><dt>Permissions</dt><dd>{item.permissions}</dd></div><div><dt>Result</dt><dd>{item.result}</dd></div></dl></section></main>}
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { useCases } from "@sandbox/content";
+import { SolutionExperience } from "../../../components/SolutionExperiences";
+
+type Params = Promise<{ slug: string }>;
+
+export function generateStaticParams() {
+  return useCases.map(({ slug }) => ({ slug }));
+}
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const { slug } = await params;
+  const item = useCases.find((value) => value.slug === slug);
+  if (!item) return {};
+  return {
+    title: item.title,
+    description: item.problem,
+    alternates: { canonical: `/solutions/${item.slug}` },
+  };
+}
+
+export default async function Page({ params }: { params: Params }) {
+  const { slug } = await params;
+  const item = useCases.find((value) => value.slug === slug);
+  if (!item) notFound();
+  return <SolutionExperience item={item} />;
+}

@@ -1,0 +1,633 @@
+Date : 2026-08-30 22:04:09
+Directory : c:\Users\chris\Desktop\sandbox
+Total : 437 files,  94565 codes, 80 comments, 4916 blanks, all 99561 lines
+
+Languages
++-------------------------+------------+------------+------------+------------+------------+
+| language                | files      | code       | comment    | blank      | total      |
++-------------------------+------------+------------+------------+------------+------------+
+| JSON                    |         31 |     30,421 |          0 |         27 |     30,448 |
+| Rust                    |         46 |     18,025 |         14 |        759 |     18,798 |
+| TypeScript JSX          |         75 |     14,042 |          2 |        467 |     14,511 |
+| TypeScript              |        142 |     13,587 |         21 |      1,201 |     14,809 |
+| PostCSS                 |         19 |      8,935 |         28 |      1,180 |     10,143 |
+| WebAssembly Text Format |          2 |      4,139 |          0 |         65 |      4,204 |
+| Markdown                |         53 |      2,125 |          6 |        906 |      3,037 |
+| MS SQL                  |         38 |      2,104 |          0 |        207 |      2,311 |
+| YAML                    |          4 |        589 |          2 |         31 |        622 |
+| JSON with Comments      |         11 |        200 |          0 |         12 |        212 |
+| Shell Script            |          3 |        171 |          3 |         31 |        205 |
+| Docker                  |          4 |         82 |          4 |         16 |        102 |
+| JavaScript              |          1 |         66 |          0 |          8 |         74 |
+| HTML                    |          1 |         25 |          0 |          1 |         26 |
+| XML                     |          5 |         19 |          0 |          3 |         22 |
+| Ignore                  |          1 |         18 |          0 |          1 |         19 |
+| PowerShell              |          1 |         17 |          0 |          1 |         18 |
++-------------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                          | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                             |        437 |     94,565 |         80 |      4,916 |     99,561 |
+| . (Files)                                                                                                     |          9 |      9,670 |          0 |         39 |      9,709 |
+| .github                                                                                                       |          3 |        481 |          2 |         26 |        509 |
+| .github\workflows                                                                                             |          3 |        481 |          2 |         26 |        509 |
+| agents                                                                                                        |          9 |      1,554 |          2 |         68 |      1,624 |
+| agents\server                                                                                                 |          9 |      1,554 |          2 |         68 |      1,624 |
+| agents\server (Files)                                                                                         |          1 |         15 |          1 |          3 |         19 |
+| agents\server\packaging                                                                                       |          1 |         45 |          1 |          8 |         54 |
+| agents\server\src                                                                                             |          7 |      1,494 |          0 |         57 |      1,551 |
+| apps                                                                                                          |         93 |     13,990 |         40 |      1,518 |     15,548 |
+| apps\docs                                                                                                     |         19 |      2,517 |          8 |        107 |      2,632 |
+| apps\docs (Files)                                                                                             |          6 |         76 |          6 |         13 |         95 |
+| apps\docs\app                                                                                                 |          7 |        409 |          2 |         51 |        462 |
+| apps\docs\app (Files)                                                                                         |          4 |        254 |          2 |         27 |        283 |
+| apps\docs\app\[[...slug]]                                                                                     |          1 |        117 |          0 |         18 |        135 |
+| apps\docs\app\developers                                                                                      |          1 |         23 |          0 |          3 |         26 |
+| apps\docs\app\developers\api                                                                                  |          1 |         23 |          0 |          3 |         26 |
+| apps\docs\app\developers\api\reference                                                                        |          1 |         23 |          0 |          3 |         26 |
+| apps\docs\app\nodes                                                                                           |          1 |         15 |          0 |          3 |         18 |
+| apps\docs\app\nodes\reference                                                                                 |          1 |         15 |          0 |          3 |         18 |
+| apps\docs\components                                                                                          |          2 |        159 |          0 |         18 |        177 |
+| apps\docs\generated                                                                                           |          1 |        789 |          0 |          1 |        790 |
+| apps\docs\lib                                                                                                 |          3 |      1,084 |          0 |         24 |      1,108 |
+| apps\marketing                                                                                                |         50 |      9,018 |         24 |      1,329 |     10,371 |
+| apps\marketing (Files)                                                                                        |          8 |        115 |          7 |         18 |        140 |
+| apps\marketing\app                                                                                            |         33 |      3,871 |          3 |        528 |      4,402 |
+| apps\marketing\app (Files)                                                                                    |         14 |      3,583 |          3 |        487 |      4,073 |
+| apps\marketing\app\api                                                                                        |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\app\api\forms                                                                                  |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\app\changelog                                                                                  |          1 |          1 |          0 |          1 |          2 |
+| apps\marketing\app\contact                                                                                    |          1 |          2 |          0 |          1 |          3 |
+| apps\marketing\app\developers                                                                                 |          1 |         14 |          0 |          4 |         18 |
+| apps\marketing\app\downloads                                                                                  |          2 |         59 |          0 |          9 |         68 |
+| apps\marketing\app\enterprise                                                                                 |          1 |         54 |          0 |          1 |         55 |
+| apps\marketing\app\integrations                                                                               |          1 |          4 |          0 |          1 |          5 |
+| apps\marketing\app\legal                                                                                      |          2 |          2 |          0 |          2 |          4 |
+| apps\marketing\app\legal (Files)                                                                              |          1 |          1 |          0 |          1 |          2 |
+| apps\marketing\app\legal\[slug]                                                                               |          1 |          1 |          0 |          1 |          2 |
+| apps\marketing\app\marketplace                                                                                |          2 |         23 |          0 |          5 |         28 |
+| apps\marketing\app\marketplace (Files)                                                                        |          1 |          4 |          0 |          1 |          5 |
+| apps\marketing\app\marketplace\[pluginId]                                                                     |          1 |         19 |          0 |          4 |         23 |
+| apps\marketing\app\pricing                                                                                    |          1 |         24 |          0 |          5 |         29 |
+| apps\marketing\app\product                                                                                    |          1 |         26 |          0 |          6 |         32 |
+| apps\marketing\app\product\[slug]                                                                             |          1 |         26 |          0 |          6 |         32 |
+| apps\marketing\app\security                                                                                   |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\app\solutions                                                                                  |          2 |          8 |          0 |          2 |         10 |
+| apps\marketing\app\solutions (Files)                                                                          |          1 |          5 |          0 |          1 |          6 |
+| apps\marketing\app\solutions\[slug]                                                                           |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\app\support                                                                                    |          1 |         62 |          0 |          1 |         63 |
+| apps\marketing\app\templates                                                                                  |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\app\templates\[slug]                                                                           |          1 |          3 |          0 |          1 |          4 |
+| apps\marketing\components                                                                                     |          8 |      4,991 |         14 |        778 |      5,783 |
+| apps\marketing\lib                                                                                            |          1 |         41 |          0 |          5 |         46 |
+| apps\web                                                                                                      |         24 |      2,455 |          8 |         82 |      2,545 |
+| apps\web (Files)                                                                                              |          7 |        111 |          6 |         15 |        132 |
+| apps\web\app                                                                                                  |         15 |      2,310 |          2 |         59 |      2,371 |
+| apps\web\app (Files)                                                                                          |          5 |        748 |          2 |         31 |        781 |
+| apps\web\app\[section]                                                                                        |          1 |      1,113 |          0 |         11 |      1,124 |
+| apps\web\app\api                                                                                              |          1 |         17 |          0 |          2 |         19 |
+| apps\web\app\api\account                                                                                      |          1 |         17 |          0 |          2 |         19 |
+| apps\web\app\api\account\export                                                                               |          1 |         17 |          0 |          2 |         19 |
+| apps\web\app\auth                                                                                             |          2 |         34 |          0 |          4 |         38 |
+| apps\web\app\auth\callback                                                                                    |          1 |         19 |          0 |          2 |         21 |
+| apps\web\app\auth\start                                                                                       |          1 |         15 |          0 |          2 |         17 |
+| apps\web\app\billing                                                                                          |          3 |         33 |          0 |          6 |         39 |
+| apps\web\app\billing (Files)                                                                                  |          2 |         19 |          0 |          4 |         23 |
+| apps\web\app\billing\checkout                                                                                 |          1 |         14 |          0 |          2 |         16 |
+| apps\web\app\marketplace                                                                                      |          2 |        363 |          0 |          4 |        367 |
+| apps\web\app\marketplace (Files)                                                                              |          1 |        209 |          0 |          2 |        211 |
+| apps\web\app\marketplace\[pluginId]                                                                           |          1 |        154 |          0 |          2 |        156 |
+| apps\web\app\sign-in                                                                                          |          1 |          2 |          0 |          1 |          3 |
+| apps\web\lib                                                                                                  |          2 |         34 |          0 |          8 |         42 |
+| browser-sidecar                                                                                               |         11 |      2,329 |          0 |         48 |      2,377 |
+| browser-sidecar (Files)                                                                                       |          4 |      1,769 |          0 |          5 |      1,774 |
+| browser-sidecar\src                                                                                           |          7 |        560 |          0 |         43 |        603 |
+| deploy                                                                                                        |          5 |        629 |          2 |        210 |        841 |
+| deploy\digitalocean                                                                                           |          5 |        629 |          2 |        210 |        841 |
+| docs                                                                                                          |         42 |     13,767 |          0 |        668 |     14,435 |
+| docs (Files)                                                                                                  |         41 |      1,600 |          0 |        667 |      2,267 |
+| docs\api                                                                                                      |          1 |     12,167 |          0 |          1 |     12,168 |
+| examples                                                                                                      |         12 |      4,411 |          0 |         89 |      4,500 |
+| examples\plugins                                                                                              |         12 |      4,411 |          0 |         89 |      4,500 |
+| examples\plugins\internal-approval                                                                            |          6 |      1,773 |          0 |         30 |      1,803 |
+| examples\plugins\internal-approval (Files)                                                                    |          2 |         88 |          0 |          2 |         90 |
+| examples\plugins\internal-approval\assets                                                                     |          1 |          1 |          0 |          1 |          2 |
+| examples\plugins\internal-approval\components                                                                 |          1 |      1,617 |          0 |         17 |      1,634 |
+| examples\plugins\internal-approval\docs                                                                       |          1 |          2 |          0 |          2 |          4 |
+| examples\plugins\internal-approval\guest                                                                      |          1 |         65 |          0 |          8 |         73 |
+| examples\plugins\internal-approval\guest\src                                                                  |          1 |         65 |          0 |          8 |         73 |
+| examples\plugins\weather-data                                                                                 |          6 |      2,638 |          0 |         59 |      2,697 |
+| examples\plugins\weather-data (Files)                                                                         |          2 |         53 |          0 |          2 |         55 |
+| examples\plugins\weather-data\assets                                                                          |          1 |          1 |          0 |          1 |          2 |
+| examples\plugins\weather-data\components                                                                      |          1 |      2,522 |          0 |         48 |      2,570 |
+| examples\plugins\weather-data\docs                                                                            |          1 |          2 |          0 |          2 |          4 |
+| examples\plugins\weather-data\guest                                                                           |          1 |         60 |          0 |          6 |         66 |
+| examples\plugins\weather-data\guest\src                                                                       |          1 |         60 |          0 |          6 |         66 |
+| packages                                                                                                      |         31 |      1,993 |          0 |        254 |      2,247 |
+| packages\api-client                                                                                           |          6 |        542 |          0 |         93 |        635 |
+| packages\api-client (Files)                                                                                   |          4 |         72 |          0 |         10 |         82 |
+| packages\api-client\src                                                                                       |          2 |        470 |          0 |         83 |        553 |
+| packages\brand                                                                                                |          2 |         35 |          0 |          3 |         38 |
+| packages\brand (Files)                                                                                        |          1 |          9 |          0 |          1 |         10 |
+| packages\brand\src                                                                                            |          1 |         26 |          0 |          2 |         28 |
+| packages\content                                                                                              |          3 |        118 |          0 |         14 |        132 |
+| packages\content (Files)                                                                                      |          1 |          9 |          0 |          1 |         10 |
+| packages\content\src                                                                                          |          2 |        109 |          0 |         13 |        122 |
+| packages\contracts                                                                                            |          5 |        627 |          0 |         62 |        689 |
+| packages\contracts (Files)                                                                                    |          3 |         47 |          0 |          4 |         51 |
+| packages\contracts\src                                                                                        |          2 |        580 |          0 |         58 |        638 |
+| packages\plugin-sdk                                                                                           |         13 |        647 |          0 |         77 |        724 |
+| packages\plugin-sdk (Files)                                                                                   |          3 |         56 |          0 |          3 |         59 |
+| packages\plugin-sdk\src                                                                                       |         10 |        591 |          0 |         74 |        665 |
+| packages\ui                                                                                                   |          2 |         24 |          0 |          5 |         29 |
+| packages\ui (Files)                                                                                           |          1 |         12 |          0 |          1 |         13 |
+| packages\ui\src                                                                                               |          1 |         12 |          0 |          4 |         16 |
+| scripts                                                                                                       |          3 |         99 |          0 |         12 |        111 |
+| services                                                                                                      |        114 |      9,984 |          8 |        974 |     10,966 |
+| services\browser-worker                                                                                       |         12 |        217 |          1 |         30 |        248 |
+| services\browser-worker (Files)                                                                               |          4 |         43 |          1 |          8 |         52 |
+| services\browser-worker\src                                                                                   |          8 |        174 |          0 |         22 |        196 |
+| services\control-plane                                                                                        |         89 |      8,897 |          3 |        891 |      9,791 |
+| services\control-plane (Files)                                                                                |          3 |         59 |          0 |          4 |         63 |
+| services\control-plane\db                                                                                     |         29 |      1,820 |          0 |        165 |      1,985 |
+| services\control-plane\db\migrations                                                                          |         29 |      1,820 |          0 |        165 |      1,985 |
+| services\control-plane\scripts                                                                                |          3 |         89 |          0 |         11 |        100 |
+| services\control-plane\src                                                                                    |         54 |      6,929 |          3 |        711 |      7,643 |
+| services\hosted-runner                                                                                        |          5 |        725 |          1 |         31 |        757 |
+| services\hosted-runner (Files)                                                                                |          1 |         15 |          1 |          2 |         18 |
+| services\hosted-runner\examples                                                                               |          1 |         42 |          0 |          1 |         43 |
+| services\hosted-runner\src                                                                                    |          3 |        668 |          0 |         28 |        696 |
+| services\scheduler                                                                                            |          8 |        145 |          3 |         22 |        170 |
+| services\scheduler (Files)                                                                                    |          3 |         28 |          0 |          5 |         33 |
+| services\scheduler\src                                                                                        |          5 |        117 |          3 |         17 |        137 |
+| src                                                                                                           |         53 |     13,866 |         12 |        305 |     14,183 |
+| src (Files)                                                                                                   |         22 |      4,277 |         10 |        129 |      4,416 |
+| src-tauri                                                                                                     |         52 |     21,792 |         14 |        705 |     22,511 |
+| src-tauri (Files)                                                                                             |          2 |         56 |          0 |          2 |         58 |
+| src-tauri\capabilities                                                                                        |          1 |         12 |          0 |          1 |         13 |
+| src-tauri\engine                                                                                              |         19 |      6,479 |         11 |        268 |      6,758 |
+| src-tauri\engine\migrations                                                                                   |          9 |        284 |          0 |         42 |        326 |
+| src-tauri\engine\src                                                                                          |         10 |      6,195 |         11 |        226 |      6,432 |
+| src-tauri\gen                                                                                                 |          4 |      5,688 |          0 |          0 |      5,688 |
+| src-tauri\gen\schemas                                                                                         |          4 |      5,688 |          0 |          0 |      5,688 |
+| src-tauri\icons                                                                                               |          3 |         17 |          0 |          1 |         18 |
+| src-tauri\icons (Files)                                                                                       |          1 |          8 |          0 |          1 |          9 |
+| src-tauri\icons\android                                                                                       |          2 |          9 |          0 |          0 |          9 |
+| src-tauri\icons\android\mipmap-anydpi-v26                                                                     |          1 |          5 |          0 |          0 |          5 |
+| src-tauri\icons\android\values                                                                                |          1 |          4 |          0 |          0 |          4 |
+| src-tauri\plugin-runtime                                                                                      |          9 |      2,596 |          1 |        140 |      2,737 |
+| src-tauri\plugin-runtime\examples                                                                             |          1 |         31 |          0 |          2 |         33 |
+| src-tauri\plugin-runtime\src                                                                                  |          7 |      2,435 |          1 |        130 |      2,566 |
+| src-tauri\plugin-runtime\tests                                                                                |          1 |        130 |          0 |          8 |        138 |
+| src-tauri\src                                                                                                 |         14 |      6,944 |          2 |        293 |      7,239 |
+| src\components                                                                                                |         30 |      9,588 |          2 |        175 |      9,765 |
+| src\components (Files)                                                                                        |         24 |      9,306 |          1 |        150 |      9,457 |
+| src\components\ui                                                                                             |          6 |        282 |          1 |         25 |        308 |
+| src\test                                                                                                      |          1 |          1 |          0 |          1 |          2 |
++---------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+
+| filename                                                                                                      | language                | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+
+| c:\Users\chris\Desktop\sandbox\.dockerignore                                                                  | Ignore                  |         18 |          0 |          1 |         19 |
+| c:\Users\chris\Desktop\sandbox\.github\workflows\ci.yml                                                       | YAML                    |         54 |          2 |          5 |         61 |
+| c:\Users\chris\Desktop\sandbox\.github\workflows\deploy-digitalocean.yml                                      | YAML                    |        108 |          0 |         12 |        120 |
+| c:\Users\chris\Desktop\sandbox\.github\workflows\release.yml                                                  | YAML                    |        319 |          0 |          9 |        328 |
+| c:\Users\chris\Desktop\sandbox\README.md                                                                      | Markdown                |         93 |          0 |         28 |        121 |
+| c:\Users\chris\Desktop\sandbox\agents\server\Dockerfile                                                       | Docker                  |         15 |          1 |          3 |         19 |
+| c:\Users\chris\Desktop\sandbox\agents\server\packaging\build-release.sh                                       | Shell Script            |         45 |          1 |          8 |         54 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\client.rs                                                    | Rust                    |        269 |          0 |         20 |        289 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\config.rs                                                    | Rust                    |        245 |          0 |          3 |        248 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\identity.rs                                                  | Rust                    |         92 |          0 |          5 |         97 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\lib.rs                                                       | Rust                    |          8 |          0 |          2 |         10 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\main.rs                                                      | Rust                    |        178 |          0 |          7 |        185 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\pairing.rs                                                   | Rust                    |        131 |          0 |          3 |        134 |
+| c:\Users\chris\Desktop\sandbox\agents\server\src\runner.rs                                                    | Rust                    |        571 |          0 |         17 |        588 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\AGENTS.md                                                            | Markdown                |          3 |          2 |          5 |         10 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\CLAUDE.md                                                            | Markdown                |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\[[...slug]]\page.tsx                                             | TypeScript JSX          |        117 |          0 |         18 |        135 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\developers\api\reference\page.tsx                                | TypeScript JSX          |         23 |          0 |          3 |         26 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\globals.css                                                      | PostCSS                 |        207 |          2 |         22 |        231 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\layout.tsx                                                       | TypeScript JSX          |         45 |          0 |          3 |         48 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\nodes\reference\page.tsx                                         | TypeScript JSX          |         15 |          0 |          3 |         18 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\robots.ts                                                        | TypeScript              |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\app\sitemap.ts                                                       | TypeScript              |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\components\DocsNavigation.tsx                                        | TypeScript JSX          |         32 |          0 |          5 |         37 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\components\Search.tsx                                                | TypeScript JSX          |        127 |          0 |         13 |        140 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\generated\nodes.json                                                 | JSON                    |        789 |          0 |          1 |        790 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\lib\content.ts                                                       | TypeScript              |        101 |          0 |          7 |        108 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\lib\expanded-content.ts                                              | TypeScript              |        954 |          0 |         13 |        967 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\lib\openapi.ts                                                       | TypeScript              |         29 |          0 |          4 |         33 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\next-env.d.ts                                                        | TypeScript              |          2 |          4 |          2 |          8 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\next.config.ts                                                       | TypeScript              |          6 |          0 |          3 |          9 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\package.json                                                         | JSON                    |         28 |          0 |          1 |         29 |
+| c:\Users\chris\Desktop\sandbox\apps\docs\tsconfig.json                                                        | JSON with Comments      |         36 |          0 |          1 |         37 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\AGENTS.md                                                       | Markdown                |          3 |          2 |          5 |         10 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\CLAUDE.md                                                       | Markdown                |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\Dockerfile                                                      | Docker                  |         31 |          1 |          6 |         38 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\HeroExperience.module.css                                   | PostCSS                 |        430 |          0 |         68 |        498 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\HeroExperience.tsx                                          | TypeScript JSX          |        179 |          0 |         15 |        194 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\SiteFooter.module.css                                       | PostCSS                 |        211 |          0 |         33 |        244 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\SiteFooter.tsx                                              | TypeScript JSX          |         71 |          0 |          5 |         76 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\SiteHeader.module.css                                       | PostCSS                 |        491 |          0 |         74 |        565 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\SiteHeader.tsx                                              | TypeScript JSX          |        403 |          0 |         25 |        428 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\WorkflowDemo.module.css                                     | PostCSS                 |        179 |          0 |         17 |        196 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\WorkflowDemo.tsx                                            | TypeScript JSX          |        128 |          0 |         14 |        142 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\api\forms\route.ts                                          | TypeScript              |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\changelog\page.tsx                                          | TypeScript JSX          |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\contact\page.tsx                                            | TypeScript JSX          |          2 |          0 |          1 |          3 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\developers\page.tsx                                         | TypeScript JSX          |         14 |          0 |          4 |         18 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\downloads\DownloadsClient.tsx                               | TypeScript JSX          |         51 |          0 |          6 |         57 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\downloads\page.tsx                                          | TypeScript JSX          |          8 |          0 |          3 |         11 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\enterprise\page.tsx                                         | TypeScript JSX          |         54 |          0 |          1 |         55 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\globals.css                                                 | PostCSS                 |         34 |          3 |          4 |         41 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\home.module.css                                             | PostCSS                 |      1,159 |          0 |        209 |      1,368 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\integrations\page.tsx                                       | TypeScript JSX          |          4 |          0 |          1 |          5 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\layout.tsx                                                  | TypeScript JSX          |         40 |          0 |          4 |         44 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\legal\[slug]\page.tsx                                       | TypeScript JSX          |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\legal\page.tsx                                              | TypeScript JSX          |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\marketplace\[pluginId]\page.tsx                             | TypeScript JSX          |         19 |          0 |          4 |         23 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\marketplace\page.tsx                                        | TypeScript JSX          |          4 |          0 |          1 |          5 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\page.tsx                                                    | TypeScript JSX          |        224 |          0 |         15 |        239 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\pricing\page.tsx                                            | TypeScript JSX          |         24 |          0 |          5 |         29 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\product\[slug]\page.tsx                                     | TypeScript JSX          |         26 |          0 |          6 |         32 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\robots.ts                                                   | TypeScript              |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\security\page.tsx                                           | TypeScript JSX          |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\sitemap.ts                                                  | TypeScript              |         33 |          0 |          3 |         36 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\solutions\[slug]\page.tsx                                   | TypeScript JSX          |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\solutions\page.tsx                                          | TypeScript JSX          |          5 |          0 |          1 |          6 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\support\page.tsx                                            | TypeScript JSX          |         62 |          0 |          1 |         63 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\app\templates\[slug]\page.tsx                                   | TypeScript JSX          |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductCapabilityExplorer.module.css                 | PostCSS                 |        285 |          0 |         47 |        332 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductCapabilityExplorer.tsx                        | TypeScript JSX          |        111 |          0 |          9 |        120 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductHeroes.module.css                             | PostCSS                 |      2,756 |          6 |        478 |      3,240 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductHeroes.tsx                                    | TypeScript JSX          |        369 |          0 |         29 |        398 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductPageBodies.module.css                         | PostCSS                 |      1,115 |          8 |        165 |      1,288 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductPageBodies.tsx                                | TypeScript JSX          |        317 |          0 |         44 |        361 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductPageView.module.css                           | PostCSS                 |          6 |          0 |          1 |          7 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\components\ProductPageView.tsx                                  | TypeScript JSX          |         32 |          0 |          5 |         37 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\instrumentation.ts                                              | TypeScript              |          5 |          0 |          1 |          6 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\lib\release-manifest.ts                                         | TypeScript              |         41 |          0 |          5 |         46 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\next-env.d.ts                                                   | TypeScript              |          2 |          4 |          2 |          8 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\next.config.ts                                                  | TypeScript              |          9 |          0 |          1 |         10 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\package.json                                                    | JSON                    |         28 |          0 |          1 |         29 |
+| c:\Users\chris\Desktop\sandbox\apps\marketing\tsconfig.json                                                   | JSON with Comments      |         36 |          0 |          1 |         37 |
+| c:\Users\chris\Desktop\sandbox\apps\web\AGENTS.md                                                             | Markdown                |          3 |          2 |          5 |         10 |
+| c:\Users\chris\Desktop\sandbox\apps\web\CLAUDE.md                                                             | Markdown                |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\ScimTokenForm.tsx                                                 | TypeScript JSX          |         17 |          0 |          4 |         21 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\[section]\page.tsx                                                | TypeScript JSX          |      1,113 |          0 |         11 |      1,124 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\actions.ts                                                        | TypeScript              |        147 |          0 |         15 |        162 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\api\account\export\route.ts                                       | TypeScript              |         17 |          0 |          2 |         19 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\auth\callback\route.ts                                            | TypeScript              |         19 |          0 |          2 |         21 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\auth\start\route.ts                                               | TypeScript              |         15 |          0 |          2 |         17 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\billing\billing.css                                               | PostCSS                 |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\billing\checkout\route.ts                                         | TypeScript              |         14 |          0 |          2 |         16 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\billing\page.tsx                                                  | TypeScript JSX          |         18 |          0 |          3 |         21 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\globals.css                                                       | PostCSS                 |        522 |          2 |          4 |        528 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\layout.tsx                                                        | TypeScript JSX          |         38 |          0 |          5 |         43 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\marketplace\[pluginId]\page.tsx                                   | TypeScript JSX          |        154 |          0 |          2 |        156 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\marketplace\page.tsx                                              | TypeScript JSX          |        209 |          0 |          2 |        211 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\page.tsx                                                          | TypeScript JSX          |         24 |          0 |          3 |         27 |
+| c:\Users\chris\Desktop\sandbox\apps\web\app\sign-in\page.tsx                                                  | TypeScript JSX          |          2 |          0 |          1 |          3 |
+| c:\Users\chris\Desktop\sandbox\apps\web\lib\auth.ts                                                           | TypeScript              |         12 |          0 |          4 |         16 |
+| c:\Users\chris\Desktop\sandbox\apps\web\lib\control-plane.ts                                                  | TypeScript              |         22 |          0 |          4 |         26 |
+| c:\Users\chris\Desktop\sandbox\apps\web\next-env.d.ts                                                         | TypeScript              |          2 |          4 |          2 |          8 |
+| c:\Users\chris\Desktop\sandbox\apps\web\next.config.ts                                                        | TypeScript              |         14 |          0 |          2 |         16 |
+| c:\Users\chris\Desktop\sandbox\apps\web\package.json                                                          | JSON                    |         25 |          0 |          1 |         26 |
+| c:\Users\chris\Desktop\sandbox\apps\web\proxy.ts                                                              | TypeScript              |         30 |          0 |          3 |         33 |
+| c:\Users\chris\Desktop\sandbox\apps\web\tsconfig.json                                                         | JSON with Comments      |         36 |          0 |          1 |         37 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\package-lock.json                                              | JSON                    |      1,725 |          0 |          1 |      1,726 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\package.json                                                   | JSON                    |         19 |          0 |          1 |         20 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\locator.test.ts                                            | TypeScript              |         33 |          0 |          4 |         37 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\locator.ts                                                 | TypeScript              |         52 |          0 |          5 |         57 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\protocol.ts                                                | TypeScript              |         38 |          0 |          5 |         43 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\recorder.ts                                                | TypeScript              |         16 |          0 |          3 |         19 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\server.test.ts                                             | TypeScript              |         90 |          0 |          7 |         97 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\server.ts                                                  | TypeScript              |        307 |          0 |         16 |        323 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\src\types.ts                                                   | TypeScript              |         24 |          0 |          3 |         27 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\tsconfig.json                                                  | JSON with Comments      |         16 |          0 |          1 |         17 |
+| c:\Users\chris\Desktop\sandbox\browser-sidecar\vitest.config.ts                                               | TypeScript              |          9 |          0 |          2 |         11 |
+| c:\Users\chris\Desktop\sandbox\deploy\digitalocean\DEPLOYMENT-GUIDE.md                                        | Markdown                |        309 |          0 |        142 |        451 |
+| c:\Users\chris\Desktop\sandbox\deploy\digitalocean\README.md                                                  | Markdown                |         86 |          0 |         40 |        126 |
+| c:\Users\chris\Desktop\sandbox\deploy\digitalocean\bootstrap.sh                                               | Shell Script            |         39 |          1 |          9 |         49 |
+| c:\Users\chris\Desktop\sandbox\deploy\digitalocean\compose.yml                                                | YAML                    |        108 |          0 |          5 |        113 |
+| c:\Users\chris\Desktop\sandbox\deploy\digitalocean\deploy.sh                                                  | Shell Script            |         87 |          1 |         14 |        102 |
+| c:\Users\chris\Desktop\sandbox\docs\accessibility-v0.5.md                                                     | Markdown                |         33 |          0 |         11 |         44 |
+| c:\Users\chris\Desktop\sandbox\docs\api-policy-v0.5.md                                                        | Markdown                |         72 |          0 |         21 |         93 |
+| c:\Users\chris\Desktop\sandbox\docs\api\openapi-v1.json                                                       | JSON                    |     12,167 |          0 |          1 |     12,168 |
+| c:\Users\chris\Desktop\sandbox\docs\architecture-v0.3.md                                                      | Markdown                |        129 |          0 |         42 |        171 |
+| c:\Users\chris\Desktop\sandbox\docs\architecture-v0.4.md                                                      | Markdown                |         55 |          0 |         13 |         68 |
+| c:\Users\chris\Desktop\sandbox\docs\architecture-v0.5.md                                                      | Markdown                |         61 |          0 |         12 |         73 |
+| c:\Users\chris\Desktop\sandbox\docs\execution-state-machine.md                                                | Markdown                |         33 |          0 |         14 |         47 |
+| c:\Users\chris\Desktop\sandbox\docs\frontend-performance-v0.5.md                                              | Markdown                |         17 |          0 |         13 |         30 |
+| c:\Users\chris\Desktop\sandbox\docs\ga-blockers-v0.5.md                                                       | Markdown                |         44 |          0 |          7 |         51 |
+| c:\Users\chris\Desktop\sandbox\docs\hosted-runner-isolation.md                                                | Markdown                |         35 |          0 |         17 |         52 |
+| c:\Users\chris\Desktop\sandbox\docs\incident-response-v0.5.md                                                 | Markdown                |         16 |          0 |         10 |         26 |
+| c:\Users\chris\Desktop\sandbox\docs\known-limitations-v0.3.md                                                 | Markdown                |         14 |          0 |          6 |         20 |
+| c:\Users\chris\Desktop\sandbox\docs\managed-browser-threat-model.md                                           | Markdown                |          6 |          0 |          6 |         12 |
+| c:\Users\chris\Desktop\sandbox\docs\marketplace-review.md                                                     | Markdown                |         19 |          0 |         12 |         31 |
+| c:\Users\chris\Desktop\sandbox\docs\migration-v0.2-to-v0.3.md                                                 | Markdown                |         12 |          0 |         13 |         25 |
+| c:\Users\chris\Desktop\sandbox\docs\operations-v0.3.md                                                        | Markdown                |         44 |          0 |         16 |         60 |
+| c:\Users\chris\Desktop\sandbox\docs\plugin-sandbox.md                                                         | Markdown                |         36 |          0 |         21 |         57 |
+| c:\Users\chris\Desktop\sandbox\docs\plugin-sdk.md                                                             | Markdown                |        127 |          0 |         58 |        185 |
+| c:\Users\chris\Desktop\sandbox\docs\plugin-threat-model.md                                                    | Markdown                |         46 |          0 |         14 |         60 |
+| c:\Users\chris\Desktop\sandbox\docs\privacy-and-retention-v0.5.md                                             | Markdown                |         14 |          0 |          8 |         22 |
+| c:\Users\chris\Desktop\sandbox\docs\product-commerce-v0.6.md                                                  | Markdown                |         24 |          0 |         12 |         36 |
+| c:\Users\chris\Desktop\sandbox\docs\release-integrity-v0.5.md                                                 | Markdown                |         49 |          0 |         21 |         70 |
+| c:\Users\chris\Desktop\sandbox\docs\reliability-v0.5.md                                                       | Markdown                |          8 |          0 |          6 |         14 |
+| c:\Users\chris\Desktop\sandbox\docs\runner-pools.md                                                           | Markdown                |          8 |          0 |          6 |         14 |
+| c:\Users\chris\Desktop\sandbox\docs\runner-protocol.md                                                        | Markdown                |         36 |          0 |         21 |         57 |
+| c:\Users\chris\Desktop\sandbox\docs\scheduler-and-event-queue.md                                              | Markdown                |          6 |          0 |          6 |         12 |
+| c:\Users\chris\Desktop\sandbox\docs\security-review-v0.3.md                                                   | Markdown                |         21 |          0 |          7 |         28 |
+| c:\Users\chris\Desktop\sandbox\docs\self-hosted-runner.md                                                     | Markdown                |         42 |          0 |         17 |         59 |
+| c:\Users\chris\Desktop\sandbox\docs\service-accounts-and-tokens.md                                            | Markdown                |         71 |          0 |         30 |        101 |
+| c:\Users\chris\Desktop\sandbox\docs\stage-five-audit.md                                                       | Markdown                |         51 |          0 |         17 |         68 |
+| c:\Users\chris\Desktop\sandbox\docs\stage-four-audit.md                                                       | Markdown                |         53 |          0 |         16 |         69 |
+| c:\Users\chris\Desktop\sandbox\docs\stage-three-audit.md                                                      | Markdown                |        129 |          0 |         64 |        193 |
+| c:\Users\chris\Desktop\sandbox\docs\stage-two-audit.md                                                        | Markdown                |         24 |          0 |          9 |         33 |
+| c:\Users\chris\Desktop\sandbox\docs\support-access-v0.5.md                                                    | Markdown                |         12 |          0 |          8 |         20 |
+| c:\Users\chris\Desktop\sandbox\docs\support-matrix-v0.5.md                                                    | Markdown                |         28 |          0 |          6 |         34 |
+| c:\Users\chris\Desktop\sandbox\docs\sync-and-conflicts.md                                                     | Markdown                |          8 |          0 |          9 |         17 |
+| c:\Users\chris\Desktop\sandbox\docs\team-permissions.md                                                       | Markdown                |         23 |          0 |         10 |         33 |
+| c:\Users\chris\Desktop\sandbox\docs\threat-model-v0.4.md                                                      | Markdown                |         32 |          0 |         11 |         43 |
+| c:\Users\chris\Desktop\sandbox\docs\usage-metering-v0.5.md                                                    | Markdown                |         14 |          0 |          8 |         22 |
+| c:\Users\chris\Desktop\sandbox\docs\v0.6-launch-readiness.md                                                  | Markdown                |         81 |          0 |         36 |        117 |
+| c:\Users\chris\Desktop\sandbox\docs\v0.6-public-architecture.md                                               | Markdown                |         37 |          0 |         17 |         54 |
+| c:\Users\chris\Desktop\sandbox\docs\v0.7-beta-readiness.md                                                    | Markdown                |         30 |          0 |         16 |         46 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\assets\icon.svg                             | XML                     |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\components\main.wasm                        | WebAssembly Text Format |      1,617 |          0 |         17 |      1,634 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\docs\request-approval.md                    | Markdown                |          2 |          0 |          2 |          4 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\guest\src\lib.rs                            | Rust                    |         65 |          0 |          8 |         73 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\manifest.json                               | JSON                    |         80 |          0 |          1 |         81 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\internal-approval\package.json                                | JSON                    |          8 |          0 |          1 |          9 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\assets\icon.svg                                  | XML                     |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\components\main.wasm                             | WebAssembly Text Format |      2,522 |          0 |         48 |      2,570 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\docs\current-weather.md                          | Markdown                |          2 |          0 |          2 |          4 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\guest\src\lib.rs                                 | Rust                    |         60 |          0 |          6 |         66 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\manifest.json                                    | JSON                    |         45 |          0 |          1 |         46 |
+| c:\Users\chris\Desktop\sandbox\examples\plugins\weather-data\package.json                                     | JSON                    |          8 |          0 |          1 |          9 |
+| c:\Users\chris\Desktop\sandbox\index.html                                                                     | HTML                    |         25 |          0 |          1 |         26 |
+| c:\Users\chris\Desktop\sandbox\package-lock.json                                                              | JSON                    |      9,391 |          0 |          1 |      9,392 |
+| c:\Users\chris\Desktop\sandbox\package.json                                                                   | JSON                    |         74 |          0 |          1 |         75 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\README.md                                                  | Markdown                |         21 |          0 |          7 |         28 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\package.json                                               | JSON                    |         32 |          0 |          1 |         33 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\src\index.test.ts                                          | TypeScript              |         72 |          0 |         10 |         82 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\src\index.ts                                               | TypeScript              |        398 |          0 |         73 |        471 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\tsconfig.json                                              | JSON with Comments      |         17 |          0 |          1 |         18 |
+| c:\Users\chris\Desktop\sandbox\packages\api-client\vitest.config.ts                                           | TypeScript              |          2 |          0 |          1 |          3 |
+| c:\Users\chris\Desktop\sandbox\packages\brand\package.json                                                    | JSON                    |          9 |          0 |          1 |         10 |
+| c:\Users\chris\Desktop\sandbox\packages\brand\src\index.ts                                                    | TypeScript              |         26 |          0 |          2 |         28 |
+| c:\Users\chris\Desktop\sandbox\packages\content\package.json                                                  | JSON                    |          9 |          0 |          1 |         10 |
+| c:\Users\chris\Desktop\sandbox\packages\content\src\index.test.ts                                             | TypeScript              |         48 |          0 |          5 |         53 |
+| c:\Users\chris\Desktop\sandbox\packages\content\src\index.ts                                                  | TypeScript              |         61 |          0 |          8 |         69 |
+| c:\Users\chris\Desktop\sandbox\packages\contracts\package.json                                                | JSON                    |         28 |          0 |          1 |         29 |
+| c:\Users\chris\Desktop\sandbox\packages\contracts\src\index.test.ts                                           | TypeScript              |         33 |          0 |          5 |         38 |
+| c:\Users\chris\Desktop\sandbox\packages\contracts\src\index.ts                                                | TypeScript              |        547 |          0 |         53 |        600 |
+| c:\Users\chris\Desktop\sandbox\packages\contracts\tsconfig.json                                               | JSON with Comments      |         15 |          0 |          1 |         16 |
+| c:\Users\chris\Desktop\sandbox\packages\contracts\vitest.config.ts                                            | TypeScript              |          4 |          0 |          2 |          6 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\package.json                                               | JSON                    |         38 |          0 |          1 |         39 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\cli.ts                                                 | TypeScript              |        124 |          0 |         16 |        140 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\docs.ts                                                | TypeScript              |          5 |          0 |          2 |          7 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\index.ts                                               | TypeScript              |         14 |          0 |          4 |         18 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\mock-host.ts                                           | TypeScript              |         23 |          0 |          6 |         29 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\package.ts                                             | TypeScript              |        149 |          0 |         17 |        166 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\scaffold.ts                                            | TypeScript              |         54 |          0 |          6 |         60 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\schema.ts                                              | TypeScript              |         10 |          0 |          2 |         12 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\sdk.test.ts                                            | TypeScript              |         54 |          0 |          6 |         60 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\types.ts                                               | TypeScript              |         84 |          0 |          7 |         91 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\src\validation.ts                                          | TypeScript              |         74 |          0 |          8 |         82 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\tsconfig.json                                              | JSON with Comments      |         16 |          0 |          1 |         17 |
+| c:\Users\chris\Desktop\sandbox\packages\plugin-sdk\vitest.config.ts                                           | TypeScript              |          2 |          0 |          1 |          3 |
+| c:\Users\chris\Desktop\sandbox\packages\ui\package.json                                                       | JSON                    |         12 |          0 |          1 |         13 |
+| c:\Users\chris\Desktop\sandbox\packages\ui\src\index.tsx                                                      | TypeScript JSX          |         12 |          0 |          4 |         16 |
+| c:\Users\chris\Desktop\sandbox\scripts\generate-node-reference.ts                                             | TypeScript              |         16 |          0 |          3 |         19 |
+| c:\Users\chris\Desktop\sandbox\scripts\generate-release-manifest.mjs                                          | JavaScript              |         66 |          0 |          8 |         74 |
+| c:\Users\chris\Desktop\sandbox\scripts\prepare-browser-runtime.ps1                                            | PowerShell              |         17 |          0 |          1 |         18 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\Dockerfile                                             | Docker                  |         21 |          1 |          5 |         27 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\package.json                                           | JSON                    |         19 |          0 |          1 |         20 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\main.ts                                            | TypeScript              |         14 |          0 |          2 |         16 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\network-policy.ts                                  | TypeScript              |         28 |          0 |          5 |         33 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\profiles.ts                                        | TypeScript              |         10 |          0 |          2 |         12 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\security.test.ts                                   | TypeScript              |          9 |          0 |          2 |         11 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\usage.test.ts                                      | TypeScript              |         18 |          0 |          2 |         20 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\usage.ts                                           | TypeScript              |         31 |          0 |          4 |         35 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\worker.integration.test.ts                         | TypeScript              |         16 |          0 |          2 |         18 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\src\worker.ts                                          | TypeScript              |         48 |          0 |          3 |         51 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\tsconfig.json                                          | JSON with Comments      |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\services\browser-worker\vitest.config.ts                                       | TypeScript              |          2 |          0 |          1 |          3 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\001_control_plane.sql                     | MS SQL                  |        536 |          0 |         44 |        580 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\002_sync_encryption_contract.sql          | MS SQL                  |         15 |          0 |          3 |         18 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\003_publisher_identity.sql                | MS SQL                  |         18 |          0 |          3 |         21 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\004_runner_pairing_metadata.sql           | MS SQL                  |          5 |          0 |          2 |          7 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\005_workflow_approval_votes.sql           | MS SQL                  |         10 |          0 |          2 |         12 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\006_runner_device_requests.sql            | MS SQL                  |          8 |          0 |          2 |         10 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\007_shared_connection_deployments.sql     | MS SQL                  |         11 |          0 |          2 |         13 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\008_billing_events.sql                    | MS SQL                  |         19 |          0 |          4 |         23 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\009_webhook_relay_security.sql            | MS SQL                  |          7 |          0 |          3 |         10 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\010_marketplace_review_reports.sql        | MS SQL                  |         11 |          0 |          3 |         14 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\011_workspace_tenant_policies.sql         | MS SQL                  |         23 |          0 |          3 |         26 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\012_durable_executions.sql                | MS SQL                  |        156 |          0 |          8 |        164 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\013_workflow_deployments.sql              | MS SQL                  |        131 |          0 |          8 |        139 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\014_scheduler_and_event_queue.sql         | MS SQL                  |        104 |          0 |          6 |        110 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\015_cloud_browser_profiles.sql            | MS SQL                  |         41 |          0 |          3 |         44 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\016_runner_pools.sql                      | MS SQL                  |         37 |          0 |          4 |         41 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\017_usage_metering.sql                    | MS SQL                  |         54 |          0 |          7 |         61 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\018_service_accounts_and_tokens.sql       | MS SQL                  |        106 |          0 |          9 |        115 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\019_api_contract.sql                      | MS SQL                  |         15 |          0 |          1 |         16 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\020_runner_authorization_context.sql      | MS SQL                  |          7 |          0 |          3 |         10 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\021_organisation_service_accounts.sql     | MS SQL                  |         45 |          0 |          4 |         49 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\022_credential_expiry_notifications.sql   | MS SQL                  |         26 |          0 |          3 |         29 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\023_service_account_client_assertions.sql | MS SQL                  |         53 |          0 |          6 |         59 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\024_service_account_access_reviews.sql    | MS SQL                  |         54 |          0 |          4 |         58 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\025_operational_incidents.sql             | MS SQL                  |         58 |          0 |          4 |         62 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\026_support_access.sql                    | MS SQL                  |         52 |          0 |          4 |         56 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\027_privacy_controls.sql                  | MS SQL                  |         79 |          0 |          7 |         86 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\028_product_commerce.sql                  | MS SQL                  |         88 |          0 |          8 |         96 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\db\migrations\029_enterprise_identity.sql               | MS SQL                  |         51 |          0 |          5 |         56 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\package.json                                            | JSON                    |         39 |          0 |          1 |         40 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\scripts\generate-openapi.ts                             | TypeScript              |         29 |          0 |          4 |         33 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\scripts\incident.ts                                     | TypeScript              |         34 |          0 |          3 |         37 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\scripts\sync-product-plans.ts                           | TypeScript              |         26 |          0 |          4 |         30 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\access_reviews.test.ts                              | TypeScript              |         26 |          0 |          3 |         29 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\access_reviews.ts                                   | TypeScript              |         50 |          0 |          8 |         58 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\api_client_compatibility.test.ts                    | TypeScript              |         49 |          0 |          6 |         55 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\api_contract.integration.test.ts                    | TypeScript              |         24 |          0 |          4 |         28 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\api_contract.ts                                     | TypeScript              |        283 |          0 |         23 |        306 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\auth.test.ts                                        | TypeScript              |          6 |          0 |          2 |          8 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\auth.ts                                             | TypeScript              |         59 |          0 |          8 |         67 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\authorization.test.ts                               | TypeScript              |         62 |          0 |          6 |         68 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\authorization.ts                                    | TypeScript              |         66 |          0 |          8 |         74 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\billing.test.ts                                     | TypeScript              |         13 |          0 |          2 |         15 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\billing.ts                                          | TypeScript              |         57 |          0 |          8 |         65 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\credential_notifications.test.ts                    | TypeScript              |         35 |          0 |          4 |         39 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\credential_notifications.ts                         | TypeScript              |         96 |          0 |          7 |        103 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\credentials.integration.test.ts                     | TypeScript              |        118 |          0 |         11 |        129 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\credentials.ts                                      | TypeScript              |        238 |          0 |         20 |        258 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\deployment.test.ts                                  | TypeScript              |         14 |          0 |          3 |         17 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\deployment.ts                                       | TypeScript              |         83 |          0 |          8 |         91 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\email.ts                                            | TypeScript              |         41 |          0 |          8 |         49 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\entitlement.test.ts                                 | TypeScript              |         14 |          0 |          2 |         16 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\entitlement.ts                                      | TypeScript              |         23 |          0 |          4 |         27 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\execution_coordinator.integration.test.ts           | TypeScript              |         58 |          0 |          8 |         66 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\execution_coordinator.ts                            | TypeScript              |        302 |          0 |         19 |        321 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\execution_state.test.ts                             | TypeScript              |         36 |          0 |          6 |         42 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\execution_state.ts                                  | TypeScript              |         81 |          0 |          8 |         89 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\incidents.integration.test.ts                       | TypeScript              |         61 |          0 |          7 |         68 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\incidents.test.ts                                   | TypeScript              |         26 |          0 |          3 |         29 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\incidents.ts                                        | TypeScript              |        157 |          0 |         21 |        178 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\main.ts                                             | TypeScript              |        105 |          0 |          7 |        112 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\migrate.ts                                          | TypeScript              |         38 |          0 |          3 |         41 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\package_services.ts                                 | TypeScript              |         52 |          0 |          6 |         58 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\postgres.test.ts                                    | TypeScript              |         28 |          0 |          6 |         34 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\postgres.ts                                         | TypeScript              |      1,653 |          3 |        144 |      1,800 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\privacy.integration.test.ts                         | TypeScript              |         13 |          0 |          2 |         15 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\privacy.test.ts                                     | TypeScript              |          6 |          0 |          2 |          8 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\privacy.ts                                          | TypeScript              |         72 |          0 |         12 |         84 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\product_commerce.ts                                 | TypeScript              |        114 |          0 |         12 |        126 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\reliability.test.ts                                 | TypeScript              |         41 |          0 |          4 |         45 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\reliability.ts                                      | TypeScript              |        115 |          0 |         17 |        132 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\runner_pool.test.ts                                 | TypeScript              |         16 |          0 |          3 |         19 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\runner_pool.ts                                      | TypeScript              |         45 |          0 |          4 |         49 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\runner_protocol.test.ts                             | TypeScript              |         25 |          0 |          3 |         28 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\runner_protocol.ts                                  | TypeScript              |         47 |          0 |         11 |         58 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\server.test.ts                                      | TypeScript              |        528 |          0 |         42 |        570 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\server.ts                                           | TypeScript              |      1,278 |          0 |        150 |      1,428 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\support_access.integration.test.ts                  | TypeScript              |         33 |          0 |          6 |         39 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\support_access.test.ts                              | TypeScript              |         12 |          0 |          2 |         14 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\support_access.ts                                   | TypeScript              |        121 |          0 |         16 |        137 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\types.ts                                            | TypeScript              |        201 |          0 |          6 |        207 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\usage.integration.test.ts                           | TypeScript              |         42 |          0 |          6 |         48 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\usage.ts                                            | TypeScript              |        162 |          0 |         16 |        178 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\usage_producer.test.ts                              | TypeScript              |         19 |          0 |          2 |         21 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\usage_producer.ts                                   | TypeScript              |         38 |          0 |          5 |         43 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\webhook_crypto.test.ts                              | TypeScript              |         18 |          0 |          2 |         20 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\src\webhook_crypto.ts                                   | TypeScript              |         29 |          0 |          5 |         34 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\tsconfig.json                                           | JSON with Comments      |         16 |          0 |          1 |         17 |
+| c:\Users\chris\Desktop\sandbox\services\control-plane\vitest.config.ts                                        | TypeScript              |          4 |          0 |          2 |          6 |
+| c:\Users\chris\Desktop\sandbox\services\hosted-runner\Dockerfile                                              | Docker                  |         15 |          1 |          2 |         18 |
+| c:\Users\chris\Desktop\sandbox\services\hosted-runner\examples\set-data.json                                  | JSON                    |         42 |          0 |          1 |         43 |
+| c:\Users\chris\Desktop\sandbox\services\hosted-runner\src\lib.rs                                              | Rust                    |        473 |          0 |         19 |        492 |
+| c:\Users\chris\Desktop\sandbox\services\hosted-runner\src\main.rs                                             | Rust                    |         61 |          0 |          2 |         63 |
+| c:\Users\chris\Desktop\sandbox\services\hosted-runner\src\usage.rs                                            | Rust                    |        134 |          0 |          7 |        141 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\package.json                                                | JSON                    |         22 |          0 |          1 |         23 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\src\postgres.integration.test.ts                            | TypeScript              |         49 |          0 |          6 |         55 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\src\postgres.ts                                             | TypeScript              |         13 |          0 |          4 |         17 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\src\queue.ts                                                | TypeScript              |         15 |          0 |          1 |         16 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\src\schedule.test.ts                                        | TypeScript              |          9 |          0 |          2 |         11 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\src\schedule.ts                                             | TypeScript              |         31 |          3 |          4 |         38 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\tsconfig.json                                               | JSON with Comments      |          4 |          0 |          2 |          6 |
+| c:\Users\chris\Desktop\sandbox\services\scheduler\vitest.config.ts                                            | TypeScript              |          2 |          0 |          2 |          4 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\build.rs                                                             | Rust                    |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\capabilities\default.json                                            | JSON                    |         12 |          0 |          1 |         13 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\001_initial.sql                                    | MS SQL                  |         44 |          0 |          6 |         50 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\002_schedule_state.sql                             | MS SQL                  |          8 |          0 |          3 |         11 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\003_browser_integrations.sql                       | MS SQL                  |         87 |          0 |         10 |         97 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\004_integration_polling.sql                        | MS SQL                  |          7 |          0 |          3 |         10 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\005_plugin_installations.sql                       | MS SQL                  |         57 |          0 |          5 |         62 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\006_plugin_execution.sql                           | MS SQL                  |         27 |          0 |          4 |         31 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\007_runner_command_receipts.sql                    | MS SQL                  |         14 |          0 |          3 |         17 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\008_workflow_metadata.sql                          | MS SQL                  |         11 |          0 |          3 |         14 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\migrations\009_workflow_revisions_and_state.sql               | MS SQL                  |         29 |          0 |          5 |         34 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\db.rs                                                     | Rust                    |      2,080 |          0 |         93 |      2,173 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\engine.rs                                                 | Rust                    |      2,531 |          0 |         54 |      2,585 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\error.rs                                                  | Rust                    |         52 |          0 |          3 |         55 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\lib.rs                                                    | Rust                    |         13 |          0 |          2 |         15 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\model.rs                                                  | Rust                    |        521 |         11 |         41 |        573 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\permissions.rs                                            | Rust                    |         71 |          0 |          5 |         76 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\redaction.rs                                              | Rust                    |         63 |          0 |          5 |         68 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\references.rs                                             | Rust                    |        119 |          0 |          5 |        124 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\schedule.rs                                               | Rust                    |        108 |          0 |          3 |        111 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\engine\src\validation.rs                                             | Rust                    |        637 |          0 |         15 |        652 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\gen\schemas\acl-manifests.json                                       | JSON                    |          1 |          0 |          0 |          1 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\gen\schemas\capabilities.json                                        | JSON                    |          1 |          0 |          0 |          1 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\gen\schemas\desktop-schema.json                                      | JSON                    |      2,843 |          0 |          0 |      2,843 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\gen\schemas\windows-schema.json                                      | JSON                    |      2,843 |          0 |          0 |      2,843 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\icons\android\mipmap-anydpi-v26\ic_launcher.xml                      | XML                     |          5 |          0 |          0 |          5 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\icons\android\values\ic_launcher_background.xml                      | XML                     |          4 |          0 |          0 |          4 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\icons\icon.svg                                                       | XML                     |          8 |          0 |          1 |          9 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\examples\verify_package.rs                            | Rust                    |         31 |          0 |          2 |         33 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\broker.rs                                         | Rust                    |        835 |          0 |         43 |        878 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\error.rs                                          | Rust                    |         20 |          0 |          2 |         22 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\lib.rs                                            | Rust                    |         22 |          0 |          3 |         25 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\manifest.rs                                       | Rust                    |        705 |          0 |         34 |        739 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\package.rs                                        | Rust                    |        349 |          0 |         22 |        371 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\runtime.rs                                        | Rust                    |        431 |          0 |         20 |        451 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\src\schema.rs                                         | Rust                    |         73 |          1 |          6 |         80 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\plugin-runtime\tests\example_plugins.rs                              | Rust                    |        130 |          0 |          8 |        138 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\account_auth.rs                                                  | Rust                    |        336 |          0 |         20 |        356 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\browser_sidecar.rs                                               | Rust                    |        288 |          0 |         19 |        307 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\commands.rs                                                      | Rust                    |      2,284 |          0 |         85 |      2,369 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\credential_vault.rs                                              | Rust                    |         98 |          0 |         12 |        110 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\integrations.rs                                                  | Rust                    |        525 |          0 |         12 |        537 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\lib.rs                                                           | Rust                    |        492 |          0 |         13 |        505 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\main.rs                                                          | Rust                    |          3 |          0 |          1 |          4 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\marketplace.rs                                                   | Rust                    |        218 |          0 |         14 |        232 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\oauth.rs                                                         | Rust                    |        216 |          0 |         13 |        229 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\plugin_manager.rs                                                | Rust                    |        914 |          2 |         46 |        962 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\remote_runner.rs                                                 | Rust                    |        314 |          0 |         16 |        330 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\runner.rs                                                        | Rust                    |        377 |          0 |          9 |        386 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\sync_crypto.rs                                                   | Rust                    |        400 |          0 |         22 |        422 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\src\templates.rs                                                     | Rust                    |        479 |          0 |         11 |        490 |
+| c:\Users\chris\Desktop\sandbox\src-tauri\tauri.conf.json                                                      | JSON                    |         53 |          0 |          1 |         54 |
+| c:\Users\chris\Desktop\sandbox\src\App.tsx                                                                    | TypeScript JSX          |        339 |          0 |          5 |        344 |
+| c:\Users\chris\Desktop\sandbox\src\api.ts                                                                     | TypeScript              |        467 |          0 |          1 |        468 |
+| c:\Users\chris\Desktop\sandbox\src\attribution.css                                                            | PostCSS                 |          7 |          0 |          1 |          8 |
+| c:\Users\chris\Desktop\sandbox\src\catalogue.test.ts                                                          | TypeScript              |         33 |          0 |          5 |         38 |
+| c:\Users\chris\Desktop\sandbox\src\catalogue.ts                                                               | TypeScript              |        105 |          0 |          2 |        107 |
+| c:\Users\chris\Desktop\sandbox\src\code_splitting.test.ts                                                     | TypeScript              |         26 |          0 |          4 |         30 |
+| c:\Users\chris\Desktop\sandbox\src\components\AccessibleWorkflowEditor.test.tsx                               | TypeScript JSX          |         53 |          0 |          9 |         62 |
+| c:\Users\chris\Desktop\sandbox\src\components\AccessibleWorkflowEditor.tsx                                    | TypeScript JSX          |         85 |          0 |          9 |         94 |
+| c:\Users\chris\Desktop\sandbox\src\components\ApprovalRequest.tsx                                             | TypeScript JSX          |        296 |          0 |          4 |        300 |
+| c:\Users\chris\Desktop\sandbox\src\components\BrowserRecorder.tsx                                             | TypeScript JSX          |        362 |          0 |          6 |        368 |
+| c:\Users\chris\Desktop\sandbox\src\components\CloudView.tsx                                                   | TypeScript JSX          |        509 |          0 |         15 |        524 |
+| c:\Users\chris\Desktop\sandbox\src\components\CommandPalette.test.tsx                                         | TypeScript JSX          |         12 |          0 |          2 |         14 |
+| c:\Users\chris\Desktop\sandbox\src\components\CommandPalette.tsx                                              | TypeScript JSX          |        302 |          0 |          3 |        305 |
+| c:\Users\chris\Desktop\sandbox\src\components\ConnectionsSettings.tsx                                         | TypeScript JSX          |        415 |          0 |          7 |        422 |
+| c:\Users\chris\Desktop\sandbox\src\components\Dashboard.test.tsx                                              | TypeScript JSX          |        116 |          0 |          5 |        121 |
+| c:\Users\chris\Desktop\sandbox\src\components\Dashboard.tsx                                                   | TypeScript JSX          |        697 |          0 |          4 |        701 |
+| c:\Users\chris\Desktop\sandbox\src\components\DesktopUpdateNotice.tsx                                         | TypeScript JSX          |         34 |          0 |          6 |         40 |
+| c:\Users\chris\Desktop\sandbox\src\components\EmptyState.tsx                                                  | TypeScript JSX          |         14 |          0 |          2 |         16 |
+| c:\Users\chris\Desktop\sandbox\src\components\ExecutionInspector.tsx                                          | TypeScript JSX          |        419 |          0 |          8 |        427 |
+| c:\Users\chris\Desktop\sandbox\src\components\HistoryView.tsx                                                 | TypeScript JSX          |        434 |          0 |          2 |        436 |
+| c:\Users\chris\Desktop\sandbox\src\components\InstalledPluginsView.tsx                                        | TypeScript JSX          |        420 |          0 |          8 |        428 |
+| c:\Users\chris\Desktop\sandbox\src\components\MarketplaceView.tsx                                             | TypeScript JSX          |        406 |          0 |          3 |        409 |
+| c:\Users\chris\Desktop\sandbox\src\components\NodeInspector.tsx                                               | TypeScript JSX          |      1,861 |          0 |         32 |      1,893 |
+| c:\Users\chris\Desktop\sandbox\src\components\PendingApprovalsView.tsx                                        | TypeScript JSX          |         78 |          0 |          2 |         80 |
+| c:\Users\chris\Desktop\sandbox\src\components\PluginsHub.tsx                                                  | TypeScript JSX          |         53 |          0 |          3 |         56 |
+| c:\Users\chris\Desktop\sandbox\src\components\SettingsView.tsx                                                | TypeScript JSX          |        849 |          0 |         11 |        860 |
+| c:\Users\chris\Desktop\sandbox\src\components\Sidebar.tsx                                                     | TypeScript JSX          |        279 |          0 |          3 |        282 |
+| c:\Users\chris\Desktop\sandbox\src\components\Status.tsx                                                      | TypeScript JSX          |          4 |          0 |          1 |          5 |
+| c:\Users\chris\Desktop\sandbox\src\components\WorkflowEditor.tsx                                              | TypeScript JSX          |      1,591 |          1 |          3 |      1,595 |
+| c:\Users\chris\Desktop\sandbox\src\components\WorkflowNodeCard.tsx                                            | TypeScript JSX          |         17 |          0 |          2 |         19 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\AsyncErrorBoundary.tsx                                       | TypeScript JSX          |         13 |          0 |          3 |         16 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\Dialog.test.tsx                                              | TypeScript JSX          |         44 |          0 |          3 |         47 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\Dialog.tsx                                                   | TypeScript JSX          |        183 |          1 |          8 |        192 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\States.tsx                                                   | TypeScript JSX          |         11 |          0 |          4 |         15 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\Toast.tsx                                                    | TypeScript JSX          |         23 |          0 |          4 |         27 |
+| c:\Users\chris\Desktop\sandbox\src\components\ui\Tooltip.tsx                                                  | TypeScript JSX          |          8 |          0 |          3 |         11 |
+| c:\Users\chris\Desktop\sandbox\src\main.tsx                                                                   | TypeScript JSX          |         10 |          0 |          2 |         12 |
+| c:\Users\chris\Desktop\sandbox\src\marketplace.css                                                            | PostCSS                 |          4 |          0 |          2 |          6 |
+| c:\Users\chris\Desktop\sandbox\src\plugins.css                                                                | PostCSS                 |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\src\preferences.css                                                            | PostCSS                 |        221 |          0 |         39 |        260 |
+| c:\Users\chris\Desktop\sandbox\src\preferences.test.ts                                                        | TypeScript              |         35 |          0 |          6 |         41 |
+| c:\Users\chris\Desktop\sandbox\src\preferences.ts                                                             | TypeScript              |        153 |          0 |         11 |        164 |
+| c:\Users\chris\Desktop\sandbox\src\previewApi.ts                                                              | TypeScript              |      1,185 |          0 |          2 |      1,187 |
+| c:\Users\chris\Desktop\sandbox\src\public_domains.test.ts                                                     | TypeScript              |         16 |          0 |          3 |         19 |
+| c:\Users\chris\Desktop\sandbox\src\qol.css                                                                    | PostCSS                 |      1,286 |          7 |         13 |      1,306 |
+| c:\Users\chris\Desktop\sandbox\src\release_compatibility.test.ts                                              | TypeScript              |        137 |          0 |         16 |        153 |
+| c:\Users\chris\Desktop\sandbox\src\store.ts                                                                   | TypeScript              |         81 |          0 |          2 |         83 |
+| c:\Users\chris\Desktop\sandbox\src\styles.css                                                                 | PostCSS                 |         20 |          0 |          1 |         21 |
+| c:\Users\chris\Desktop\sandbox\src\test\setup.ts                                                              | TypeScript              |          1 |          0 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\src\types.ts                                                                   | TypeScript              |         67 |          2 |          1 |         70 |
+| c:\Users\chris\Desktop\sandbox\src\updates.test.ts                                                            | TypeScript              |         14 |          0 |          3 |         17 |
+| c:\Users\chris\Desktop\sandbox\src\updates.ts                                                                 | TypeScript              |         70 |          0 |          8 |         78 |
+| c:\Users\chris\Desktop\sandbox\src\vite-env.d.ts                                                              | TypeScript              |          0 |          1 |          1 |          2 |
+| c:\Users\chris\Desktop\sandbox\tsconfig.app.json                                                              | JSON                    |         20 |          0 |          1 |         21 |
+| c:\Users\chris\Desktop\sandbox\tsconfig.json                                                                  | JSON with Comments      |          7 |          0 |          1 |          8 |
+| c:\Users\chris\Desktop\sandbox\tsconfig.node.json                                                             | JSON                    |         11 |          0 |          1 |         12 |
+| c:\Users\chris\Desktop\sandbox\vite.config.ts                                                                 | TypeScript              |         31 |          0 |          4 |         35 |
+| Total                                                                                                         |                         |     94,565 |         80 |      4,916 |     99,561 |
++---------------------------------------------------------------------------------------------------------------+-------------------------+------------+------------+------------+------------+

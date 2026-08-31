@@ -1,0 +1,210 @@
+.demo {
+  --bg: #090b0a;
+  --surface: #0f1210;
+  --surface-raised: #151816;
+  --surface-hover: #1a1e1b;
+  --border: #2b302c;
+  --border-strong: #3a403b;
+  --text: #f1f3ed;
+  --text-secondary: #a7ada7;
+  --text-muted: #7e867f;
+  --accent: #d6ff4b;
+  --accent-ring: rgba(214, 255, 75, 0.14);
+  --success: #63c48d;
+  --warning: #d8aa5e;
+  --error: #e16f70;
+  min-width: 0;
+  border: 1px solid #2d322e;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+}
+
+.toolbar {
+  min-height: 54px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: #0d100e;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.toolbar > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.toolbar > div > span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.toolbar strong { font-size: 11px; }
+.toolbar small { color: var(--text-muted); font-size: 9px; }
+
+.toolbar button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.toolbar button:hover,
+.toolbar button:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.desktopCanvas {
+  height: 540px;
+  border-bottom: 1px solid var(--border);
+}
+
+.desktopCanvas :global(.react-flow__edge-path) {
+  stroke: #555b55;
+  stroke-width: 1.5;
+}
+
+.desktopCanvas :global(.react-flow__controls) {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.desktopCanvas :global(.react-flow__controls-button) {
+  border-bottom-color: var(--border);
+  background: var(--surface);
+  fill: var(--text-secondary);
+}
+
+.desktopCanvas :global(.react-flow__minimap) {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0d100e;
+}
+
+.mobileCanvas { display: none; }
+
+.inspector {
+  min-height: 118px;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.35fr) minmax(0, 1fr);
+}
+
+.inspector > header {
+  padding: 22px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+}
+
+.inspector > header span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.inspector > header strong {
+  font-size: 13px;
+}
+
+.inspector dl {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.inspector dl > div {
+  min-width: 0;
+  padding: 20px;
+  border-right: 1px solid var(--border);
+}
+
+.inspector dl > div:last-child { border-right: 0; }
+
+.inspector dt {
+  color: var(--text-muted);
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.inspector dd {
+  margin: 9px 0 0;
+  overflow: hidden;
+  color: #cbd0ca;
+  font: 9px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .toolbar small,
+  .desktopCanvas { display: none; }
+
+  .mobileCanvas {
+    padding: 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  .mobileCanvas > button {
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    scroll-snap-align: start;
+    cursor: pointer;
+  }
+
+  .mobileCanvas :global(.node-card) { height: 112px; }
+
+  .inspector {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector > header {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inspector dl {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector dl > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .inspector dl > div:last-child { border-bottom: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo * { scroll-behavior: auto !important; }
+}

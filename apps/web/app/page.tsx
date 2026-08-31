@@ -1,5 +1,5 @@
 import { launchRelease } from "@sandbox/content";
-import { ArrowRight, CheckCircle2, Download, KeyRound, LifeBuoy, Package, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleAlert, Download, KeyRound, LifeBuoy, Package, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { authenticatedClient } from "../lib/auth";
 
@@ -7,6 +7,7 @@ export const dynamic="force-dynamic";
 
 export default async function Home() {
   const api=await authenticatedClient();
+  if(!api)return <main className="portal-page"><section className="blocked-notice"><CircleAlert/><div><strong>Account unavailable</strong><p>Your authenticated control-plane session could not be created. Sign in again or check the account service configuration.</p></div></section></main>;
   const [profile,organisations,commerce]=api?await Promise.allSettled([api.getAccountProfile(),api.listAccountOrganisations(),api.getProductAccount()]):[];
   const account=profile?.status==="fulfilled"?profile.value.data:null;
   const organisationItems=organisations?.status==="fulfilled"?organisations.value.data.items:[];
@@ -18,7 +19,7 @@ export default async function Home() {
     <section className="overview-grid">
       <article><header><Package/><span>Recent release</span></header><strong>Sandbox {launchRelease.version}</strong><p>{launchRelease.summary}</p><Link href="/releases">View release notes <ArrowRight/></Link></article>
       <article><header><Users/><span>Team workspaces</span></header><strong>{organisationItems.length} organisation{organisationItems.length===1?"":"s"}</strong><p>{organisationItems.flatMap(item=>item.workspaces).length} accessible workspaces with enforced roles and governance.</p><Link href="/organisations">Open operations <ArrowRight/></Link></article>
-      <article><header><KeyRound/><span>Developer access</span></header><strong>Stable v1 API</strong><p>Personal tokens, service accounts and client assertions use the validated public contract.</p><Link href="/security">Review access <ArrowRight/></Link></article>
+      <article><header><KeyRound/><span>Developer access</span></header><strong>Versioned v1 beta API</strong><p>Personal tokens, service accounts and client assertions use the validated public contract.</p><Link href="/security">Review access <ArrowRight/></Link></article>
       <article><header><LifeBuoy/><span>Support access</span></header><strong>Approval protected</strong><p>Temporary diagnostic access is time-boxed, auditable, revocable and automatically expires.</p><Link href="/support">Support options <ArrowRight/></Link></article>
     </section>
     <section className="account-status"><h2>Service readiness</h2><p><CheckCircle2/>Account data above is loaded from the authenticated control plane.</p><p><CheckCircle2/>Encrypted sync, publication approvals, deployment preflight and runner pools are available.</p><p><ShieldCheck/>Credentials stay server-side and every workspace operation is authorised again at the API.</p></section>

@@ -4,7 +4,7 @@ import { groupBy } from "../../../../lib/group-by";
 
 export const metadata: Metadata = {
   title: "API reference",
-  description: "Generated reference for the stable Sandbox control-plane v1 API.",
+  description: "Generated reference for the versioned Sandbox control-plane v1 beta API.",
   openGraph: { images: [] },
   twitter: { images: [] },
 };
@@ -13,7 +13,7 @@ export default function ApiReferencePage() {
   const groups = groupBy(apiOperations, operation => operation.tag);
   return <main id="doc" className="doc-page"><article>
     <header><div><span className="version">Generated from OpenAPI {apiInfo.version}</span></div><h1>{apiInfo.title}</h1><p>{apiInfo.description}</p></header>
-    <section><h2>Contract guarantees</h2><p>This reference is generated from <code>docs/api/openapi-v1.json</code>, the same validated contract used by the control-plane compatibility tests and typed client. Stable operations are additive within v1.</p></section>
+    <section><h2>Contract status</h2><p>This beta reference is generated from <code>docs/api/openapi-v1.json</code>, the same validated contract used by the control-plane compatibility tests and typed client. Operations explicitly marked stable are additive within v1.</p></section>
     {Array.from(groups, ([tag, operations]) => <section key={tag}>
       <h2>{tag}</h2>
       <div className="api-operations">{operations.map(operation => <article className="api-operation" key={operation.operationId}>

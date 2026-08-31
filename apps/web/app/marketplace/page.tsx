@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { officialIntegrations } from "@sandbox/content";
+import { launchRelease, officialIntegrations } from "@sandbox/content";
 import {
   BadgeCheck,
   Box,
@@ -32,7 +32,7 @@ export default async function MarketplacePage({
       : "recent";
   const verified = values.verified === "true";
   const query = new URLSearchParams({
-    hostVersion: "0.5.0",
+    hostVersion: launchRelease.version,
     limit: "24",
     pricing,
     sort,
@@ -102,7 +102,7 @@ export default async function MarketplacePage({
       <section className="listing-section">
         <header>
           <div>
-            <h2>Compatible with Sandbox 0.3</h2>
+            <h2>Compatible with Sandbox {launchRelease.version}</h2>
             <p>
               {resultCount} signed integration
               {resultCount === 1 ? "" : "s"} in this page

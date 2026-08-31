@@ -1,64 +1,60 @@
 .header {
-  --header-height: 72px;
   position: sticky;
-  z-index: 100;
   top: 0;
-  height: var(--header-height);
-  border-bottom: 1px solid transparent;
-  background: #08090a;
-  color: #f4f5ef;
-  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+  z-index: 80;
+  height: 64px;
+  border-bottom: 1px solid rgba(242, 244, 238, 0.1);
+  background: rgba(9, 11, 10, 0.88);
+  backdrop-filter: blur(18px) saturate(135%);
+  transition: background-color 180ms ease, border-color 180ms ease;
 }
 
-.header[data-scrolled="true"],
-.header:has(.navGroup[data-open="true"]) {
-  border-bottom-color: #24272a;
-  background: rgba(8, 9, 10, 0.97);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+.header[data-scrolled="true"] {
+  border-color: rgba(242, 244, 238, 0.17);
+  background: rgba(9, 11, 10, 0.97);
+}
+
+.header[data-mobile-open="true"] {
+  background: #090b0a;
+  backdrop-filter: none;
 }
 
 .inner {
-  width: min(100%, 1500px);
+  width: min(100%, 1440px);
   height: 100%;
   margin: 0 auto;
-  padding: 0 clamp(20px, 3vw, 48px);
+  padding: 0 clamp(18px, 3vw, 42px);
   display: flex;
   align-items: center;
-  gap: clamp(32px, 4vw, 68px);
+  gap: clamp(24px, 3.4vw, 50px);
 }
 
 .wordmark {
-  position: relative;
-  z-index: 2;
   flex: 0 0 auto;
+  color: #f2f4ee;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: #f4f5ef;
-  font-size: 15px;
-  font-weight: 740;
-  letter-spacing: -0.035em;
+  gap: 11px;
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
 }
 
 .mark {
-  width: 29px;
-  height: 29px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   background: #d6ff4b;
-  color: #0a0c08;
+  color: #10130a;
   display: grid;
   place-items: center;
-  transition: transform 180ms ease;
-}
-
-.wordmark:hover .mark {
-  transform: rotate(-4deg);
 }
 
 .desktopNav {
   height: 100%;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
 }
 
 .navGroup {
@@ -69,496 +65,381 @@
 
 .navGroup > button,
 .directLink {
-  position: relative;
-  height: 38px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 13px;
   border: 0;
+  border-radius: 7px;
   background: transparent;
-  color: #a7adb1;
+  color: #aeb4ae;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 610;
-  transition: background-color 160ms ease, color 160ms ease;
-}
-
-.navGroup > button::after,
-.directLink::after {
-  content: "";
-  position: absolute;
-  right: 12px;
-  bottom: 4px;
-  left: 12px;
-  height: 1px;
-  background: #d6ff4b;
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 160ms ease;
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .navGroup > button:hover,
 .navGroup > button:focus-visible,
 .navGroup > button[data-active="true"],
+.navGroup[data-open="true"] > button,
 .directLink:hover,
 .directLink:focus-visible,
 .directLink[data-active="true"] {
-  color: #f4f5ef;
+  background: #171a18;
+  color: #f3f5ef;
 }
 
-.navGroup > button[data-active="true"]::after,
-.directLink[data-active="true"]::after {
-  transform: scaleX(1);
+.navGroup > button:focus-visible,
+.directLink:focus-visible,
+.signIn:focus-visible,
+.primaryAction:focus-visible,
+.menuButton:focus-visible {
+  outline: 2px solid #d6ff4b;
+  outline-offset: 2px;
 }
 
-.navGroup[data-open="true"] > button {
-  background: #d6ff4b;
-  color: #0b0d09;
-}
-
-.navGroup[data-open="true"] > button::after {
-  display: none;
-}
-
-.navGroup[data-open="true"] > button svg {
-  transform: rotate(180deg);
-}
+.navGroup > button svg { transition: transform 160ms ease; }
+.navGroup[data-open="true"] > button svg { transform: rotate(180deg); }
 
 .dropdown {
-  position: fixed;
-  z-index: 104;
-  top: 66px;
+  position: absolute;
+  top: calc(100% + 8px);
   left: 50%;
-  width: min(1080px, calc(100vw - 48px));
-  min-height: 322px;
-  border: 1px solid #c9c9bd;
-  background: #ebeade;
-  color: #11130f;
-  display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+  width: min(940px, calc(100vw - 40px));
+  padding: 28px;
+  border: 1px solid #c8cbc1;
+  border-radius: 12px;
+  background: #f1f2eb;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
+  color: #151814;
   opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -9px);
   visibility: hidden;
-  transition: opacity 150ms ease, transform 180ms ease, visibility 150ms ease;
+  pointer-events: none;
+  transform: translate(-50%, -7px);
+  transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 150ms;
+}
+
+.dropdown[data-count="2"] { width: min(690px, calc(100vw - 40px)); }
+
+.dropdown::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 10px;
 }
 
 .navGroup[data-open="true"] .dropdown {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
   transform: translate(-50%, 0);
-  visibility: visible;
-}
-
-.dropdownLead {
-  min-width: 0;
-  padding: 28px 25px;
-  border-right: 1px solid #bdbdb1;
-  background: #d6ff4b;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.dropdownLead small {
-  font: 720 8px ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.15em;
-}
-
-.dropdownLead p {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 680;
-  letter-spacing: -0.045em;
-  line-height: 1.08;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 0s;
 }
 
 .dropdownSections {
-  min-width: 0;
-  padding: 23px;
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
 }
 
-.dropdownSections > section {
-  min-width: 0;
-  flex: 1 1 0;
+.dropdownSections[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dropdownSections section { min-width: 0; }
+.dropdownSections section + section {
+  padding-left: 28px;
+  border-left: 1px solid #d2d5cb;
 }
 
 .dropdownSections h2 {
-  margin: 0 11px 11px;
-  color: #686a62;
-  font: 720 8px ui-monospace, SFMono-Regular, Consolas, monospace;
-  letter-spacing: 0.14em;
+  margin: 0 4px 12px;
+  color: #697067;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .dropdownSections a {
-  min-height: 72px;
-  padding: 11px;
-  display: block;
-  outline-offset: -2px;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-
-.dropdownSections a > span {
+  min-height: 74px;
+  padding: 14px 5px;
+  border-top: 1px solid #d2d5cb;
+  border-radius: 4px;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 720;
-}
-
-.dropdownSections a small {
-  max-width: 205px;
-  margin-top: 5px;
-  color: #6d7068;
-  display: block;
-  font-size: 9px;
-  line-height: 1.45;
+  flex-direction: column;
+  justify-content: center;
+  transition: background-color 150ms ease, transform 150ms ease;
 }
 
 .dropdownSections a:hover,
 .dropdownSections a:focus-visible,
 .dropdownSections a[data-current="true"] {
-  background: #11130f;
-  color: #f2f1e6;
+  background: #e5e8dc;
+  transform: translateX(3px);
 }
 
-.dropdownSections a:hover small,
-.dropdownSections a:focus-visible small,
-.dropdownSections a[data-current="true"] small {
-  color: #a9aca2;
+.dropdownSections a:focus-visible {
+  outline: 2px solid #526800;
+  outline-offset: 2px;
 }
 
-.dropdownSections a[data-current="true"] > span::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  background: #d6ff4b;
+.dropdownSections a > span {
+  color: #171a16;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.dropdownSections a[data-current="true"] > span { color: #4c6200; }
+
+.dropdownSections a > small {
+  max-width: 29ch;
+  margin-top: 6px;
+  color: #687067;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .actions {
-  position: relative;
-  z-index: 2;
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 17px;
+  gap: 10px;
 }
 
 .signIn {
-  padding-left: 17px;
-  border-left: 1px solid #2c3033;
-  color: #a7adb1;
-  font-size: 11px;
-  font-weight: 610;
-  transition: color 150ms ease;
+  min-height: 42px;
+  padding: 0 9px;
+  color: #aeb4ae;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
-.signIn:hover,
-.signIn:focus-visible {
-  color: #f4f5ef;
-}
+.signIn:hover { color: #f1f3ed; background: #171a18; }
 
 .primaryAction {
-  height: 38px;
-  padding: 0 14px;
-  background: #f2f3ed;
-  color: #0b0d0e;
+  min-height: 42px;
+  padding: 0 15px;
+  border-radius: 7px;
+  background: #f2f4ee;
+  color: #11130f;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
-  font-weight: 730;
-  transition: background-color 160ms ease, transform 160ms ease;
+  font-size: 13px;
+  font-weight: 720;
+  transition: background-color 150ms ease, transform 150ms ease;
 }
 
-.primaryAction:hover,
-.primaryAction:focus-visible,
-.primaryAction[data-active="true"] {
-  background: #d6ff4b;
-  transform: translateY(-1px);
-}
+.primaryAction:hover { background: #d6ff4b; transform: translateY(-1px); }
+.primaryAction:active { transform: translateY(0); }
 
 .menuButton {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   padding: 0;
-  border: 1px solid #2d3134;
-  background: #111315;
-  color: #f4f5ef;
+  border: 1px solid #303530;
+  border-radius: 7px;
+  background: transparent;
+  color: #eef0ea;
   display: none;
   place-items: center;
   cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
+
+.menuButton:hover { border-color: #636b64; background: #171a18; }
 
 .mobileBackdrop,
-.mobilePanel {
-  display: none;
-}
+.mobilePanel { display: none; }
 
-@media (max-width: 1120px) {
+@media (max-width: 1040px) {
   .desktopNav,
-  .signIn {
-    display: none;
-  }
-
-  .menuButton {
-    display: grid;
-  }
+  .signIn,
+  .primaryAction { display: none; }
+  .menuButton { display: grid; }
+  .header[data-mobile-open="true"] .menuButton { visibility: hidden; pointer-events: none; }
 
   .mobileBackdrop {
     position: fixed;
-    z-index: 101;
-    inset: 0;
+    inset: 64px 0 0;
+    z-index: 81;
     border: 0;
-    background: rgba(0, 0, 0, 0.62);
+    background: rgba(0, 0, 0, 0.6);
     display: block;
-    cursor: default;
   }
 
   .mobilePanel {
     position: fixed;
-    z-index: 102;
-    top: 0;
+    top: 64px;
     right: 0;
-    width: min(570px, 100%);
-    height: 100dvh;
-    background: #ebeade;
-    color: #11130f;
+    bottom: 0;
+    z-index: 82;
+    width: min(480px, 100vw);
+    border-left: 1px solid #303530;
+    background: #0c0f0d;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
-    overflow: hidden;
-    box-shadow: -30px 0 80px rgba(0, 0, 0, 0.3);
-    animation: panelIn 210ms ease-out both;
+    animation: panelIn 200ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .mobilePanel > header {
-    min-height: 92px;
-    padding: 20px 22px;
-    border-bottom: 1px solid #c2c2b6;
+    min-height: 82px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #292e2a;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
+    gap: 18px;
   }
 
-  .mobilePanel > header > div {
-    display: grid;
-    gap: 8px;
-  }
-
-  .mobilePanel > header small {
-    color: #6c6e66;
-    font: 720 8px ui-monospace, SFMono-Regular, Consolas, monospace;
-    letter-spacing: 0.14em;
-  }
-
-  .mobilePanel > header strong {
-    font-size: 17px;
-    letter-spacing: -0.03em;
+  .mobilePanel > header > strong {
+    color: #f2f4ee;
+    font-size: 24px;
+    font-weight: 680;
+    letter-spacing: -0.035em;
   }
 
   .mobilePanel > header button {
-    width: 43px;
-    height: 43px;
-    padding: 0;
-    border: 1px solid #b4b5a9;
+    width: 42px;
+    height: 42px;
+    border: 1px solid #343a35;
+    border-radius: 7px;
     background: transparent;
-    color: #11130f;
+    color: #eef0ea;
     display: grid;
     place-items: center;
     cursor: pointer;
   }
 
+  .mobilePanel > header button:hover,
+  .mobilePanel > header button:focus-visible { border-color: #687069; background: #171a18; }
+  .mobilePanel > header button:focus-visible { outline: 2px solid #d6ff4b; outline-offset: 2px; }
+
   .mobilePanel > nav {
     min-height: 0;
-    padding: 0 22px;
-    display: block;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-
-  .mobileGroup {
-    border-bottom: 1px solid #c2c2b6;
+    padding: 10px 22px 26px;
+    overflow: auto;
   }
 
   .mobileGroup > button,
   .mobileDirect {
     width: 100%;
-    min-height: 72px;
+    min-height: 68px;
     padding: 0;
     border: 0;
+    border-bottom: 1px solid #292e2a;
     background: transparent;
-    color: #11130f;
-    display: grid;
-    grid-template-columns: 34px 1fr auto;
+    color: #eef0ea;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    text-align: left;
+    justify-content: space-between;
     cursor: pointer;
+    text-align: left;
   }
 
-  .mobileGroup > button > span,
-  .mobileDirect > span {
-    color: #777970;
-    font: 700 9px ui-monospace, SFMono-Regular, Consolas, monospace;
-  }
-
-  .mobileGroup > button > strong,
-  .mobileDirect > strong {
+  .mobileGroup > button strong,
+  .mobileDirect strong {
     font-size: 21px;
-    letter-spacing: -0.045em;
+    font-weight: 640;
+    letter-spacing: -0.035em;
   }
 
-  .mobileGroup > button[data-active="true"] > span,
-  .mobileDirect[data-current="true"] > span {
-    color: #11130f;
-  }
-
-  .mobileGroup > button[data-active="true"] > strong,
-  .mobileDirect[data-current="true"] > strong {
-    text-decoration: underline;
-    text-decoration-color: #8eaa2a;
-    text-decoration-thickness: 2px;
-    text-underline-offset: 6px;
-  }
-
-  .mobileGroup > button[aria-expanded="true"] svg {
-    transform: rotate(180deg);
-  }
+  .mobileGroup > button:focus-visible,
+  .mobileDirect:focus-visible { outline: 2px solid #d6ff4b; outline-offset: -2px; }
+  .mobileGroup > button svg { color: #8b938c; transition: transform 160ms ease; }
+  .mobileGroup > button[aria-expanded="true"] svg { transform: rotate(180deg); }
 
   .mobileGroup > div {
-    padding: 2px 0 23px 34px;
+    padding: 14px 0 22px;
+    border-bottom: 1px solid #292e2a;
   }
 
-  .mobileGroup > div > section + section {
-    margin-top: 20px;
-  }
-
+  .mobileGroup > div section + section { margin-top: 22px; }
   .mobileGroup h2 {
-    margin: 0 0 7px;
-    color: #777970;
-    font: 720 8px ui-monospace, SFMono-Regular, Consolas, monospace;
-    letter-spacing: 0.14em;
+    margin: 0 8px 7px;
+    color: #7c857d;
+    font-size: 10px;
+    font-weight: 750;
     text-transform: uppercase;
+    letter-spacing: 0.1em;
   }
 
   .mobileGroup a {
-    min-height: 51px;
-    padding: 8px 10px;
-    display: block;
-  }
-
-  .mobileGroup a > span {
+    min-height: 62px;
+    padding: 10px 8px;
+    border-radius: 7px;
     display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 720;
-  }
-
-  .mobileGroup a small {
-    margin-top: 4px;
-    color: #6c6e66;
-    display: block;
-    font-size: 9px;
-    line-height: 1.4;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .mobileGroup a:hover,
   .mobileGroup a:focus-visible,
-  .mobileGroup a[data-current="true"] {
-    background: #11130f;
-    color: #f2f1e6;
-  }
-
-  .mobileGroup a:hover small,
-  .mobileGroup a:focus-visible small,
-  .mobileGroup a[data-current="true"] small {
-    color: #a9aca2;
-  }
-
-  .mobileDirect {
-    border-bottom: 1px solid #c2c2b6;
-  }
+  .mobileGroup a[data-current="true"] { background: #171b18; }
+  .mobileGroup a:focus-visible { outline: 2px solid #d6ff4b; outline-offset: 1px; }
+  .mobileGroup a > span { color: #edf0e9; font-size: 16px; font-weight: 680; letter-spacing: -0.02em; }
+  .mobileGroup a[data-current="true"] > span { color: #d6ff4b; }
+  .mobileGroup a > small { max-width: 39ch; margin-top: 5px; color: #929a93; font-size: 12px; line-height: 1.45; }
 
   .mobilePanel > footer {
-    padding: 18px 22px;
-    border-top: 1px solid #c2c2b6;
-    background: #d6ff4b;
+    min-height: 80px;
+    padding: 14px 22px;
+    border-top: 1px solid #303530;
     display: grid;
-    grid-template-columns: 1fr 1.45fr;
+    grid-template-columns: 0.7fr 1.3fr;
     gap: 10px;
   }
 
   .mobilePanel > footer a {
-    min-height: 46px;
-    padding: 0 14px;
-    border: 1px solid #11130f;
-    display: inline-flex;
+    min-height: 50px;
+    border: 1px solid #343a35;
+    border-radius: 7px;
+    display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    font-size: 11px;
-    font-weight: 720;
+    font-size: 13px;
+    font-weight: 700;
   }
 
-  .mobilePanel > footer a:last-child {
-    background: #11130f;
-    color: #f2f1e6;
-  }
+  .mobilePanel > footer a:hover,
+  .mobilePanel > footer a:focus-visible { border-color: #6e766f; }
+  .mobilePanel > footer a:focus-visible { outline: 2px solid #d6ff4b; outline-offset: 2px; }
+  .mobilePanel > footer a:last-child { border-color: #d6ff4b; background: #d6ff4b; color: #11130b; }
 }
 
-@media (max-width: 600px) {
-  .header {
-    --header-height: 64px;
-  }
-
-  .inner {
-    padding: 0 16px;
-  }
-
-  .primaryAction {
-    display: none;
-  }
-
-  .actions {
-    gap: 9px;
-  }
-
+@media (max-width: 520px) {
+  .inner { padding: 0 14px; }
+  .mobilePanel { width: 100vw; border-left: 0; }
   .mobilePanel > header,
   .mobilePanel > nav,
-  .mobilePanel > footer {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .mobilePanel > footer {
-    grid-template-columns: 0.8fr 1.2fr;
-  }
+  .mobilePanel > footer { padding-right: 16px; padding-left: 16px; }
 }
 
 @keyframes panelIn {
-  from { transform: translateX(24px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from { opacity: 0; transform: translateX(24px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .header,
-  .mark,
   .navGroup > button,
+  .navGroup > button svg,
   .directLink,
   .dropdown,
-  .primaryAction {
-    transition: none;
-  }
-
-  .mobilePanel {
-    animation: none;
-  }
+  .dropdownSections a,
+  .primaryAction,
+  .mobilePanel,
+  .mobileGroup > button svg { transition: none; animation: none; }
 }

@@ -4,7 +4,7 @@ type DraftPage = Omit<DocPage, "version" | "reviewed"> &
   Partial<Pick<DocPage, "version" | "reviewed">>;
 
 const guide = (page: DraftPage): DocPage => ({
-  version: "0.5.x–0.6.x",
+  version: "0.7.1-beta.3",
   reviewed: "2026-08-28",
   ...page,
 });

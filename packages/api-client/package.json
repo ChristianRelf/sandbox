@@ -1,7 +1,7 @@
 {
   "name": "@sandbox/api-client",
   "version": "0.7.1-beta.3",
-  "description": "Typed client for the stable Sandbox control-plane v1 API",
+  "description": "Typed client for the Sandbox control-plane v1 beta API",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

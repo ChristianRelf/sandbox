@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Box, ExternalLink, Menu } from "lucide-react";
+import { ArrowUpRight, Box } from "lucide-react";
 import { brand } from "@sandbox/brand";
-import { docs, nav } from "../lib/content";
+import { docs, nav, currentProductVersion } from "../lib/content";
 import { DocsNavigation } from "../components/DocsNavigation";
+import { MobileDocsNavigation } from "../components/MobileDocsNavigation";
 import { Search } from "../components/Search";
 import "./globals.css";
 
@@ -26,22 +27,38 @@ export const metadata: Metadata = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <html lang="en" data-scroll-behavior="smooth"><body>
-    <a href="#doc" className="skip-link">Skip to article</a>
-    <header className="topbar">
-      <Link href="/getting-started" className="wordmark"><span><Box size={15}/></span>Sandbox <i>Docs</i></Link>
-      <Search pages={docs}/>
-      <div className="topbar-links"><a href={brand.domains.marketing}>Product</a><a href={brand.domains.app}>Account <ExternalLink size={11}/></a></div>
-      <details className="mobile-navigation">
-        <summary aria-label="Open documentation navigation"><Menu size={18}/></summary>
-        <div><DocsNavigation groups={nav}/></div>
-      </details>
-    </header>
-    <aside className="sidebar">
-      <header><span>DOCUMENTATION</span><small>{docs.length} GUIDES</small></header>
-      <DocsNavigation groups={nav}/>
-      <footer><strong>Current documentation</strong><span>Product 0.5.x · Web 0.6.x</span></footer>
-    </aside>
-    {children}
-  </body></html>;
+  return (
+    <html lang="en" data-scroll-behavior="smooth">
+      <body>
+        <a href="#doc" className="skip-link">Skip to article</a>
+        <header className="topbar">
+          <Link href="/getting-started" className="wordmark" aria-label="Sandbox documentation home">
+            <span><Box aria-hidden="true" size={15} /></span>
+            <strong>Sandbox</strong>
+            <i>Docs</i>
+          </Link>
+          <Search pages={docs} />
+          <nav className="topbar-links" aria-label="Sandbox destinations">
+            <a href={brand.domains.marketing}>Product</a>
+            <a href={brand.domains.app}>Account <ArrowUpRight aria-hidden="true" size={12} /></a>
+          </nav>
+          <MobileDocsNavigation groups={nav} />
+        </header>
+
+        <aside className="sidebar">
+          <div className="sidebar-intro">
+            <strong>Documentation</strong>
+            <p>Build, run and operate Sandbox.</p>
+          </div>
+          <DocsNavigation groups={nav} />
+          <footer>
+            <span>Current source version</span>
+            <strong>{currentProductVersion}</strong>
+          </footer>
+        </aside>
+
+        {children}
+      </body>
+    </html>
+  );
 }

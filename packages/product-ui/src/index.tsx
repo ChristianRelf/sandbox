@@ -1,0 +1,95 @@
+import { Handle, Position } from "@xyflow/react";
+import { AlertTriangle, Plus, type LucideIcon } from "lucide-react";
+import "./node-card.css";
+
+export type ProductNodeStatus =
+  | "idle"
+  | "waiting"
+  | "running"
+  | "successful"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type ProductWorkflowNodeProps = {
+  id: string;
+  name: string;
+  summary: string;
+  icon: LucideIcon;
+  status?: ProductNodeStatus;
+  selected?: boolean;
+  disabled?: boolean;
+  warning?: string;
+  trigger?: boolean;
+  condition?: boolean;
+  inputCount: number;
+  outputLabels: string[];
+  onAdd?: (sourceId: string) => void;
+  standalone?: boolean;
+};
+
+export function ProductWorkflowNode({
+  id,
+  name,
+  summary,
+  icon: Icon,
+  status = "idle",
+  selected = false,
+  disabled = false,
+  warning,
+  trigger = false,
+  condition = false,
+  inputCount,
+  outputLabels,
+  onAdd,
+  standalone = false,
+}: ProductWorkflowNodeProps) {
+  return (
+    <div
+      className={`node-card ${selected ? "selected" : ""} node-${status} ${disabled ? "disabled" : ""}`}
+      data-product-node="true"
+    >
+      {!standalone && !trigger && (
+        <Handle type="target" position={Position.Left} id="input" className="node-handle" />
+      )}
+      <div className="node-top">
+        <span className="node-icon"><Icon aria-hidden="true" size={15} /></span>
+        <span className={`node-state state-${status}`} />
+        {warning && <AlertTriangle className="node-warning" aria-label={warning} size={14} />}
+      </div>
+      <b>{name}</b>
+      <small>{summary}</small>
+      <div
+        className="node-data-contract"
+        aria-label={`${inputCount} typed inputs and ${outputLabels.length} typed outputs`}
+      >
+        <span>{inputCount ? `${inputCount} in` : "trigger"}</span>
+        <span aria-hidden="true">→</span>
+        <span>{outputLabels.slice(0, 2).join(", ") || "done"}</span>
+      </div>
+      {!standalone && condition ? (
+        <>
+          <Handle type="source" position={Position.Right} id="true" className="node-handle branch true" style={{ top: "42%" }} />
+          <Handle type="source" position={Position.Right} id="false" className="node-handle branch false" style={{ top: "76%" }} />
+          <span className="branch-label true-label">true</span>
+          <span className="branch-label false-label">false</span>
+        </>
+      ) : !standalone ? (
+        <Handle type="source" position={Position.Right} id="output" className="node-handle" />
+      ) : null}
+      {!standalone && onAdd && (
+        <button
+          className="node-add nodrag"
+          type="button"
+          aria-label={`Add after ${name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onAdd(id);
+          }}
+        >
+          <Plus aria-hidden="true" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
