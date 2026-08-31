@@ -1,4 +1,4 @@
-# sndbox v0.7.1 beta control-plane deployment
+# sndbox v0.7.2 beta control-plane deployment
 
 This deploys the beta API at `https://api.sndbox.app` with:
 
@@ -209,7 +209,7 @@ The webhook signing secret and `sk_test_` secret key are different values. Do no
 ## 8. End-to-end beta check
 
 1. Confirm `/health` and `/ready` both succeed.
-2. Start the v0.7.1 beta desktop build and select **Sign in**.
+2. Start the v0.7.2 beta desktop build and select **Sign in**.
 3. Register or sign in through Auth0, then verify the email address.
 4. Return to the desktop application. Its first authenticated API call should create the matching beta account automatically.
 5. In Auth0, open **Monitoring → Logs** and confirm the login's Action execution succeeded.

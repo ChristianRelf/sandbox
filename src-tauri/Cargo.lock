@@ -4350,7 +4350,7 @@ dependencies = [
 
 [[package]]
 name = "sandbox-app"
-version = "0.7.1-beta.3"
+version = "0.7.2-beta.1"
 dependencies = [
  "aes-gcm",
  "async-trait",
@@ -4388,7 +4388,7 @@ dependencies = [
 
 [[package]]
 name = "sandbox-engine"
-version = "0.7.1-beta.3"
+version = "0.7.2-beta.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4412,7 +4412,7 @@ dependencies = [
 
 [[package]]
 name = "sandbox-plugin-runtime"
-version = "0.7.1-beta.3"
+version = "0.7.2-beta.1"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
