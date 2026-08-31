@@ -42,7 +42,7 @@ The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` defa
 
 Before the first deployment, configure `CONTROL_PLANE_URL`, `OIDC_AUTHORIZE_URL`, `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, and `OIDC_AUDIENCE` in `/opt/sandbox/.env`. Use a dedicated Auth0 Regular Web Application whose callback URL is `https://app.sndbox.app/auth/callback`; keep the client secret out of Git.
 
-For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.2-beta.1`), and select `website`.
+For the first deployment, open **Actions > Deploy DigitalOcean beta > Run workflow**, enter the published version without `v` (for example `0.7.2-beta.2`), and select `website`.
 
 To deploy automatically after every successful release, create the repository variable `DEPLOY_DIGITALOCEAN=true`. Automatic deployments intentionally select the website-only profile; observability and the runner remain manual choices.
 
@@ -62,7 +62,7 @@ The documentation is deployed independently from `apps/docs` through Mintlify. A
 For a manual deployment without Actions, copy this directory to `/opt/sandbox`, copy `.env.example` to `.env`, authenticate Docker to GHCR if the package is private, and run:
 
 ```bash
-./deploy.sh 0.7.2-beta.1 website
+./deploy.sh 0.7.2-beta.2 website
 ```
 
 ## Grafana Application Observability

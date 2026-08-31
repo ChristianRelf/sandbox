@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const betaVersion = "0.7.2-beta.1";
+const betaVersion = "0.7.2-beta.2";
 const escapedBetaVersion = betaVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("v0.7 beta release compatibility", () => {
@@ -50,7 +50,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${betaVersion}";`);
     expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${betaVersion}";`);
     expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${betaVersion}";`);
-    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.2-beta.1,<0.8"');
+    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.2-beta.2,<0.8"');
   });
 
   it("attests prerelease artifacts while keeping stable Windows releases fail-closed", () => {
@@ -129,6 +129,8 @@ describe("v0.7 beta release compatibility", () => {
 
     expect(read("apps/marketing/Dockerfile")).not.toContain("COPY . .");
     expect(read("apps/web/Dockerfile")).not.toContain("COPY . .");
+    expect(read("apps/marketing/Dockerfile")).toContain("COPY packages/product-ui packages/product-ui");
+    expect(read("apps/web/Dockerfile")).toContain("COPY packages/product-ui packages/product-ui");
     expect(read("apps/marketing/Dockerfile")).toContain("FROM deps AS api-client-build");
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
     expect(read("services/control-plane/Dockerfile")).toContain("npm ci --omit=dev");

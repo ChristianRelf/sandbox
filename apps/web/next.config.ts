@@ -4,7 +4,7 @@ const config: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ["@sandbox/api-client", "@sandbox/brand", "@sandbox/content"],
+  transpilePackages: ["@sandbox/api-client", "@sandbox/brand", "@sandbox/content", "@sandbox/product-ui"],
   async headers() {
     return [{ source: "/(.*)", headers: [
       { key: "X-Content-Type-Options", value: "nosniff" },

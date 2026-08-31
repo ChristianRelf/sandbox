@@ -11,6 +11,8 @@
 !packages/brand/**
 !packages/content
 !packages/content/**
+!packages/product-ui
+!packages/product-ui/**
 **/node_modules
 **/.next
 **/dist

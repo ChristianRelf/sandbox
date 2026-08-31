@@ -9,6 +9,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/brand/package.json packages/brand/package.json
 COPY packages/content/package.json packages/content/package.json
+COPY packages/product-ui/package.json packages/product-ui/package.json
 RUN --mount=type=cache,id=sandbox-account-npm,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --prefer-offline \
       --workspace @sandbox/web --include-workspace-root=false
@@ -21,6 +22,7 @@ FROM api-client-build AS build
 COPY apps/web apps/web
 COPY packages/brand packages/brand
 COPY packages/content packages/content
+COPY packages/product-ui packages/product-ui
 RUN --mount=type=cache,id=sandbox-account-next,target=/workspace/apps/web/.next/cache \
     npm run build --workspace @sandbox/web
 

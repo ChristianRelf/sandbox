@@ -9,6 +9,7 @@ COPY apps/marketing/package.json apps/marketing/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/brand/package.json packages/brand/package.json
 COPY packages/content/package.json packages/content/package.json
+COPY packages/product-ui/package.json packages/product-ui/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN --mount=type=cache,id=sandbox-marketing-npm,target=/root/.npm \
     npm ci --ignore-scripts --no-audit --no-fund --prefer-offline \
@@ -22,6 +23,7 @@ FROM api-client-build AS build
 COPY apps/marketing apps/marketing
 COPY packages/brand packages/brand
 COPY packages/content packages/content
+COPY packages/product-ui packages/product-ui
 COPY packages/ui packages/ui
 RUN --mount=type=cache,id=sandbox-marketing-next,target=/workspace/apps/marketing/.next/cache \
     npm run build --workspace @sandbox/marketing
