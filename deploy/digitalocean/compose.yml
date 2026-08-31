@@ -54,6 +54,35 @@ services:
     pids_limit: 128
     mem_limit: 384m
 
+  account:
+    image: ghcr.io/christianrelf/sandbox-account:${SANDBOX_VERSION:-0.7.1-beta.3}
+    restart: unless-stopped
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3300
+      CONTROL_PLANE_URL: ${CONTROL_PLANE_URL:-https://api.sndbox.app}
+      OIDC_AUTHORIZE_URL: ${OIDC_AUTHORIZE_URL:-}
+      OIDC_TOKEN_URL: ${OIDC_TOKEN_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://app.sndbox.app/auth/callback}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-https://api.sndbox.app}
+    ports:
+      - "${SANDBOX_HTTP_BIND:-127.0.0.1}:3300:3300"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/').then(response => { if (!response.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+
   caddy:
     image: caddy:2.11.4-alpine
     restart: unless-stopped
@@ -62,9 +91,12 @@ services:
         condition: service_healthy
       docs:
         condition: service_healthy
+      account:
+        condition: service_healthy
     environment:
       SANDBOX_DOMAIN: ${SANDBOX_DOMAIN:-sndbox.app}
       SANDBOX_DOCS_DOMAIN: ${SANDBOX_DOCS_DOMAIN:-docs.sndbox.app}
+      SANDBOX_APP_DOMAIN: ${SANDBOX_APP_DOMAIN:-app.sndbox.app}
     ports:
       - "80:80"
       - "443:443"

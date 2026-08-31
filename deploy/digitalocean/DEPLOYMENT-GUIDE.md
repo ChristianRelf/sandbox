@@ -3,6 +3,7 @@
 This guide deploys the supported v0.7 beta server surface:
 
 - `https://sndbox.app` and `https://www.sndbox.app`
+- `https://app.sndbox.app`
 - `https://docs.sndbox.app`
 - Automatic HTTPS through Caddy
 - Optional Grafana Alloy observability
@@ -20,7 +21,7 @@ You need:
 - Administrator access to the Sandbox GitHub repository
 - A local clone of this repository with the deployment changes pushed to `main`
 
-The website, docs service, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. The supplied limits also support the smaller 2 GB staging configuration.
+The website, account portal, docs service, Caddy, telemetry collector, and one runner fit comfortably on an 8 GB Droplet. Use at least 4 GB when the account portal is enabled.
 
 ## 2. Configure DNS
 
@@ -30,19 +31,21 @@ Open the DNS management page for `sndbox.app` and create:
 | --- | --- | --- | --- |
 | `A` | `@` | `YOUR_DROPLET_IPV4` | `300` or automatic |
 | `CNAME` | `www` | `sndbox.app` | `300` or automatic |
+| `CNAME` | `app` | `sndbox.app` | `300` or automatic |
 | `CNAME` | `docs` | `sndbox.app` | `300` or automatic |
 
-Do not create records for `app`, `api`, `identity`, or `internal` yet. Do not add an `AAAA` record unless IPv6 is configured on the Droplet.
+Keep `api` on the separately deployed control plane. Do not create records for `identity` or `internal`, and do not add an `AAAA` record unless IPv6 is configured on the Droplet.
 
 From PowerShell, check propagation:
 
 ```powershell
 Resolve-DnsName sndbox.app
 Resolve-DnsName www.sndbox.app
+Resolve-DnsName app.sndbox.app
 Resolve-DnsName docs.sndbox.app
 ```
 
-All three names must eventually resolve to the Droplet.
+All four public-site names must eventually resolve to the Droplet.
 
 ## 3. Create a dedicated deployment SSH key
 
@@ -165,7 +168,7 @@ In **DigitalOcean > Networking > Firewalls**, attach a firewall to the Droplet w
 | TCP | `443` | All IPv4 and IPv6 |
 | UDP | `443` | All IPv4 and IPv6; optional HTTP/3 support |
 
-Allow normal outbound traffic. Do not expose ports `3100`, `3200`, `12345`, `2375`, `2376`, or PostgreSQL.
+Allow normal outbound traffic. Do not expose ports `3100`, `3200`, `3300`, `12345`, `2375`, `2376`, or PostgreSQL.
 
 If restricting SSH to fixed source addresses, remember that ordinary GitHub-hosted runners do not use one small permanent IP range. For this beta, allow SSH broadly and rely on key-only authentication, or use a self-hosted runner/VPN later.
 
@@ -232,6 +235,20 @@ Optional environment variables:
 
 For the simplest first deployment, leave both at their defaults.
 
+On the Droplet, create `/opt/sandbox/.env` from `.env.example` and configure the account portal before deploying:
+
+```dotenv
+CONTROL_PLANE_URL=https://api.sndbox.app
+OIDC_AUTHORIZE_URL=https://YOUR_AUTH0_DOMAIN/authorize
+OIDC_TOKEN_URL=https://YOUR_AUTH0_DOMAIN/oauth/token
+OIDC_CLIENT_ID=YOUR_REGULAR_WEB_APPLICATION_CLIENT_ID
+OIDC_CLIENT_SECRET=YOUR_REGULAR_WEB_APPLICATION_CLIENT_SECRET
+OIDC_REDIRECT_URI=https://app.sndbox.app/auth/callback
+OIDC_AUDIENCE=https://api.sndbox.app
+```
+
+Use a dedicated Auth0 **Regular Web Application**. Add `https://app.sndbox.app/auth/callback` to Allowed Callback URLs, `https://app.sndbox.app` to Allowed Logout URLs, and `https://app.sndbox.app/sign-in` as the Application Login URI. Keep `.env` mode `0600` and never commit the client secret.
+
 ## 9. Confirm GHCR can be accessed
 
 The deployment action signs in to GitHub Container Registry using its short-lived `GITHUB_TOKEN`; no long-lived registry token is copied to the Droplet.
@@ -260,7 +277,7 @@ Open **GitHub > Actions > Release**. Wait for every job to succeed. The workflow
 
 - An explicitly unsigned Windows NSIS test installer for this prerelease
 - Linux runner archives
-- Multi-architecture website, docs, and runner containers
+- Multi-architecture website, account, docs, and runner containers
 - Checksums, Sigstore signatures, `release-manifest.json`, and GitHub artifact attestations when the repository supports them
 - A published GitHub prerelease
 
@@ -289,10 +306,10 @@ The workflow will:
 3. Upload only `deploy/digitalocean`.
 4. Preserve the existing `.env`, `runner.toml`, runner data, and Docker volumes.
 5. Authenticate to GHCR with a temporary token.
-6. Pull the immutable website and docs versions and the pinned Caddy release.
-7. Start all three services and wait for their health checks.
-8. Test both public services over the Droplet's loopback interface.
-9. Restore the previous website and docs versions if deployment fails.
+6. Pull the immutable website, account, and docs versions and the pinned Caddy release.
+7. Start all four services and wait for their health checks.
+8. Test all three public services over the Droplet's loopback interface.
+9. Restore the previous website, account, and docs versions if deployment fails.
 10. Remove the temporary GHCR and SSH credentials from the Actions runner.
 
 ## 12. Verify the deployment
@@ -308,20 +325,23 @@ Run:
 ```bash
 cd /opt/sandbox
 docker compose ps
-docker compose logs --tail=100 website docs caddy
+docker compose logs --tail=100 website account docs caddy
 curl --fail http://127.0.0.1:3100/
 curl --fail http://127.0.0.1:3200/
+curl --fail http://127.0.0.1:3300/sign-in
 curl --fail --head https://sndbox.app/
 curl --fail --head https://www.sndbox.app/
+curl --fail --head https://app.sndbox.app/sign-in
 curl --fail --head https://docs.sndbox.app/
 ```
 
 Expected results:
 
-- `website`, `docs`, and `caddy` are running and healthy.
-- Both loopback requests succeed.
+- `website`, `account`, `docs`, and `caddy` are running and healthy.
+- All three loopback requests succeed.
 - `https://sndbox.app` returns a successful response.
 - `https://www.sndbox.app` redirects to `https://sndbox.app`.
+- `https://app.sndbox.app/sign-in` returns the account login page.
 - `https://docs.sndbox.app` returns the documentation site.
 - The downloads page displays the published beta installer from `release-manifest.json`.
 
@@ -339,7 +359,7 @@ Create this repository variable:
 DEPLOY_DIGITALOCEAN=true
 ```
 
-Future successful releases will automatically deploy the website and docs. Observability and the runner remain manual profile choices.
+Future successful releases will automatically deploy the website, account portal, and docs. Observability and the runner remain manual profile choices.
 
 ## 14. Enable optional observability
 
@@ -402,7 +422,7 @@ Never deploy mutable tags such as `latest`.
 
 ## 17. Roll back
 
-Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls those immutable images and restarts the website and docs.
+Open **Actions > Deploy DigitalOcean beta > Run workflow** and enter the last known-good published version. The action pulls those immutable images and restarts the website, account portal, and docs.
 
 The deployment script also attempts this rollback automatically when a new image fails its health checks.
 

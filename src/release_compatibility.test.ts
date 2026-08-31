@@ -82,6 +82,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(workflow).toContain("services/browser-worker/Dockerfile");
     expect(workflow).toContain("services/control-plane/Dockerfile");
     expect(workflow).toContain("apps/docs/Dockerfile");
+    expect(workflow).toContain("apps/web/Dockerfile");
     expect(workflow).toContain("needs: [verify-release, desktop-windows, agent-linux, containers]");
     expect(workflow).toContain("generate-release-manifest.mjs");
     expect(workflow).toContain("--prerelease");
@@ -115,6 +116,7 @@ describe("v0.7 beta release compatibility", () => {
       "agents/server/Dockerfile",
       "apps/docs/Dockerfile",
       "apps/marketing/Dockerfile",
+      "apps/web/Dockerfile",
       "services/browser-worker/Dockerfile",
       "services/control-plane/Dockerfile",
       "services/hosted-runner/Dockerfile",
@@ -127,6 +129,7 @@ describe("v0.7 beta release compatibility", () => {
 
     expect(read("apps/marketing/Dockerfile")).not.toContain("COPY . .");
     expect(read("apps/docs/Dockerfile")).not.toContain("COPY . .");
+    expect(read("apps/web/Dockerfile")).not.toContain("COPY . .");
     expect(read("apps/marketing/Dockerfile")).toContain("FROM deps AS api-client-build");
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
     expect(read("services/control-plane/Dockerfile")).toContain("npm ci --omit=dev");
@@ -153,18 +156,23 @@ describe("v0.7 beta release compatibility", () => {
     expect(compose).toContain("condition: service_healthy");
     expect(compose).toContain("127.0.0.1}:3100:3100");
     expect(compose).toContain("127.0.0.1}:3200:3200");
+    expect(compose).toContain("127.0.0.1}:3300:3300");
     expect(compose).toContain("sandbox-docs:${SANDBOX_VERSION");
+    expect(compose).toContain("sandbox-account:${SANDBOX_VERSION");
+    expect(compose).toContain("OIDC_AUDIENCE: ${OIDC_AUDIENCE");
     expect(compose).toContain('test: ["CMD", "node", "-e"');
 
     const deployScript = read("deploy/digitalocean/deploy.sh");
     expect(deployScript).toContain("Deployment failed; restoring the previous public-site version.");
-    expect(deployScript).toContain("services=(website docs caddy)");
-    expect(deployScript).toContain("pull docs >/dev/null 2>&1");
+    expect(deployScript).toContain("services=(website docs account caddy)");
+    expect(deployScript).toContain("pull docs account >/dev/null 2>&1");
+    expect(deployScript).toContain("OIDC_REDIRECT_URI OIDC_AUDIENCE");
     expect(deployScript).toContain("up -d --no-deps caddy");
     expect(deployScript).toContain("--wait-timeout 180");
     expect(deployScript).toContain("if [[ ! -f .env ]]");
     expect(read("deploy/digitalocean/Caddyfile")).toContain("reverse_proxy website:3100");
     expect(read("deploy/digitalocean/Caddyfile")).toContain("reverse_proxy docs:3200");
+    expect(read("deploy/digitalocean/Caddyfile")).toContain("reverse_proxy account:3300");
   });
 });
 
