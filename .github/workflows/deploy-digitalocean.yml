@@ -89,6 +89,11 @@ jobs:
             StrictHostKeyChecking yes
             BatchMode yes
             ConnectTimeout 15
+            ControlMaster auto
+            ControlPath $HOME/.ssh/sandbox-%C
+            ControlPersist 10m
+            ServerAliveInterval 15
+            ServerAliveCountMax 3
           EOF
           chmod 600 "$HOME/.ssh/config"
           ssh sandbox-droplet 'docker version >/dev/null && docker compose version >/dev/null'
@@ -147,4 +152,6 @@ jobs:
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
-        run: rm -f "$HOME/.ssh/digitalocean_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP/discord-changelog-bot.env"
+        run: |
+          ssh -O exit sandbox-droplet >/dev/null 2>&1 || true
+          rm -f "$HOME/.ssh/digitalocean_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP/discord-changelog-bot.env"
