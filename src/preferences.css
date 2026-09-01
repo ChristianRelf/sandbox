@@ -125,6 +125,9 @@
 .settings-release-card span { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
 .settings-release-card strong { font-size: 12px; }
 .settings-release-card small { color: var(--text-muted); font-size: 9px; }
+.settings-release-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.settings-release-actions .button { flex: 0 0 auto; }
+.settings-release-actions small { line-height: 1.45; }
 
 .dashboard-grid {
   min-width: 0;

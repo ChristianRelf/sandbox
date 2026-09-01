@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseVersion = "0.7.4-beta.3";
+const releaseVersion = "0.7.5-beta.1";
 const escapedReleaseVersion = releaseVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe("v0.7.4 beta release compatibility", () => {
+describe("v0.7.5 beta release compatibility", () => {
   it("keeps first-party surfaces and runtime components on one beta version", () => {
     const packages = [
       "package.json",

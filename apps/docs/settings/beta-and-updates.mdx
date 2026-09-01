@@ -4,7 +4,7 @@ description: "Check the installed build and choose stable or prerelease update d
 icon: "refresh-cw"
 ---
 
-The page shows the installed version and provides **Check for updates**.
+The page shows the installed version and provides **Check for updates**. Use **Check now** to see whether the installed build is current, whether the release feed failed, or whether a newer version exists. When a newer build is available, the sidebar action shows its version and opens the matching Windows installer download. If no Windows installer is attached, it opens the immutable GitHub release page instead.
 
 | Channel | Behavior |
 | --- | --- |
@@ -12,6 +12,10 @@ The page shows the installed version and provides **Check for updates**.
 | Beta | Includes beta and release-candidate versions in addition to stable. |
 
 An update must come from the immutable repository release tag and published manifest. The downloads page shows artifact size, checksum, and the available verification mechanism.
+
+The beta installer is downloaded through your system browser. Close sndbox, run the downloaded installer, and confirm its version and SHA-256 digest on the downloads page before installation. Automatic in-place installation is not enabled for unsigned beta builds.
+
+sndbox checks at startup, when the device comes back online, when the app returns to the foreground, and every 30 minutes while it remains open. Dismissing a notice hides that version for 24 hours; **Check now** reveals an available build immediately.
 
 <Warning>
   The current Windows beta can be an unsigned test build. Verify its SHA-256 digest and release source before installation; a channel preference does not authenticate a file copied from elsewhere.

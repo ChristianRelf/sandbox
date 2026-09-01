@@ -18,8 +18,10 @@ import {
   Workflow,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import packageMetadata from "../../package.json";
 import { api } from "../api";
 import { usePreferences } from "../preferences";
+import { checkForDesktopUpdateStatus, DESKTOP_UPDATE_AVAILABLE_EVENT, type DesktopUpdateCheckResult } from "../updates";
 import type {
   BrowserEngineStatus,
   BrowserProfile,
@@ -75,6 +77,8 @@ export function SettingsView() {
   const [error, setError] = useState<string>();
   const [settingsSearch, setSettingsSearch] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateCheck, setUpdateCheck] = useState<DesktopUpdateCheckResult>();
   const [profileAction, setProfileAction] = useState<{
     kind: "clear" | "delete";
     profile: BrowserProfile;
@@ -134,6 +138,16 @@ export function SettingsView() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const checkForUpdateNow = async () => {
+    setCheckingUpdate(true);
+    const result = await checkForDesktopUpdateStatus(preferences.updateChannel);
+    setUpdateCheck(result);
+    if (result.status === "available") {
+      window.dispatchEvent(new CustomEvent(DESKTOP_UPDATE_AVAILABLE_EVENT, { detail: result.update }));
+    }
+    setCheckingUpdate(false);
   };
 
   return (
@@ -538,11 +552,24 @@ export function SettingsView() {
               </SelectPreference>
               <div className="settings-release-card">
                 <span>Installed version</span>
-                <strong>sndbox 0.7.4-beta.3</strong>
+                <strong>sndbox {packageMetadata.version}</strong>
                 <small>
                   Desktop installers and Linux runners are verified against the
                   same immutable release tag.
                 </small>
+                <div className="settings-release-actions">
+                  <button className="button" disabled={!preferences.checkForUpdates || checkingUpdate} onClick={() => void checkForUpdateNow()}>
+                    <RefreshCcw className={checkingUpdate ? "spin" : ""} size={13} />
+                    {checkingUpdate ? "Checking…" : "Check now"}
+                  </button>
+                  {updateCheck && <small role={updateCheck.status === "error" ? "alert" : "status"}>
+                    {updateCheck.status === "available"
+                      ? `sndbox ${updateCheck.update.version} is available. The download action is shown in the sidebar.`
+                      : updateCheck.status === "current"
+                        ? `No newer ${preferences.updateChannel} release is available. Installed: ${updateCheck.currentVersion}${updateCheck.latestVersion ? `; latest published: ${updateCheck.latestVersion}` : ""}.`
+                        : updateCheck.message}
+                  </small>}
+                </div>
               </div>
             </PreferencePanel>
           )}
