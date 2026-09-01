@@ -38,7 +38,7 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
       {unsignedWindowsBeta && <p className="download-beta-note"><strong>Unsigned Windows test build.</strong> SmartScreen may show an unknown publisher warning. Only install a checksum-verified copy shared through this release.</p>}
       {artifact
         ? <a className="sb-button sb-button--primary" href={artifact.downloadUrl}><Download size={14}/>Download · {formatBytes(artifact.bytes)}</a>
-        : <a className="sb-button" href="https://github.com/ChristianRelf/sandbox/releases"><ExternalLink size={14}/>View release status</a>}
+        : <a className="sb-button" href="https://github.com/sndboxhq/sandbox/releases"><ExternalLink size={14}/>View release status</a>}
       {manifest && <a className="download-release-link" href={`https://github.com/${manifest.source.repository}/releases/tag/${manifest.tag}`}>Release notes and verification files <ExternalLink size={12}/></a>}
     </div></section>
   </div>;

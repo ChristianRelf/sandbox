@@ -10,7 +10,7 @@ alerts:
 services:
   - name: api
     github:
-      repo: ChristianRelf/sandbox
+      repo: sndboxhq/sandbox
       branch: main
       deploy_on_push: false
     source_dir: /

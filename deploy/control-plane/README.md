@@ -113,7 +113,7 @@ Save the file. Never run `git add -f` on it.
 This action begins the approximately $5/month charge.
 
 1. In DigitalOcean, select **Create → App Platform → Create App**.
-2. Choose **GitHub**, authorize the repository if needed, and select `ChristianRelf/sandbox`.
+2. Choose **GitHub**, authorize the repository if needed, and select `sndboxhq/sandbox`.
 3. Select branch `main` and disable automatic deploys for the first beta deployment.
 4. Configure a **Web Service** with:
 

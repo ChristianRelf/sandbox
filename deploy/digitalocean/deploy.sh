@@ -32,7 +32,7 @@ fi
 
 previous_version="$(sed -n 's/^SANDBOX_VERSION=//p' .env | tail -n 1)"
 release_manifest_url() {
-  printf 'https://github.com/ChristianRelf/sandbox/releases/download/v%s/release-manifest.json' "$1"
+  printf 'https://github.com/sndboxhq/sandbox/releases/download/v%s/release-manifest.json' "$1"
 }
 compose=(docker compose --env-file .env -f compose.yml)
 services=(website account caddy)

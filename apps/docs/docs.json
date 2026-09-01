@@ -322,7 +322,7 @@
       },
       {
         "label": "GitHub",
-        "href": "https://github.com/ChristianRelf/sandbox"
+        "href": "https://github.com/sndboxhq/sandbox"
       }
     ],
     "primary": {
@@ -333,7 +333,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/ChristianRelf/sandbox",
+      "github": "https://github.com/sndboxhq/sandbox",
       "website": "https://sndbox.app"
     },
     "links": [
@@ -358,7 +358,7 @@
         "items": [
           { "label": "Troubleshooting", "href": "/troubleshooting/overview" },
           { "label": "Support", "href": "https://sndbox.app/support" },
-          { "label": "GitHub", "href": "https://github.com/ChristianRelf/sandbox" }
+          { "label": "GitHub", "href": "https://github.com/sndboxhq/sandbox" }
         ]
       }
     ]

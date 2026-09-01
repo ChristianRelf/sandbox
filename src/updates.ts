@@ -15,7 +15,7 @@ interface GitHubRelease {
 }
 
 const RELEASES_API = import.meta.env.VITE_SANDBOX_RELEASES_API_URL
-  ?? "https://api.github.com/repos/ChristianRelf/sandbox/releases?per_page=10";
+  ?? "https://api.github.com/repos/sndboxhq/sandbox/releases?per_page=10";
 
 export async function checkForDesktopUpdate(channel: "beta" | "stable", fetcher: typeof fetch = fetch): Promise<DesktopUpdate | undefined> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return undefined;
