@@ -5,7 +5,14 @@
 !src-tauri
 !src-tauri/engine
 !src-tauri/engine/**
+!src-tauri/plugin-runtime
+!src-tauri/plugin-runtime/**
+!src-tauri/src
+!src-tauri/src/credential_vault.rs
+!src-tauri/src/plugin_manager.rs
+!src-tauri/src/provider_adapter.rs
 agents/server/packaging
 agents/server/target
 src-tauri/engine/target
+src-tauri/plugin-runtime/target
 **/*.log

@@ -5,6 +5,8 @@ ARG TARGETARCH
 ENV CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/cargo-target
 WORKDIR /source
 COPY src-tauri/engine src-tauri/engine
+COPY src-tauri/plugin-runtime src-tauri/plugin-runtime
+COPY src-tauri/src/credential_vault.rs src-tauri/src/plugin_manager.rs src-tauri/src/provider_adapter.rs src-tauri/src/
 COPY agents/server agents/server
 RUN --mount=type=cache,id=sandbox-server-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry \
     --mount=type=cache,id=sandbox-server-cargo-git-${TARGETARCH},target=/usr/local/cargo/git \
