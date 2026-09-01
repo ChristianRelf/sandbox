@@ -89,7 +89,7 @@ describe("control-plane API", () => {
   it("accepts bounded first-party bug reports without a user webhook",async()=>{
     const submit=vi.fn(async()=>({delivered:true as const,provider:"discord" as const,status:204,reportId:"BUG-1234ABCD"}));
     const deps={...dependencies([]),bugReports:{submit}},server=await createServer(deps);
-    const payload={summary:"Code editor loses diagnostics",description:"The error list disappears after changing language.",diagnostics:{"App version":"0.7.4-beta.1"}};
+    const payload={summary:"Code editor loses diagnostics",description:"The error list disappears after changing language.",diagnostics:{"App version":"0.7.4-beta.2"}};
     const response=await server.inject({method:"POST",url:"/v1/support/bug-reports",headers:{"idempotency-key":"bug-report-request-0001"},payload});
     expect(response.statusCode,response.body).toBe(200);expect(response.json()).toEqual({delivered:true,provider:"discord",status:204,reportId:"BUG-1234ABCD"});
     expect(submit).toHaveBeenCalledWith(payload);expect(deps.sessions.verify).not.toHaveBeenCalled();

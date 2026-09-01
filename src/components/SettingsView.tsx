@@ -538,7 +538,7 @@ export function SettingsView() {
               </SelectPreference>
               <div className="settings-release-card">
                 <span>Installed version</span>
-                <strong>sndbox 0.7.4-beta.1</strong>
+                <strong>sndbox 0.7.4-beta.2</strong>
                 <small>
                   Desktop installers and Linux runners are verified against the
                   same immutable release tag.

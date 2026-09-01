@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { SndboxMark } from "@sandbox/product-ui/brand";
+import packageMetadata from "../../package.json";
 import { api } from "../api";
 import { usePreferences } from "../preferences";
 import { useAppStore, type View } from "../store";
@@ -156,7 +157,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         <SndboxMark className="brand-mark" size={26} />
         {!collapsed && (
           <span>
-            sndbox <small>0.7.2 beta</small>
+            sndbox <small>{packageMetadata.version}</small>
           </span>
         )}
       </div>

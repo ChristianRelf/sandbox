@@ -6,18 +6,23 @@ import {
   CheckCircle2,
   ChevronDown,
   ExternalLink,
-  Hash,
-  Github,
-  CalendarDays,
-  NotebookText,
-  Mail,
-  MessageSquare,
   Pencil,
   RefreshCcw,
   ShieldCheck,
-  Sparkles,
   Trash2,
 } from "lucide-react";
+import type { IconType } from "react-icons";
+import {
+  SiAnthropic,
+  SiDiscord,
+  SiGithub,
+  SiGmail,
+  SiGoogle,
+  SiNotion,
+  SiOllama,
+  SiOpenai,
+  SiSlack,
+} from "react-icons/si";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import type { ConnectionMetadata } from "../types";
@@ -174,7 +179,7 @@ export function ConnectionsSettings() {
       </div>
       <div className="connection-option-grid">
         <ConnectionOption
-          icon={<Sparkles size={18} />}
+          icon={<SiOpenai size={18} />}
           name="AI provider"
           description="Build and edit workflows from the AI chat."
           method="API key"
@@ -184,7 +189,7 @@ export function ConnectionsSettings() {
           onClick={() => setAddingAi(true)}
         />
         <ConnectionOption
-          icon={<Mail size={18} />}
+          icon={<SiGmail size={18} />}
           name="Gmail"
           description="Use email triggers, messages, and drafts."
           method="Google sign-in"
@@ -193,7 +198,7 @@ export function ConnectionsSettings() {
           onClick={() => void connectGmail()}
         />
         <ConnectionOption
-          icon={<CalendarDays size={18} />}
+          icon={<SiGoogle size={18} />}
           name="Google Workspace"
           description="Use Calendar, Drive, and Sheets actions and polling triggers."
           method="Google sign-in"
@@ -203,7 +208,7 @@ export function ConnectionsSettings() {
           onClick={() => void connectIntegration("google_workspace", "Google Workspace")}
         />
         <ConnectionOption
-          icon={<Hash size={18} />}
+          icon={<SiSlack size={18} />}
           name="Slack OAuth"
           description="Read channels, send messages, react, and upload files."
           method="Slack OAuth v2"
@@ -213,7 +218,7 @@ export function ConnectionsSettings() {
           onClick={() => void connectIntegration("slack_oauth", "Slack")}
         />
         <ConnectionOption
-          icon={<NotebookText size={18} />}
+          icon={<SiNotion size={18} />}
           name="Notion"
           description="Query and update pages in connected data sources."
           method="Notion OAuth"
@@ -223,7 +228,7 @@ export function ConnectionsSettings() {
           onClick={() => void connectIntegration("notion", "Notion")}
         />
         <ConnectionOption
-          icon={<Github size={18} />}
+          icon={<SiGithub size={18} />}
           name="GitHub"
           description="Automate issues, pull requests, reviews, and Actions."
           method="GitHub App device flow"
@@ -233,7 +238,7 @@ export function ConnectionsSettings() {
           onClick={() => void connectIntegration("github_app", "GitHub")}
         />
         <ConnectionOption
-          icon={<MessageSquare size={18} />}
+          icon={<SiDiscord size={18} />}
           name="Discord"
           description="Send workflow updates to a Discord channel."
           method="Webhook URL"
@@ -242,7 +247,7 @@ export function ConnectionsSettings() {
           onClick={() => setAdding("discord")}
         />
         <ConnectionOption
-          icon={<Hash size={18} />}
+          icon={<SiSlack size={18} />}
           name="Slack"
           description="Post notifications to your Slack workspace."
           method="Webhook URL"
@@ -306,7 +311,7 @@ export function ConnectionsSettings() {
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Portal>
                       <DropdownMenu.Content className="menu" align="end" sideOffset={5}>
-                      {connection.provider === "github_app" && <DropdownMenu.Item onSelect={() => void prepareGithub(connection)}><Github size={13} />Choose repositories</DropdownMenu.Item>}
+                      {connection.provider === "github_app" && <DropdownMenu.Item onSelect={() => void prepareGithub(connection)}><SiGithub size={13} />Choose repositories</DropdownMenu.Item>}
                       <DropdownMenu.Item
                         onSelect={() => {
                           setRenaming(connection);
@@ -609,31 +614,25 @@ function WebhookModal({
   );
 }
 
+const providerIcons: Record<string, IconType> = {
+  anthropic: SiAnthropic,
+  discord: SiDiscord,
+  github_app: SiGithub,
+  gmail: SiGmail,
+  google_workspace: SiGoogle,
+  notion: SiNotion,
+  openai: SiOpenai,
+  openai_compatible: SiOllama,
+  slack: SiSlack,
+  slack_oauth: SiSlack,
+};
+
 function ProviderIcon({ provider }: { provider: string }) {
-  const isAiProvider =
-    provider === "openai" ||
-    provider === "anthropic" ||
-    provider === "openai_compatible";
+  const Icon = providerIcons[provider];
 
   return (
     <span className={`connection-provider ${provider}`} aria-hidden="true">
-      {provider === "gmail" ? (
-        <Mail size={17} />
-      ) : provider === "google_workspace" ? (
-        <CalendarDays size={17} />
-      ) : provider === "github_app" ? (
-        <Github size={17} />
-      ) : provider === "notion" ? (
-        <NotebookText size={17} />
-      ) : isAiProvider ? (
-        <Sparkles size={17} />
-      ) : provider === "discord" ? (
-        <MessageSquare size={17} />
-      ) : provider === "slack" || provider === "slack_oauth" ? (
-        <Hash size={17} />
-      ) : (
-        <ExternalLink size={17} />
-      )}
+      {Icon ? <Icon size={17} /> : <ExternalLink size={17} />}
     </span>
   );
 }
