@@ -9,6 +9,8 @@
 
 .sidebar nav button.active {
   position: relative;
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .sidebar nav button.active::before {
