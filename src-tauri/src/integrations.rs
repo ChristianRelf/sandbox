@@ -327,9 +327,7 @@ async fn webhook(
         })?;
     validate_webhook(expected, webhook_url)?;
     let body = match operation {
-        "discord_embed" => {
-            json!({"content":payload.get("content"),"username":payload.get("username"),"avatar_url":payload.get("avatarUrl"),"embeds":[{"title":payload.get("title"),"description":payload.get("description"),"fields":payload.get("fields"),"color":payload.get("color"),"url":payload.get("link"),"image":{"url":payload.get("image")}}]})
-        }
+        "discord_embed" => discord_embed_body(&payload),
         _ => {
             json!({"content":payload.get("content"),"text":payload.get("content"),"username":payload.get("username"),"avatar_url":payload.get("avatarUrl")})
         }
@@ -353,6 +351,55 @@ async fn webhook(
         ));
     }
     Ok(json!({"delivered":true,"provider":expected,"status":status.as_u16()}))
+}
+
+fn discord_embed_body(payload: &Value) -> Value {
+    let mut body = Map::new();
+    for (source, target) in [
+        ("content", "content"),
+        ("username", "username"),
+        ("avatarUrl", "avatar_url"),
+    ] {
+        if let Some(value) = payload
+            .get(source)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            body.insert(target.into(), json!(value));
+        }
+    }
+    let mut embed = Map::new();
+    for key in ["title", "description", "url", "timestamp"] {
+        if let Some(value) = payload
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+        {
+            embed.insert(key.into(), json!(value));
+        }
+    }
+    if let Some(fields) = payload
+        .get("fields")
+        .and_then(Value::as_array)
+        .filter(|fields| !fields.is_empty())
+    {
+        embed.insert("fields".into(), Value::Array(fields.clone()));
+    }
+    if let Some(color) = payload.get("color").and_then(Value::as_u64) {
+        embed.insert("color".into(), json!(color));
+    }
+    if let Some(footer) = payload.get("footer").filter(|value| value.is_object()) {
+        embed.insert("footer".into(), footer.clone());
+    }
+    if let Some(image) = payload
+        .get("image")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
+        embed.insert("image".into(), json!({"url":image}));
+    }
+    body.insert("embeds".into(), json!([Value::Object(embed)]));
+    Value::Object(body)
 }
 
 fn build_message(payload: &Value) -> Result<String, String> {
@@ -533,4 +580,28 @@ async fn provider_json(response: reqwest::Response, action: &str) -> Result<Valu
     }
     serde_json::from_slice(&bytes)
         .map_err(|error| format!("{action} returned invalid JSON: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discord_embed_omits_empty_optional_media_and_keeps_design_metadata() {
+        let body = discord_embed_body(&json!({
+            "username":"sndbox bug reports",
+            "title":"Bug: Example",
+            "description":"Something happened.",
+            "color":15158332,
+            "fields":[{"name":"Severity","value":"Critical","inline":true}],
+            "footer":{"text":"credentials are never included"},
+            "timestamp":"2026-09-01T12:00:00Z",
+            "image":""
+        }));
+        let embed = &body["embeds"][0];
+        assert_eq!(embed["color"], 15_158_332);
+        assert_eq!(embed["footer"]["text"], "credentials are never included");
+        assert!(embed.get("image").is_none());
+        assert!(body.get("avatar_url").is_none());
+    }
 }

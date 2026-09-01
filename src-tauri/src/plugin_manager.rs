@@ -385,7 +385,10 @@ impl PluginManager {
         guest_input.insert("nodeType".into(), Value::String(node.node_type.clone()));
         guest_input.insert("configuration".into(), node.configuration.clone());
         guest_input.insert("input".into(), input);
-        guest_input.insert("idempotencyKey".into(), Value::String(idempotency_key.clone()));
+        guest_input.insert(
+            "idempotencyKey".into(),
+            Value::String(idempotency_key.clone()),
+        );
         guest_input.insert(
             "connectionReferences".into(),
             serde_json::json!(&pin.credential_references),

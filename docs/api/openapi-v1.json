@@ -5045,6 +5045,83 @@
         }
       }
     },
+    "/v1/support/bug-reports": {
+      "post": {
+        "operationId": "post_v1_support_bug_reports",
+        "tags": [
+          "support"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1SupportBugReportsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1SupportBugReportsInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/workflows/{workflowId}/runs": {
       "post": {
         "operationId": "post_v1_workflows_workflowId_runs",
@@ -10960,6 +11037,22 @@
           }
         ],
         "description": "Successful response for GET /v1/product-plans."
+      },
+      "PostV1SupportBugReportsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/support/bug-reports."
+      },
+      "PostV1SupportBugReportsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/support/bug-reports."
       },
       "GetV1AccountCommerceResponse": {
         "allOf": [

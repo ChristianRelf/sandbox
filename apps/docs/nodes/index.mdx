@@ -4,7 +4,7 @@ description: "Every node currently implemented in sndbox, generated from the pro
 icon: "blocks"
 ---
 
-sndbox currently implements **42 built-in nodes** across triggers, logic, data, network, browser, communication, and system automation. These pages are generated from `src/catalogue.ts`; names, type IDs, defaults, typed ports, side-effect flags, and supported placements are not hand-copied.
+sndbox currently implements **45 built-in nodes** across triggers, logic, data, network, browser, communication, and system automation. These pages are generated from `src/catalogue.ts`; names, type IDs, defaults, typed ports, side-effect flags, and supported placements are not hand-copied.
 
 <Tip>
   Start with a trigger, connect compatible ports, and map outputs into later node fields. The node inspector only shows settings implemented by that node.
@@ -65,6 +65,12 @@ sndbox currently implements **42 built-in nodes** across triggers, logic, data, 
 </Card>
 <Card title="Set Workflow State" icon="braces" href="/nodes/set-workflow-state">
   Store a value after a successful run.
+</Card>
+<Card title="AI" icon="braces" href="/nodes/ai-prompt">
+  Send an instruction mid-workflow and wait for the model response.
+</Card>
+<Card title="Code" icon="braces" href="/nodes/code">
+  Author Python, HTML, JavaScript, or CSS in a full editor.
 </Card>
 
 ## Network
@@ -155,4 +161,7 @@ sndbox currently implements **42 built-in nodes** across triggers, logic, data, 
 </Card>
 <Card title="Run Command" icon="terminal" href="/nodes/run-command">
   Execute an explicitly approved process.
+</Card>
+<Card title="Web Builder" icon="terminal" href="/nodes/web-builder">
+  Combine HTML, JavaScript, and CSS into a localhost site.
 </Card>

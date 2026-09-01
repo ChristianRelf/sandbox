@@ -1,6 +1,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { listen } from "@tauri-apps/api/event";
 import {
+  Bug,
   Clock3,
   Cloud,
   Command,
@@ -14,7 +15,7 @@ import {
   ShieldQuestion,
   Settings2,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { SndboxMark } from "@sandbox/product-ui/brand";
 import { api } from "../api";
 import { usePreferences } from "../preferences";
@@ -24,6 +25,12 @@ import { DesktopUpdateNotice } from "./DesktopUpdateNotice";
 import { ConfirmDialog } from "./ui/Dialog";
 import { Tooltip } from "./ui/Tooltip";
 import { useToast } from "./ui/Toast";
+
+const BugReportDialog = lazy(() =>
+  import("./BugReportDialog").then((module) => ({
+    default: module.BugReportDialog,
+  })),
+);
 
 const initialRunner: RunnerStatus = {
   paused: false,
@@ -46,6 +53,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
   const [activeWorkflowNames, setActiveWorkflowNames] = useState<string[]>([]);
   const [nextView, setNextView] = useState<View>();
   const [runnerBusy, setRunnerBusy] = useState(false);
+  const [bugReportOpen, setBugReportOpen] = useState(false);
   const collapsed = savedCollapsed || (view === "editor" && narrow);
   const refresh = () => {
     void api
@@ -243,6 +251,14 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         </Popover.Portal>
       </Popover.Root>
       <div className="sidebar-bottom">
+        <button
+          className="bug-report-sidebar-button"
+          aria-label="Report a bug"
+          onClick={() => setBugReportOpen(true)}
+        >
+          <Bug size={16} />
+          {!collapsed && <span>Report a bug</span>}
+        </button>
         <button aria-label="Open commands" onClick={onCommand}>
           <Command size={16} />
           {!collapsed && (
@@ -275,6 +291,15 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           setNextView(undefined);
         }}
       />
+      {bugReportOpen && (
+        <Suspense fallback={null}>
+          <BugReportDialog
+            open
+            onOpenChange={setBugReportOpen}
+            currentView={view}
+          />
+        </Suspense>
+      )}
     </aside>
   );
 }

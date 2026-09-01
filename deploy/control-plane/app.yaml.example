@@ -41,3 +41,7 @@ services:
         value: "8080"
         scope: RUN_TIME
         type: GENERAL
+      - key: BUG_REPORT_DISCORD_WEBHOOK_URL
+        value: REPLACE_WITH_DISCORD_BUG_REPORT_WEBHOOK_URL
+        scope: RUN_TIME
+        type: SECRET

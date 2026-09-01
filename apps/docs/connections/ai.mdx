@@ -1,0 +1,50 @@
+---
+title: "AI connections"
+description: "Connect ChatGPT, Claude, or an OpenAI-compatible model for workflow building, AI nodes, and code writing."
+icon: "sparkles"
+---
+
+AI connections let sndbox call a model without putting its API key in workflow JSON. A connection selects one provider and model and can be reused by the AI workflow builder, [AI node](/nodes/ai-prompt), and Code editor.
+
+## Add a connection
+
+1. Open **Settings → Connections** and choose **AI provider** under **Add a connection**.
+2. Pick the large **ChatGPT**, **Claude**, or **Local / custom** provider card.
+3. Choose a model from the dropdown, or select **Custom model ID** and enter the exact ID accepted by the provider.
+4. Give the connection a recognizable name and enter its API key.
+5. For **Local / custom**, confirm the OpenAI-compatible base URL.
+6. Choose **Connect**.
+
+| Choice | Provider used by sndbox | Request API |
+| --- | --- | --- |
+| ChatGPT | OpenAI | Responses API |
+| Claude | Anthropic | Messages API |
+| Local / custom | Ollama or another endpoint you control | OpenAI-compatible chat completions |
+
+<Note>
+  The one-to-five yellow dots are a relative token-usage guide within the model picker. They are not an exact price, context-window size, rate limit, or guarantee of the tokens a request will consume.
+</Note>
+
+## Local and custom endpoints
+
+The default local URL is `http://localhost:11434/v1`. Custom remote endpoints must use HTTPS; plain HTTP is accepted only for `localhost`, `127.0.0.1`, or the IPv6 loopback address. Do not embed a username, password, query string, or fragment in the base URL. Put the key in the separate API-key field.
+
+Some local servers ignore authentication. The connection form still requires a non-empty key value; use a harmless placeholder only when the server documentation confirms that authentication is ignored.
+
+## What the connection can power
+
+| Capability | What the model receives | What changes |
+| --- | --- | --- |
+| AI workflow builder | Your instruction and the current workflow graph | Produces a draft graph for review; it does not run it |
+| AI node | The configured system instruction, prompt, and mapped context | Pauses the workflow and returns the live model response |
+| Code editor | Your instruction, language, and current editor draft | Replaces the unsaved draft with a complete code file |
+
+See [Build workflows with AI](/workflows/ai-builder) for the differences between these surfaces.
+
+## Credentials and privacy
+
+The API key is stored in the operating-system credential vault. Workflow files, exports, and synced definitions keep only the connection ID and model metadata. The underlying key is not exposed to node outputs or ordinary execution logs.
+
+Prompts and relevant workflow or code context are sent to the provider selected by the connection. Review that provider's data policy before sending personal, confidential, or regulated data. A local endpoint keeps the model request on the configured local service only when the endpoint itself is local and does not forward requests elsewhere.
+
+Revoking a connection prevents later AI requests that reference it. Existing workflow definitions retain the unresolved reference until you select another connection.

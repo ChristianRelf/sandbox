@@ -1,11 +1,14 @@
-use crate::AppState;
+use crate::{credential_vault::CredentialVault, AppState};
 use sandbox_engine::{
     validation::{validate, ValidationIssue},
-    Position, Workflow, WorkflowEdge, WorkflowNode,
+    ConnectionStatus, Database, Position, Workflow, WorkflowEdge, WorkflowNode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::Arc,
+};
 use tauri::State;
 use uuid::Uuid;
 
@@ -33,6 +36,9 @@ const SUPPORTED_NODES: &[&str] = &[
     "set_workflow_state",
     "compare_previous",
     "run_command",
+    "ai_prompt",
+    "code",
+    "web_builder",
     "open_browser",
     "navigate",
     "click_element",
@@ -87,6 +93,19 @@ struct AiNode {
     configuration: Value,
     #[serde(default)]
     disabled: bool,
+    #[serde(default, rename = "inputBindings")]
+    input_bindings: BTreeMap<String, AiBinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiBinding {
+    source: String,
+    #[serde(default = "default_output_port")]
+    output: String,
+}
+
+fn default_output_port() -> String {
+    "result".into()
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +115,12 @@ struct AiEdge {
     target: String,
     #[serde(default = "output_handle")]
     source_handle: String,
+    #[serde(default = "input_handle")]
+    target_handle: String,
+}
+
+fn input_handle() -> String {
+    "input".into()
 }
 
 #[derive(Debug, Serialize)]
@@ -173,6 +198,265 @@ pub async fn build_workflow_with_ai(
     .await?;
     let graph = parse_graph(&content)?;
     graph_to_proposal(graph, workflow)
+}
+
+pub(crate) async fn run_ai_prompt(
+    database: &Database,
+    vault: Arc<dyn CredentialVault>,
+    payload: Value,
+) -> Result<Value> {
+    let connection_id = payload
+        .get("connectionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "AI requires a connected model.".to_string())?;
+    let prompt = payload
+        .get("prompt")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "AI requires an instruction.".to_string())?;
+    let system = payload
+        .get("systemPrompt")
+        .and_then(Value::as_str)
+        .unwrap_or("You are a helpful workflow assistant.");
+    let max_tokens = payload
+        .get("maxTokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(1_200)
+        .clamp(64, 32_000);
+    let temperature = payload
+        .get("temperature")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.2)
+        .clamp(0.0, 1.0);
+    let mut connection = database
+        .get_connection(connection_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "The selected AI connection no longer exists.".to_string())?;
+    if connection.status != ConnectionStatus::Connected
+        || !matches!(
+            connection.provider.as_str(),
+            "openai" | "anthropic" | "openai_compatible"
+        )
+    {
+        return Err("The selected AI connection must be reconnected before it can run.".into());
+    }
+    let secret = vault.get(connection_id)?;
+    let api_key = secret
+        .get("apiKey")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "The AI API key is missing. Reconnect this provider.".to_string())?;
+    let model = connection
+        .metadata
+        .get("model")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "The AI connection needs a model ID.".to_string())?;
+    let (response, usage) = request_text_provider(
+        &connection.provider,
+        &connection.metadata,
+        api_key,
+        &model,
+        system,
+        prompt,
+        max_tokens,
+        temperature,
+    )
+    .await?;
+    connection.last_used_at = Some(chrono::Utc::now());
+    database
+        .save_connection(&connection)
+        .map_err(|error| error.to_string())?;
+    Ok(json!({
+        "response": response,
+        "usage": usage,
+        "model": model,
+        "provider": connection.provider,
+    }))
+}
+
+#[tauri::command]
+pub async fn generate_code_with_ai(
+    connection_id: String,
+    language: String,
+    instruction: String,
+    current_code: String,
+    state: State<'_, AppState>,
+) -> Result<Value> {
+    if !matches!(language.as_str(), "python" | "html" | "javascript" | "css") {
+        return Err(
+            "Choose Python, HTML, JavaScript, or CSS before asking AI to write code.".into(),
+        );
+    }
+    let instruction = instruction.trim();
+    if instruction.is_empty() {
+        return Err("Describe the code you want AI to write.".into());
+    }
+    if instruction.chars().count() > 8_000 || current_code.len() > 2 * 1024 * 1024 {
+        return Err("The AI coding request is too large.".into());
+    }
+    let system = format!(
+        "You are the code-writing assistant inside sndbox. Write production-quality {language}. Return only the complete code for the file, with no Markdown fences or explanation. Preserve useful existing behaviour unless the user asks to replace it. The code may run inside a workflow or, for HTML, JavaScript, and CSS, feed a localhost Web Builder node. Never include credentials, API keys, or private data."
+    );
+    let prompt = format!(
+        "USER INSTRUCTION:\n{instruction}\n\nCURRENT {language_upper} CODE:\n{current_code}\n\nReturn the complete updated file.",
+        language_upper = language.to_uppercase(),
+    );
+    let output = run_ai_prompt(
+        state.engine.database(),
+        state.credential_vault.clone(),
+        json!({
+            "connectionId": connection_id,
+            "prompt": prompt,
+            "systemPrompt": system,
+            "maxTokens": 8_000,
+            "temperature": 0.15,
+        }),
+    )
+    .await?;
+    let response = output
+        .get("response")
+        .and_then(Value::as_str)
+        .map(strip_code_fence)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "AI returned an empty code block.".to_string())?;
+    Ok(json!({
+        "code": response,
+        "model": output.get("model"),
+        "usage": output.get("usage"),
+    }))
+}
+
+fn strip_code_fence(value: &str) -> String {
+    let trimmed = value.trim();
+    if !trimmed.starts_with("```") {
+        return trimmed.to_string();
+    }
+    let start = trimmed.find('\n').map(|index| index + 1).unwrap_or(3);
+    let end = trimmed
+        .rfind("```")
+        .filter(|index| *index >= start)
+        .unwrap_or(trimmed.len());
+    trimmed[start..end].trim().to_string()
+}
+
+async fn request_text_provider(
+    provider: &str,
+    metadata: &Value,
+    api_key: &str,
+    model: &str,
+    system: &str,
+    prompt: &str,
+    max_tokens: u64,
+    temperature: f64,
+) -> Result<(String, Value)> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| format!("The AI client could not start: {error}"))?;
+    let response = if provider == "anthropic" {
+        client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "system": system,
+                "messages": [{"role": "user", "content": prompt}],
+            }))
+            .send()
+            .await
+    } else if provider == "openai" {
+        client
+            .post("https://api.openai.com/v1/responses")
+            .bearer_auth(api_key)
+            .json(&json!({
+                "model": model,
+                "instructions": system,
+                "input": prompt,
+                "max_output_tokens": max_tokens,
+                "store": false,
+            }))
+            .send()
+            .await
+    } else {
+        let base = compatible_base_url(metadata)?;
+        client
+            .post(format!("{}/chat/completions", base.trim_end_matches('/')))
+            .bearer_auth(api_key)
+            .json(&json!({
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+            }))
+            .send()
+            .await
+    }
+    .map_err(|error| format!("The AI provider could not be reached: {error}"))?;
+    let status = response.status();
+    let value: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("The AI provider returned an unreadable response: {error}"))?;
+    if !status.is_success() {
+        let detail = value
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .or_else(|| value.get("error").and_then(Value::as_str))
+            .unwrap_or("The provider rejected the request.");
+        return Err(format!(
+            "AI provider HTTP {status}: {}",
+            truncate(detail, 500)
+        ));
+    }
+    let content = if provider == "anthropic" {
+        value
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|item| item.get("type").and_then(Value::as_str) == Some("text"))
+            })
+            .and_then(|item| item.get("text"))
+            .and_then(Value::as_str)
+    } else if provider == "openai" {
+        value
+            .get("output")
+            .and_then(Value::as_array)
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find_map(|item| item.get("content").and_then(Value::as_array))
+            })
+            .and_then(|items| {
+                items
+                    .iter()
+                    .find(|item| item.get("type").and_then(Value::as_str) == Some("output_text"))
+            })
+            .and_then(|item| item.get("text"))
+            .and_then(Value::as_str)
+    } else {
+        value
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+    }
+    .ok_or_else(|| "The AI provider returned no text response.".to_string())?;
+    Ok((
+        content.to_string(),
+        value.get("usage").cloned().unwrap_or_else(|| json!({})),
+    ))
 }
 
 async fn request_provider(
@@ -379,6 +663,22 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
             )
         })
         .collect();
+    let node_types: HashMap<String, String> = graph
+        .nodes
+        .iter()
+        .map(|node| (node.key.clone(), node.node_type.clone()))
+        .collect();
+    let code_languages: HashMap<String, String> = graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == "code")
+        .filter_map(|node| {
+            node.configuration
+                .get("language")
+                .and_then(Value::as_str)
+                .map(|language| (node.key.clone(), language.to_string()))
+        })
+        .collect();
     let trigger_key = triggers[0].key.clone();
     let mut level = HashMap::<String, usize>::from([(trigger_key.clone(), 0)]);
     for _ in 0..graph.nodes.len() {
@@ -396,7 +696,7 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
     let nodes: Vec<WorkflowNode> = graph
         .nodes
         .into_iter()
-        .map(|node| {
+        .map(|node| -> Result<WorkflowNode> {
             let column = level.get(&node.key).copied().unwrap_or(0);
             let row = rows.entry(column).or_insert(0);
             let position = Position {
@@ -404,7 +704,29 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
                 y: 140.0 + *row as f64 * 160.0,
             };
             *row += 1;
-            WorkflowNode {
+            let mut input_bindings = BTreeMap::new();
+            for (field, binding) in node.input_bindings {
+                let source_id = ids.get(&binding.source).ok_or_else(|| {
+                    format!(
+                        "Input '{field}' on {} references a missing source node.",
+                        node.key
+                    )
+                })?;
+                if binding.source == node.key {
+                    return Err(format!(
+                        "Input '{field}' on {} cannot reference itself.",
+                        node.key
+                    ));
+                }
+                input_bindings.insert(
+                    field,
+                    sandbox_engine::InputBinding::NodeOutput {
+                        node_id: source_id.clone(),
+                        path: vec![binding.output],
+                    },
+                );
+            }
+            Ok(WorkflowNode {
                 id: ids[&node.key].clone(),
                 node_type: node.node_type.clone(),
                 version: 1,
@@ -415,11 +737,11 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
                 position,
                 configuration: node.configuration,
                 disabled: node.disabled,
-                input_bindings: BTreeMap::new(),
+                input_bindings,
                 plugin: None,
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let mut seen_edges = HashSet::new();
     let edges: Vec<WorkflowEdge> = graph
         .edges
@@ -438,18 +760,44 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
                 edge.source.clone(),
                 edge.target.clone(),
                 edge.source_handle.clone(),
+                edge.target_handle.clone(),
             )) {
                 return Err("The AI proposal contains a duplicate connection.".to_string());
+            }
+            let web_builder_input = node_types
+                .get(&edge.target)
+                .is_some_and(|node_type| node_type == "web_builder");
+            if web_builder_input {
+                let required_language = match edge.target_handle.as_str() {
+                    "html" => "html",
+                    "javascript" => "javascript",
+                    "css" => "css",
+                    _ => return Err(
+                        "Web Builder connections must target its html, javascript, or css input."
+                            .to_string(),
+                    ),
+                };
+                if node_types.get(&edge.source).map(String::as_str) != Some("code")
+                    || code_languages.get(&edge.source).map(String::as_str)
+                        != Some(required_language)
+                {
+                    return Err(format!(
+                        "The Web Builder {} input requires a {} Code node.",
+                        edge.target_handle, required_language
+                    ));
+                }
+            } else if edge.target_handle != "input" {
+                return Err("Only Web Builder exposes named target inputs.".to_string());
             }
             Ok(WorkflowEdge {
                 id: format!("edge_{}", &Uuid::new_v4().to_string()[..8]),
                 source_node_id: ids[&edge.source].clone(),
                 source_handle: edge.source_handle,
                 target_node_id: ids[&edge.target].clone(),
-                target_handle: "input".into(),
+                target_handle: edge.target_handle.clone(),
                 kind: "control".into(),
-                source_port: None,
-                target_port: None,
+                source_port: web_builder_input.then(|| "code".into()),
+                target_port: web_builder_input.then_some(edge.target_handle),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -482,7 +830,7 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
 
 fn system_prompt() -> String {
     format!(
-        "You are the workflow builder inside sndbox. Convert the user's request into a complete visual workflow graph. Return JSON only, with this exact shape: {{\"reply\":\"brief explanation\",\"name\":\"optional workflow name\",\"description\":\"optional description\",\"nodes\":[{{\"key\":\"stable_local_key\",\"type\":\"node_type\",\"name\":\"label\",\"configuration\":{{}},\"disabled\":false}}],\"edges\":[{{\"source\":\"key\",\"target\":\"key\",\"sourceHandle\":\"output\"}}]}}. Output the complete replacement graph, including unchanged nodes when editing. Use exactly one trigger. Condition branches use sourceHandle true or false. Never invent node types, credentials, API keys, file paths, selectors, addresses, or personal data; leave unknown configuration values empty so the user can review them. Keep side-effecting actions disabled when intent is ambiguous. Supported node types: {}.",
+        "You are the workflow builder inside sndbox. Convert the user's request into a complete visual workflow graph. Return JSON only, with this exact shape: {{\"reply\":\"brief explanation\",\"name\":\"optional workflow name\",\"description\":\"optional description\",\"nodes\":[{{\"key\":\"stable_local_key\",\"type\":\"node_type\",\"name\":\"label\",\"configuration\":{{}},\"inputBindings\":{{\"targetField\":{{\"source\":\"upstream_key\",\"output\":\"output_key\"}}}},\"disabled\":false}}],\"edges\":[{{\"source\":\"key\",\"target\":\"key\",\"sourceHandle\":\"output\",\"targetHandle\":\"input\"}}]}}. Output the complete replacement graph, including unchanged nodes when editing. Use exactly one trigger. Condition branches use sourceHandle true or false. Code nodes use configuration {{\"language\":\"python|html|javascript|css\",\"sourceCode\":\"complete working source\",\"executionMode\":\"source|run\"}}. When the user asks for a site, write complete HTML, JavaScript, and CSS source in three Code nodes and map each node's code output to the Web Builder html, javascript, or css input through inputBindings. Create a separate edge from each matching Code node to the Web Builder and set targetHandle to html, javascript, or css; all other edges use targetHandle input. Never leave requested code blocks empty. Never invent node types, credentials, API keys, file paths, selectors, addresses, or personal data; leave unknown external configuration values empty so the user can review them. Keep side-effecting actions disabled when intent is ambiguous. Supported node types: {}.",
         SUPPORTED_NODES.join(", ")
     )
 }
@@ -507,6 +855,18 @@ fn workflow_schema() -> Value {
                         "type": {"type": "string", "enum": SUPPORTED_NODES},
                         "name": {"type": ["string", "null"]},
                         "configuration": {"type": "object", "additionalProperties": true},
+                        "inputBindings": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["source", "output"],
+                                "properties": {
+                                    "source": {"type": "string"},
+                                    "output": {"type": "string"}
+                                }
+                            }
+                        },
                         "disabled": {"type": "boolean"}
                     }
                 }
@@ -516,11 +876,12 @@ fn workflow_schema() -> Value {
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["source", "target", "sourceHandle"],
+                    "required": ["source", "target", "sourceHandle", "targetHandle"],
                     "properties": {
                         "source": {"type": "string"},
                         "target": {"type": "string"},
-                        "sourceHandle": {"type": "string", "enum": ["output", "true", "false"]}
+                        "sourceHandle": {"type": "string", "enum": ["output", "true", "false"]},
+                        "targetHandle": {"type": "string", "enum": ["input", "html", "javascript", "css"]}
                     }
                 }
             }
@@ -570,6 +931,18 @@ mod tests {
     }
 
     #[test]
+    fn strips_markdown_from_generated_code() {
+        assert_eq!(
+            strip_code_fence("```javascript\nconst ready = true;\n```"),
+            "const ready = true;"
+        );
+        assert_eq!(
+            strip_code_fence("body { color: red; }"),
+            "body { color: red; }"
+        );
+    }
+
+    #[test]
     fn turns_a_safe_graph_into_a_disabled_reviewable_workflow() {
         let current = crate::templates::blank(Some("Original".into()));
         let graph = AiGraph {
@@ -583,6 +956,7 @@ mod tests {
                     name: None,
                     configuration: json!({}),
                     disabled: false,
+                    input_bindings: BTreeMap::new(),
                 },
                 AiNode {
                     key: "request".into(),
@@ -590,12 +964,14 @@ mod tests {
                     name: Some("Check endpoint".into()),
                     configuration: json!({"url":""}),
                     disabled: true,
+                    input_bindings: BTreeMap::new(),
                 },
             ],
             edges: vec![AiEdge {
                 source: "start".into(),
                 target: "request".into(),
                 source_handle: "output".into(),
+                target_handle: "input".into(),
             }],
         };
         let proposal = graph_to_proposal(graph, current).unwrap();
@@ -607,5 +983,144 @@ mod tests {
             proposal.workflow.trigger_node_id,
             proposal.workflow.nodes[0].id
         );
+    }
+
+    #[test]
+    fn translates_ai_code_bindings_to_stable_node_ids() {
+        let current = crate::templates::blank(Some("Original".into()));
+        let code = |key: &str, language: &str| AiNode {
+            key: key.into(),
+            node_type: "code".into(),
+            name: None,
+            configuration: json!({"language":language,"sourceCode":"working source","executionMode":"source"}),
+            disabled: false,
+            input_bindings: BTreeMap::new(),
+        };
+        let graph = AiGraph {
+            reply: "Built it.".into(),
+            name: None,
+            description: None,
+            nodes: vec![
+                AiNode {
+                    key: "start".into(),
+                    node_type: "manual_trigger".into(),
+                    name: None,
+                    configuration: json!({}),
+                    disabled: false,
+                    input_bindings: BTreeMap::new(),
+                },
+                code("html", "html"),
+                code("js", "javascript"),
+                code("css", "css"),
+                AiNode {
+                    key: "site".into(),
+                    node_type: "web_builder".into(),
+                    name: None,
+                    configuration: json!({"html":"","javascript":"","css":"","port":0,"openBrowser":true}),
+                    disabled: false,
+                    input_bindings: BTreeMap::from([
+                        (
+                            "html".into(),
+                            AiBinding {
+                                source: "html".into(),
+                                output: "code".into(),
+                            },
+                        ),
+                        (
+                            "javascript".into(),
+                            AiBinding {
+                                source: "js".into(),
+                                output: "code".into(),
+                            },
+                        ),
+                        (
+                            "css".into(),
+                            AiBinding {
+                                source: "css".into(),
+                                output: "code".into(),
+                            },
+                        ),
+                    ]),
+                },
+            ],
+            edges: vec![
+                AiEdge {
+                    source: "start".into(),
+                    target: "html".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "start".into(),
+                    target: "js".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "start".into(),
+                    target: "css".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "html".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "html".into(),
+                },
+                AiEdge {
+                    source: "js".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "javascript".into(),
+                },
+                AiEdge {
+                    source: "css".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "css".into(),
+                },
+            ],
+        };
+        let proposal = graph_to_proposal(graph, current).unwrap();
+        let builder = proposal
+            .workflow
+            .nodes
+            .iter()
+            .find(|node| node.node_type == "web_builder")
+            .unwrap();
+        assert_eq!(builder.input_bindings.len(), 3);
+        let html_id = proposal
+            .workflow
+            .nodes
+            .iter()
+            .find(|node| node.name == "Code" && node.configuration["language"] == "html")
+            .unwrap()
+            .id
+            .clone();
+        assert_eq!(
+            builder.input_bindings["html"],
+            sandbox_engine::InputBinding::NodeOutput {
+                node_id: html_id,
+                path: vec!["code".into()]
+            }
+        );
+        let builder_edges = proposal
+            .workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.target_node_id == builder.id)
+            .collect::<Vec<_>>();
+        assert_eq!(builder_edges.len(), 3);
+        assert!(builder_edges.iter().any(
+            |edge| edge.target_handle == "html" && edge.target_port.as_deref() == Some("html")
+        ));
+        assert!(builder_edges
+            .iter()
+            .any(|edge| edge.target_handle == "javascript"
+                && edge.target_port.as_deref() == Some("javascript")));
+        assert!(builder_edges
+            .iter()
+            .any(|edge| edge.target_handle == "css" && edge.target_port.as_deref() == Some("css")));
     }
 }

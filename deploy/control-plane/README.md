@@ -97,6 +97,7 @@ Replace:
 ```dotenv
 DATABASE_URL=REPLACE_WITH_NEON_DIRECT_DATABASE_URL
 STRIPE_SECRET_KEY=REPLACE_WITH_STRIPE_TEST_SECRET_KEY
+BUG_REPORT_DISCORD_WEBHOOK_URL=REPLACE_WITH_DISCORD_BUG_REPORT_WEBHOOK_URL
 ```
 
 Leave this temporary value in place for the first deployment:
@@ -206,7 +207,16 @@ Stay inside the same Stripe sandbox that supplied the `sk_test_` key.
 
 The webhook signing secret and `sk_test_` secret key are different values. Do not interchange them.
 
-## 8. End-to-end beta check
+## 8. Configure the private bug-report channel
+
+1. In the Discord server where you want sndbox reports to arrive, create a private channel for app feedback.
+2. Open **Edit Channel → Integrations → Webhooks**, create a webhook named `sndbox bug reports`, and copy its URL.
+3. In DigitalOcean App Platform, set `BUG_REPORT_DISCORD_WEBHOOK_URL` to that URL as an **Encrypted/Secret** runtime variable.
+4. Redeploy the API. The webhook URL stays in the control plane and is never compiled into or returned to the desktop application.
+
+The public `/v1/support/bug-reports` endpoint accepts only the two report fields and optional bounded diagnostics, allows four submissions per IP every 15 minutes, disables Discord mentions, and creates the final embed server-side. Do not point it at a public Discord channel.
+
+## 9. End-to-end beta check
 
 1. Confirm `/health` and `/ready` both succeed.
 2. Start the v0.7.2 beta desktop build and select **Sign in**.
@@ -216,6 +226,7 @@ The webhook signing secret and `sk_test_` secret key are different values. Do no
 6. In DigitalOcean, inspect the API runtime logs. There should be no migration, OIDC, or database errors.
 7. In Neon, open the SQL Editor and run `SELECT id, primary_email, created_at FROM accounts;`. Confirm a row exists only after the first successful authenticated API call.
 8. Exercise checkout only with Stripe test cards. Never enter real card details in sandbox mode.
+9. Open **Report a bug** in the desktop sidebar, submit a test report, and confirm the formatted embed appears in the private Discord channel.
 
 Stripe is connected at this point, but the repository intentionally publishes no prices by default. Before testers can buy a plan, you must make a commercial choice about price and currency, create the matching recurring Price in the Stripe sandbox, deploy the account portal at `app.sndbox.app`, and synchronize the reviewed plan document as described in `docs/product-commerce-v0.6.md`. Those choices are not generated automatically because changing them has product and billing consequences.
 

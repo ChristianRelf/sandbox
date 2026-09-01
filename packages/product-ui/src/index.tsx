@@ -23,6 +23,7 @@ export type ProductWorkflowNodeProps = {
   trigger?: boolean;
   condition?: boolean;
   inputCount: number;
+  inputPorts?: Array<{ id: string; label: string }>;
   outputLabels: string[];
   onAdd?: (sourceId: string) => void;
   standalone?: boolean;
@@ -40,18 +41,46 @@ export function ProductWorkflowNode({
   trigger = false,
   condition = false,
   inputCount,
+  inputPorts,
   outputLabels,
   onAdd,
   standalone = false,
 }: ProductWorkflowNodeProps) {
   return (
     <div
-      className={`node-card ${selected ? "selected" : ""} node-${status} ${disabled ? "disabled" : ""}`}
+      className={`node-card ${selected ? "selected" : ""} node-${status} ${disabled ? "disabled" : ""} ${inputPorts?.length ? "node-card-multi-input" : ""}`}
       data-product-node="true"
     >
-      {!standalone && !trigger && (
+      {!standalone && !trigger && inputPorts?.length ? (
+        <>
+          {inputPorts.map((port, index) => {
+            const top = `${31 + index * 19}%`;
+            return (
+              <Handle
+                key={port.id}
+                type="target"
+                position={Position.Left}
+                id={port.id}
+                className="node-handle node-input-handle"
+                style={{ top }}
+                aria-label={`${port.label} input`}
+              />
+            );
+          })}
+          {inputPorts.map((port, index) => (
+            <span
+              key={`${port.id}-label`}
+              className="node-input-label"
+              style={{ top: `${31 + index * 19}%` }}
+              aria-hidden="true"
+            >
+              {port.label}
+            </span>
+          ))}
+        </>
+      ) : !standalone && !trigger ? (
         <Handle type="target" position={Position.Left} id="input" className="node-handle" />
-      )}
+      ) : null}
       <div className="node-top">
         <span className="node-icon"><Icon aria-hidden="true" size={15} /></span>
         <span className={`node-state state-${status}`} />

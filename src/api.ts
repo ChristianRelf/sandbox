@@ -6,6 +6,8 @@ import type {
   BrowserEngineStatus,
   BrowserProfile,
   BrowserProfileSettings,
+  BugReportDraft,
+  BugReportReceipt,
   CloudSyncResult,
   CloudWorkflow,
   CloudWorkflowApproval,
@@ -268,10 +270,28 @@ export const api = {
     tauri
       ? invoke<ConnectionMetadata[]>("list_connections")
       : previewApi.listConnections(),
+  submitBugReport: (report: BugReportDraft) =>
+    tauri
+      ? invoke<BugReportReceipt>("submit_bug_report", { report })
+      : previewApi.submitBugReport(report),
   buildWorkflowWithAi: (connectionId: string, message: string, workflow: Workflow) =>
     tauri
       ? invoke<AiWorkflowProposal>("build_workflow_with_ai", { connectionId, message, workflow })
       : Promise.reject(new Error("AI workflow building requires the desktop application so credentials stay in the operating-system vault.")),
+  generateCodeWithAi: (
+    connectionId: string,
+    language: "python" | "html" | "javascript" | "css",
+    instruction: string,
+    currentCode: string,
+  ) =>
+    tauri
+      ? invoke<{ code: string; model: string; usage: Record<string, unknown> }>("generate_code_with_ai", {
+          connectionId,
+          language,
+          instruction,
+          currentCode,
+        })
+      : Promise.reject(new Error("AI code writing requires the desktop application so credentials stay in the operating-system vault.")),
   createConnection: (
     provider: string,
     displayName: string,

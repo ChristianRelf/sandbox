@@ -33,6 +33,7 @@ use std::{
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
 use tokio_util::sync::CancellationToken;
 
 pub struct TauriHost {
@@ -166,6 +167,21 @@ impl HostServices for TauriHost {
         )
         .await
         .map_err(EngineError::Node)
+    }
+
+    async fn ai_operation(&self, payload: Value) -> Result<Value, EngineError> {
+        ai_builder::run_ai_prompt(&self.database, self.credential_vault.clone(), payload)
+            .await
+            .map_err(EngineError::Node)
+    }
+
+    async fn open_local_url(&self, url: &str) -> Result<(), EngineError> {
+        self.app
+            .opener()
+            .open_url(url, None::<&str>)
+            .map_err(|error| {
+                EngineError::Node(format!("The local site could not be opened: {error}"))
+            })
     }
 
     async fn plugin_operation(
@@ -414,12 +430,14 @@ pub fn run() {
             commands::stop_browser_recording,
             commands::test_browser_locator,
             commands::list_connections,
+            commands::submit_bug_report,
             commands::create_file_grant,
             commands::create_connection,
             commands::rename_connection,
             commands::reconnect_connection,
             commands::test_connection,
             ai_builder::build_workflow_with_ai,
+            ai_builder::generate_code_with_ai,
             commands::revoke_connection,
             commands::delete_connection,
             commands::workflows_using_connection,

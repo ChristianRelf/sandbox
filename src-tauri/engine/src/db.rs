@@ -162,7 +162,9 @@ impl Database {
             .optional()
             .map_err(storage)?;
         Ok(value.and_then(|(path, maximum, expires, consumed)| {
-            let expiry = DateTime::parse_from_rfc3339(&expires).ok()?.with_timezone(&Utc);
+            let expiry = DateTime::parse_from_rfc3339(&expires)
+                .ok()?
+                .with_timezone(&Utc);
             (consumed.is_none() && expiry > Utc::now()).then_some((path, maximum.max(0) as u64))
         }))
     }
@@ -252,7 +254,9 @@ impl Database {
                 "INSERT OR IGNORE INTO integration_poll_dedup(workflow_id,node_id,event_key,observed_at) VALUES(?,?,?,?)",
                 params![workflow_id,node_id,event_key,now.to_rfc3339()],
             ).map_err(storage)?;
-            if inserted == 1 { accepted.push(event_key.clone()); }
+            if inserted == 1 {
+                accepted.push(event_key.clone());
+            }
         }
         transaction.execute(
             "INSERT INTO integration_poll_cursors(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version,cursor_json,baseline_complete,last_polled_at,next_poll_at,last_error,failure_count) VALUES(?,?,?,?,?,?,?,?,?,?,NULL,0) ON CONFLICT(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version) DO UPDATE SET cursor_json=excluded.cursor_json,baseline_complete=excluded.baseline_complete,last_polled_at=excluded.last_polled_at,next_poll_at=excluded.next_poll_at,last_error=NULL,failure_count=0",
@@ -784,7 +788,11 @@ impl Database {
                     .permissions
                     .communication_approval_revision = None;
             }
-        } else if workflow.nodes.iter().any(|n| n.node_type == "run_command") {
+        } else if workflow
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node_type.as_str(), "run_command" | "code"))
+        {
             workflow.settings.permissions.command_execution_permitted = false;
             workflow.settings.permissions.approval_revision = None;
         }
@@ -1630,7 +1638,7 @@ fn dangerous_fingerprint(workflow: &Workflow) -> String {
         &workflow
             .nodes
             .iter()
-            .filter(|n| n.node_type == "run_command")
+            .filter(|n| matches!(n.node_type.as_str(), "run_command" | "code"))
             .map(|n| (&n.id, &n.configuration))
             .collect::<Vec<_>>(),
     )

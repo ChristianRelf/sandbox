@@ -10,6 +10,14 @@ sndbox treats the desktop host, browser sidecar, plugin runtime, remote runner, 
 
 File pickers establish path approval. Network domains, browser profiles, background execution, commands, and communications are tied to the workflow revision. Secrets stay in the OS vault or protected store and are redacted from ordinary evidence.
 
+Python and JavaScript Code nodes in run mode cross the command-execution boundary and require revision-bound approval. Source-mode Code nodes do not execute their contents. Web Builder serves generated content only on `127.0.0.1`; its browser-side JavaScript can still make requests using normal browser capabilities and CORS rules.
+
+## AI providers
+
+AI API keys remain in the operating-system credential vault and are resolved by the Rust host. Workflow JSON contains a connection reference and model metadata, not the key. AI workflow building, AI nodes, and Code-editor generation send the request prompt and relevant graph or code context to the selected provider.
+
+OpenAI-compatible remote base URLs require HTTPS. Plain HTTP is allowed only for loopback hosts. A locally configured endpoint is a separate trust boundary and can forward data elsewhere, so its deployment and model policy remain the user's responsibility.
+
 ## Plugins
 
 Signed immutable packages run as WebAssembly without general WASI. Host calls are typed and require declaration, node reference, user/workspace approval, and live policy. Package integrity and exact node version are pinned into the workflow.

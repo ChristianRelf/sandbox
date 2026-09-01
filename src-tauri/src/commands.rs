@@ -872,7 +872,7 @@ pub async fn export_workflow(
         "requiredPermissions": {
             "networkDomains": workflow.settings.permissions.approved_network_domains,
             "folderAccessCount": workflow.settings.permissions.approved_folders.len(),
-            "commandExecution": workflow.nodes.iter().any(|node| node.node_type == "run_command"),
+            "commandExecution": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "run_command" | "code")),
             "backgroundExecution": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "schedule_trigger" | "file_watch_trigger" | "gmail_new_email_trigger")),
             "externalCommunication": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "gmail_create_draft" | "gmail_send_email" | "gmail_add_label" | "discord_webhook" | "discord_embed" | "slack_webhook"))
         },
@@ -1602,6 +1602,94 @@ pub fn list_connections(state: State<'_, AppState>) -> Result<Vec<ConnectionMeta
     state.engine.database().list_connections().map_err(err)
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BugReportDraft {
+    summary: String,
+    description: String,
+    #[serde(default)]
+    diagnostics: std::collections::BTreeMap<String, String>,
+}
+
+#[tauri::command]
+pub async fn submit_bug_report(report: BugReportDraft) -> Result<Value> {
+    let payload = normalized_bug_report_payload(report)?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(err)?;
+    let base = account_auth::control_plane_url()?;
+    let response = client
+        .post(format!(
+            "{}/v1/support/bug-reports",
+            base.trim_end_matches('/')
+        ))
+        .header("accept", "application/json")
+        .header("idempotency-key", Uuid::new_v4().to_string())
+        .header("x-sndbox-client-version", env!("CARGO_PKG_VERSION"))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|error| format!("sndbox support could not be reached: {error}"))?;
+    let status = response.status();
+    if response
+        .content_length()
+        .is_some_and(|length| length > 64 * 1024)
+    {
+        return Err("sndbox support returned an oversized response.".into());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("sndbox support response could not be read: {error}"))?;
+    if bytes.len() > 64 * 1024 {
+        return Err("sndbox support returned an oversized response.".into());
+    }
+    let response_payload: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "sndbox support returned an invalid response.".to_string())?;
+    if !status.is_success() {
+        let message = response_payload
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("The bug report could not be delivered.");
+        let reference = response_payload
+            .get("correlationId")
+            .and_then(Value::as_str)
+            .map(|value| format!(" Reference: {value}."))
+            .unwrap_or_default();
+        return Err(format!("{message}{reference}"));
+    }
+    Ok(response_payload)
+}
+
+fn normalized_bug_report_payload(report: BugReportDraft) -> Result<Value> {
+    let summary = limited_text(&report.summary, 120);
+    let description = limited_text(&report.description, 2_000);
+    if summary.chars().count() < 4 {
+        return Err("Bug report summary must be at least 4 characters.".into());
+    }
+    if description.chars().count() < 10 {
+        return Err("Describe the problem in at least 10 characters.".into());
+    }
+    let diagnostics = report
+        .diagnostics
+        .iter()
+        .take(10)
+        .map(|(key, value)| (limited_text(key, 40), limited_text(value, 300)))
+        .filter(|(key, _)| !key.is_empty())
+        .collect::<std::collections::BTreeMap<_, _>>();
+    Ok(json!({
+        "summary": summary,
+        "description": description,
+        "diagnostics": diagnostics
+    }))
+}
+
+fn limited_text(value: &str, maximum: usize) -> String {
+    value.trim().chars().take(maximum).collect()
+}
+
 #[tauri::command]
 pub fn create_file_grant(
     path: String,
@@ -1619,7 +1707,8 @@ pub fn create_file_grant(
     if metadata.len() > maximum_bytes {
         return Err(format!(
             "The selected file is {} bytes, above this node's {}-byte limit.",
-            metadata.len(), maximum_bytes
+            metadata.len(),
+            maximum_bytes
         ));
     }
     let expires_at = Utc::now() + chrono::Duration::minutes(15);
@@ -2063,7 +2152,16 @@ fn validate_connection_input(
 ) -> Result<()> {
     if !matches!(
         provider.to_lowercase().as_str(),
-        "gmail" | "discord" | "slack" | "google_workspace" | "slack_oauth" | "notion" | "github_app" | "openai" | "anthropic" | "openai_compatible"
+        "gmail"
+            | "discord"
+            | "slack"
+            | "google_workspace"
+            | "slack_oauth"
+            | "notion"
+            | "github_app"
+            | "openai"
+            | "anthropic"
+            | "openai_compatible"
     ) {
         return Err("This connection provider is not supported.".into());
     }
@@ -2221,23 +2319,67 @@ pub async fn start_integration_oauth(
     if provider == "github_app" {
         return start_github_device_oauth(app, state).await;
     }
-    let (port, client_id_env, client_secret_env, authorization_endpoint, token_endpoint, scopes, extra) = match provider.as_str() {
-        "google_workspace" => (0, "SANDBOX_GOOGLE_WORKSPACE_CLIENT_ID", None, "https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", oauth::GOOGLE_WORKSPACE_SCOPES, vec![]),
-        "slack_oauth" => (42_818, "SANDBOX_SLACK_CLIENT_ID", Some("SANDBOX_SLACK_CLIENT_SECRET"), "https://slack.com/oauth/v2/authorize", "https://slack.com/api/oauth.v2.access", "channels:history,channels:read,chat:write,reactions:write,files:write,users:read", vec![]),
-        "notion" => (42_819, "SANDBOX_NOTION_CLIENT_ID", Some("SANDBOX_NOTION_CLIENT_SECRET"), "https://api.notion.com/v1/oauth/authorize", "https://api.notion.com/v1/oauth/token", "", vec![("owner", "user")]),
+    let (
+        port,
+        client_id_env,
+        client_secret_env,
+        authorization_endpoint,
+        token_endpoint,
+        scopes,
+        extra,
+    ) = match provider.as_str() {
+        "google_workspace" => (
+            0,
+            "SANDBOX_GOOGLE_WORKSPACE_CLIENT_ID",
+            None,
+            "https://accounts.google.com/o/oauth2/v2/auth",
+            "https://oauth2.googleapis.com/token",
+            oauth::GOOGLE_WORKSPACE_SCOPES,
+            vec![],
+        ),
+        "slack_oauth" => (
+            42_818,
+            "SANDBOX_SLACK_CLIENT_ID",
+            Some("SANDBOX_SLACK_CLIENT_SECRET"),
+            "https://slack.com/oauth/v2/authorize",
+            "https://slack.com/api/oauth.v2.access",
+            "channels:history,channels:read,chat:write,reactions:write,files:write,users:read",
+            vec![],
+        ),
+        "notion" => (
+            42_819,
+            "SANDBOX_NOTION_CLIENT_ID",
+            Some("SANDBOX_NOTION_CLIENT_SECRET"),
+            "https://api.notion.com/v1/oauth/authorize",
+            "https://api.notion.com/v1/oauth/token",
+            "",
+            vec![("owner", "user")],
+        ),
         _ => return Err("Unsupported OAuth integration provider.".into()),
     };
     let client_id = configured_secret(client_id_env, &provider)?;
-    let client_secret = client_secret_env.map(|name| configured_secret(name, &provider)).transpose()?;
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.map_err(|error| format!("sndbox could not open the local OAuth callback: {error}"))?;
+    let client_secret = client_secret_env
+        .map(|name| configured_secret(name, &provider))
+        .transpose()?;
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .map_err(|error| format!("sndbox could not open the local OAuth callback: {error}"))?;
     let address = listener.local_addr().map_err(err)?;
     let redirect_uri = format!("http://127.0.0.1:{}/oauth/callback", address.port());
     let (attempt, start) = if provider == "google_workspace" {
         oauth::start_google_workspace(&client_id, redirect_uri.clone())?
     } else {
-        oauth::start_code_flow(authorization_endpoint, &client_id, redirect_uri.clone(), scopes, &extra)?
+        oauth::start_code_flow(
+            authorization_endpoint,
+            &client_id,
+            redirect_uri.clone(),
+            scopes,
+            &extra,
+        )?
     };
-    app.opener().open_url(&start.authorization_url, None::<&str>).map_err(|error| format!("The authorization page could not be opened: {error}"))?;
+    app.opener()
+        .open_url(&start.authorization_url, None::<&str>)
+        .map_err(|error| format!("The authorization page could not be opened: {error}"))?;
     let database = state.engine.database().clone();
     let vault = state.credential_vault.clone();
     let emitted_app = app.clone();
@@ -2281,57 +2423,191 @@ pub async fn start_integration_oauth(
             write_oauth_response(&mut stream,true,"sndbox is connected. You can close this tab and return to the desktop app.").await;
             Ok(connection)
         }.await;
-        match result { Ok(connection)=>{let _=emitted_app.emit("connection-updated",connection);},Err(error)=>{let _=emitted_app.emit("connection-error",error);} }
+        match result {
+            Ok(connection) => {
+                let _ = emitted_app.emit("connection-updated", connection);
+            }
+            Err(error) => {
+                let _ = emitted_app.emit("connection-error", error);
+            }
+        }
     });
     Ok(start)
 }
 
 #[tauri::command]
-pub async fn list_integration_resources(connection_id:String,kind:String,parent:Option<String>,state:State<'_,AppState>)->Result<Vec<crate::provider_adapter::ProviderResource>>{
-    let connection_id=checked_uuid(&connection_id,"Connection")?;
-    if kind.len()>80||!kind.chars().all(|character|character.is_ascii_lowercase()||character=='_'){return Err("Resource picker kind is invalid.".into());}
-    let adapter=state.provider_adapter.clone();
-    tauri::async_runtime::spawn_blocking(move||adapter.list_resources(&connection_id,&kind,parent.as_deref()).map_err(|error|error.to_string())).await.map_err(|error|format!("Resource picker worker failed: {error}"))?
+pub async fn list_integration_resources(
+    connection_id: String,
+    kind: String,
+    parent: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::provider_adapter::ProviderResource>> {
+    let connection_id = checked_uuid(&connection_id, "Connection")?;
+    if kind.len() > 80
+        || !kind
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character == '_')
+    {
+        return Err("Resource picker kind is invalid.".into());
+    }
+    let adapter = state.provider_adapter.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        adapter
+            .list_resources(&connection_id, &kind, parent.as_deref())
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Resource picker worker failed: {error}"))?
 }
 
 #[tauri::command]
-pub async fn configure_github_installation(connection_id:String,installation_id:u64,repositories:Vec<String>,state:State<'_,AppState>)->Result<ConnectionMetadata>{
-    let connection_id=checked_uuid(&connection_id,"Connection")?;
-    if repositories.is_empty()||repositories.len()>500{return Err("Select between 1 and 500 repositories.".into());}
-    let adapter=state.provider_adapter.clone();let lookup_id=connection_id.clone();
-    let available=tauri::async_runtime::spawn_blocking(move||adapter.list_resources(&lookup_id,"github_repository",None).map_err(|error|error.to_string())).await.map_err(|error|format!("GitHub repository picker failed: {error}"))??;
+pub async fn configure_github_installation(
+    connection_id: String,
+    installation_id: u64,
+    repositories: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<ConnectionMetadata> {
+    let connection_id = checked_uuid(&connection_id, "Connection")?;
+    if repositories.is_empty() || repositories.len() > 500 {
+        return Err("Select between 1 and 500 repositories.".into());
+    }
+    let adapter = state.provider_adapter.clone();
+    let lookup_id = connection_id.clone();
+    let available = tauri::async_runtime::spawn_blocking(move || {
+        adapter
+            .list_resources(&lookup_id, "github_repository", None)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("GitHub repository picker failed: {error}"))??;
     let selected=repositories.iter().map(|name|{
         validate_repository_name(name)?;
         available.iter().find(|resource|resource.id==*name&&resource.metadata.get("installationId").and_then(Value::as_u64)==Some(installation_id)).map(|resource|json!({"repositoryId":resource.metadata.get("repositoryId"),"fullName":resource.id,"owner":resource.metadata.get("owner"),"permissions":resource.metadata.get("permissions")})).ok_or_else(||format!("Repository '{name}' is not accessible through the selected GitHub App installation."))
     }).collect::<Result<Vec<_>>>()?;
-    let mut connection=state.engine.database().get_connection(&connection_id).map_err(err)?.ok_or_else(||"The GitHub connection no longer exists.".to_string())?;
-    if connection.provider!="github_app"{return Err("The selected connection is not a GitHub App connection.".into());}
-    if !connection.metadata.get("installations").and_then(Value::as_array).is_some_and(|items|items.iter().any(|item|item.get("id").and_then(Value::as_u64)==Some(installation_id))){return Err("The selected GitHub App installation is not accessible to this account.".into());}
-    connection.status=ConnectionStatus::Connected;
-    connection.metadata["installationId"]=json!(installation_id);
-    connection.metadata["accessibleOwner"]=selected.first().and_then(|item|item.get("owner")).cloned().unwrap_or(Value::Null);
-    connection.metadata["selectedRepositories"]=Value::Array(selected);
-    connection.metadata["grantedPermissionSnapshot"]=connection.metadata.get("installations").and_then(Value::as_array).and_then(|items|items.iter().find(|item|item.get("id").and_then(Value::as_u64)==Some(installation_id))).and_then(|item|item.get("permissions")).cloned().unwrap_or_else(||json!({}));
-    connection.metadata["lastSuccessfulValidationTime"]=json!(Utc::now());
-    if let Some(object)=connection.metadata.as_object_mut(){object.remove("attentionReason");object.remove("lastValidationFailureAt");}
-    state.engine.database().save_connection(&connection).map_err(err)?;
+    let mut connection = state
+        .engine
+        .database()
+        .get_connection(&connection_id)
+        .map_err(err)?
+        .ok_or_else(|| "The GitHub connection no longer exists.".to_string())?;
+    if connection.provider != "github_app" {
+        return Err("The selected connection is not a GitHub App connection.".into());
+    }
+    if !connection
+        .metadata
+        .get("installations")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items
+                .iter()
+                .any(|item| item.get("id").and_then(Value::as_u64) == Some(installation_id))
+        })
+    {
+        return Err(
+            "The selected GitHub App installation is not accessible to this account.".into(),
+        );
+    }
+    connection.status = ConnectionStatus::Connected;
+    connection.metadata["installationId"] = json!(installation_id);
+    connection.metadata["accessibleOwner"] = selected
+        .first()
+        .and_then(|item| item.get("owner"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    connection.metadata["selectedRepositories"] = Value::Array(selected);
+    connection.metadata["grantedPermissionSnapshot"] = connection
+        .metadata
+        .get("installations")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|item| item.get("id").and_then(Value::as_u64) == Some(installation_id))
+        })
+        .and_then(|item| item.get("permissions"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    connection.metadata["lastSuccessfulValidationTime"] = json!(Utc::now());
+    if let Some(object) = connection.metadata.as_object_mut() {
+        object.remove("attentionReason");
+        object.remove("lastValidationFailureAt");
+    }
+    state
+        .engine
+        .database()
+        .save_connection(&connection)
+        .map_err(err)?;
     Ok(connection)
 }
 
-fn validate_repository_name(value:&str)->Result<()> {let parts=value.split('/').collect::<Vec<_>>();if parts.len()!=2||parts.iter().any(|part|part.is_empty()||!part.chars().all(|character|character.is_ascii_alphanumeric()||matches!(character,'-'|'_'|'.'))){Err("Repository must use owner/name format.".into())}else{Ok(())}}
+fn validate_repository_name(value: &str) -> Result<()> {
+    let parts = value.split('/').collect::<Vec<_>>();
+    if parts.len() != 2
+        || parts.iter().any(|part| {
+            part.is_empty()
+                || !part.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+                })
+        })
+    {
+        Err("Repository must use owner/name format.".into())
+    } else {
+        Ok(())
+    }
+}
 
-async fn start_github_device_oauth(app: AppHandle, state: State<'_, AppState>) -> Result<oauth::OAuthStart> {
-    let client_id=configured_secret("SANDBOX_GITHUB_APP_CLIENT_ID","github_app")?;
-    let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).redirect(reqwest::redirect::Policy::none()).build().map_err(err)?;
-    let device=provider_token_json(client.post("https://github.com/login/device/code").header("accept","application/json").form(&[("client_id",client_id.as_str())]).send().await.map_err(err)?,"GitHub device authorization").await?;
-    let verification=device.get("verification_uri").and_then(Value::as_str).ok_or_else(||"GitHub did not return a verification URL.".to_string())?.to_string();
-    let user_code=device.get("user_code").and_then(Value::as_str).ok_or_else(||"GitHub did not return a user code.".to_string())?.to_string();
-    let device_code=device.get("device_code").and_then(Value::as_str).ok_or_else(||"GitHub did not return a device code.".to_string())?.to_string();
-    let expires_in=device.get("expires_in").and_then(Value::as_i64).unwrap_or(900);
-    let interval=device.get("interval").and_then(Value::as_u64).unwrap_or(5).max(5);
-    app.opener().open_url(&verification,None::<&str>).map_err(|error|format!("The GitHub authorization page could not be opened: {error}"))?;
-    let database=state.engine.database().clone();let vault=state.credential_vault.clone();let emitted_app=app.clone();
-    let client_id_for_poll=client_id.clone();
+async fn start_github_device_oauth(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<oauth::OAuthStart> {
+    let client_id = configured_secret("SANDBOX_GITHUB_APP_CLIENT_ID", "github_app")?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(err)?;
+    let device = provider_token_json(
+        client
+            .post("https://github.com/login/device/code")
+            .header("accept", "application/json")
+            .form(&[("client_id", client_id.as_str())])
+            .send()
+            .await
+            .map_err(err)?,
+        "GitHub device authorization",
+    )
+    .await?;
+    let verification = device
+        .get("verification_uri")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "GitHub did not return a verification URL.".to_string())?
+        .to_string();
+    let user_code = device
+        .get("user_code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "GitHub did not return a user code.".to_string())?
+        .to_string();
+    let device_code = device
+        .get("device_code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "GitHub did not return a device code.".to_string())?
+        .to_string();
+    let expires_in = device
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(900);
+    let interval = device
+        .get("interval")
+        .and_then(Value::as_u64)
+        .unwrap_or(5)
+        .max(5);
+    app.opener()
+        .open_url(&verification, None::<&str>)
+        .map_err(|error| format!("The GitHub authorization page could not be opened: {error}"))?;
+    let database = state.engine.database().clone();
+    let vault = state.credential_vault.clone();
+    let emitted_app = app.clone();
+    let client_id_for_poll = client_id.clone();
     tauri::async_runtime::spawn(async move {
         let result:Result<ConnectionMetadata>=async{
             let deadline=Utc::now()+chrono::Duration::seconds(expires_in);let mut wait=interval;
@@ -2344,14 +2620,51 @@ async fn start_github_device_oauth(app: AppHandle, state: State<'_, AppState>) -
             if installation_summaries.is_empty(){return Err("Authorize or install the sndbox GitHub App for at least one account, then connect again.".into());}
             let connection=ConnectionMetadata{id:Uuid::new_v4().to_string(),provider:"github_app".into(),display_name:login.clone(),account_identifier:Some(login),scopes:vec!["metadata:read".into(),"issues:write".into(),"pull_requests:write".into(),"actions:write".into(),"contents:write".into()],created_at:Utc::now(),last_used_at:None,expires_at:token.get("expires_in").and_then(Value::as_i64).map(|seconds|Utc::now()+chrono::Duration::seconds(seconds)),status:ConnectionStatus::SetupRequired,metadata:json!({"authType":"github_app_device_flow","avatarUrl":profile.get("avatar_url"),"installations":installation_summaries,"installationId":null,"selectedRepositories":[],"lastSuccessfulValidationTime":null,"attentionReason":"Select an installation and repositories."})};
             vault.put(&connection.id,&json!({"accessToken":access,"refreshToken":token.get("refresh_token"),"tokenType":token.get("token_type")}))?;if let Err(error)=database.save_connection(&connection){let _=vault.delete(&connection.id);return Err(error.to_string());}Ok(connection)
-        }.await;match result{Ok(connection)=>{let _=emitted_app.emit("connection-updated",connection);},Err(error)=>{let _=emitted_app.emit("connection-error",error);}}
+        }.await;
+        match result {
+            Ok(connection) => {
+                let _ = emitted_app.emit("connection-updated", connection);
+            }
+            Err(error) => {
+                let _ = emitted_app.emit("connection-error", error);
+            }
+        }
     });
-    Ok(oauth::OAuthStart{authorization_url:verification,expires_at:Utc::now()+chrono::Duration::seconds(expires_in),user_code:Some(user_code)})
+    Ok(oauth::OAuthStart {
+        authorization_url: verification,
+        expires_at: Utc::now() + chrono::Duration::seconds(expires_in),
+        user_code: Some(user_code),
+    })
 }
 
-fn configured_secret(name:&str,provider:&str)->Result<String>{std::env::var(name).ok().filter(|value|!value.trim().is_empty()).ok_or_else(||format!("{provider} OAuth is not configured in this build. Set {name} and restart sndbox."))}
+fn configured_secret(name: &str, provider: &str) -> Result<String> {
+    std::env::var(name)
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "{provider} OAuth is not configured in this build. Set {name} and restart sndbox."
+            )
+        })
+}
 
-async fn provider_token_json(response:reqwest::Response,provider:&str)->Result<Value>{let status=response.status();let body:Value=response.json().await.map_err(|error|format!("{provider} returned invalid JSON: {error}"))?;if !status.is_success(){return Err(format!("{provider} failed with HTTP {status}: {}",body.get("error_description").or_else(||body.get("error")).and_then(Value::as_str).unwrap_or("unknown error")));}Ok(body)}
+async fn provider_token_json(response: reqwest::Response, provider: &str) -> Result<Value> {
+    let status = response.status();
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("{provider} returned invalid JSON: {error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "{provider} failed with HTTP {status}: {}",
+            body.get("error_description")
+                .or_else(|| body.get("error"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown error")
+        ));
+    }
+    Ok(body)
+}
 
 async fn write_oauth_response(stream: &mut tokio::net::TcpStream, success: bool, message: &str) {
     let title = if success {
@@ -2411,12 +2724,17 @@ fn sanitize_export_definition(
             .and_then(Value::as_str)
             .unwrap_or("unknown-node")
             .to_string();
+        let connection_field = if node.get("type").and_then(Value::as_str) == Some("ai_prompt") {
+            "connectionId"
+        } else {
+            "credentialId"
+        };
         let Some(configuration) = node.get_mut("configuration").and_then(Value::as_object_mut)
         else {
             continue;
         };
         if let Some(credential_id) = configuration
-            .remove("credentialId")
+            .remove(connection_field)
             .and_then(|value| value.as_str().map(str::to_string))
             .filter(|value| !value.is_empty())
         {
@@ -2523,6 +2841,40 @@ fn contains_secret_material(value: &Value) -> bool {
         }),
         Value::Array(values) => values.iter().any(contains_secret_material),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod bug_report_tests {
+    use super::*;
+
+    fn report() -> BugReportDraft {
+        BugReportDraft {
+            summary: "Web Builder preview stays blank".into(),
+            description: "The localhost page opens, but no compiled content is displayed.".into(),
+            diagnostics: [("App version".into(), "0.7.3-beta.1".into())]
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn normalizes_a_bounded_first_party_report() {
+        let payload = normalized_bug_report_payload(report()).unwrap();
+        assert_eq!(payload.as_object().unwrap().len(), 3);
+        assert_eq!(payload["summary"], "Web Builder preview stays blank");
+        assert!(payload["description"]
+            .as_str()
+            .unwrap()
+            .contains("localhost"));
+        assert_eq!(payload["diagnostics"]["App version"], "0.7.3-beta.1");
+    }
+
+    #[test]
+    fn rejects_incomplete_bug_reports() {
+        let mut incomplete = report();
+        incomplete.summary = "no".into();
+        assert!(normalized_bug_report_payload(incomplete).is_err());
     }
 }
 

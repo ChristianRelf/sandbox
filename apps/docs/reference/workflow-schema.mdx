@@ -57,3 +57,9 @@ interface WorkflowSettings {
 ```
 
 Use the editor, import/export envelope, or typed API rather than editing a stored database row. Generated node pages show the exact version 1 configuration defaults for all built-in node types.
+
+## AI and code-capable nodes
+
+The current built-in IDs are `ai_prompt`, `code`, and `web_builder`. Their exact default configurations and ports are generated in the [AI](/nodes/ai-prompt), [Code](/nodes/code), and [Web Builder](/nodes/web-builder) references.
+
+AI connections are stored as IDs in `configuration.connectionId`; credentials never enter the schema. Code source is stored in `configuration.sourceCode`. A Web Builder receives source through ordinary `node_output` bindings, with each binding pointing to the upstream Code node's `code` output. Python and JavaScript `executionMode: "run"` also require revision-bound command-execution permission.

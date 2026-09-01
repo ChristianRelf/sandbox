@@ -1,9 +1,11 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, FolderOpen, LocateFixed, RefreshCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, Bot, Code2, ExternalLink, FolderOpen, LocateFixed, Pencil, RefreshCcw, Trash2 } from "lucide-react";
 import {
   Children,
   cloneElement,
   isValidElement,
+  lazy,
+  Suspense,
   useEffect,
   useState,
   type ReactElement,
@@ -11,6 +13,7 @@ import {
 } from "react";
 import { api } from "../api";
 import { definitionFor, type NodeDefinition } from "../catalogue";
+import type { CodeLanguage } from "./CodeEditorDialog";
 import type {
   BrowserProfile,
   ConnectionMetadata,
@@ -32,6 +35,10 @@ const locatorKinds = [
   "xpath",
 ] as const;
 
+const CodeEditorDialog = lazy(() =>
+  import("./CodeEditorDialog").then((module) => ({ default: module.CodeEditorDialog })),
+);
+
 export function NodeInspector({
   workflow,
   node,
@@ -51,6 +58,7 @@ export function NodeInspector({
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [connections, setConnections] = useState<ConnectionMetadata[]>([]);
   const [locatorTest, setLocatorTest] = useState<string>();
+  const [codeEditorOpen, setCodeEditorOpen] = useState(false);
   const set = (key: string, value: unknown) =>
     onChange({ ...node, configuration: { ...config, [key]: value } });
   useEffect(() => {
@@ -61,6 +69,7 @@ export function NodeInspector({
     if (
       definition.group === "Communication" ||
       node.type === "gmail_new_email_trigger" ||
+      node.type === "ai_prompt" ||
       Boolean(node.plugin)
     )
       void api.listConnections().then(setConnections);
@@ -1305,6 +1314,74 @@ export function NodeInspector({
             <Info>State changes are committed only after the complete workflow succeeds. Individual node tests only preview them.</Info>
           </>
         )}
+        {node.type === "ai_prompt" && (
+          <>
+            <div className="node-capability-callout ai-node-callout">
+              <Bot size={16} />
+              <div><b>Waits for a live model response</b><p>The workflow pauses here until the selected AI answers or the timeout is reached.</p></div>
+            </div>
+            <Field label="AI connection">
+              <select value={String(config.connectionId ?? "")} onChange={(event) => set("connectionId", event.target.value)}>
+                <option value="">Select connected AI…</option>
+                {connections
+                  .filter((connection) => ["openai", "anthropic", "openai_compatible"].includes(connection.provider) && connection.status === "connected")
+                  .map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName} · {String(connection.metadata.model ?? "model")}</option>)}
+              </select>
+              {!connections.some((connection) => ["openai", "anthropic", "openai_compatible"].includes(connection.provider) && connection.status === "connected") && (
+                <small className="field-hint">Add an AI connection in Settings → Connections first.</small>
+              )}
+            </Field>
+            {mapping("prompt", "Instruction", { multiline: true })}
+            <Field label="System instruction" hint="Sets the model's role for this step">
+              <textarea rows={4} value={String(config.systemPrompt ?? "")} onChange={(event) => set("systemPrompt", event.target.value)} />
+            </Field>
+            <div className="field-grid">
+              <Field label="Max tokens"><input type="number" min="64" max="32000" value={Number(config.maxTokens ?? 1200)} onChange={(event) => set("maxTokens", Number(event.target.value))} /></Field>
+              <Field label="Creativity"><input type="number" min="0" max="1" step="0.1" value={Number(config.temperature ?? 0.2)} onChange={(event) => set("temperature", Number(event.target.value))} /></Field>
+            </div>
+            <TimeoutField config={config} set={set} />
+          </>
+        )}
+        {node.type === "code" && (
+          <>
+            <div className="code-node-summary">
+              <span><Code2 size={17} /></span>
+              <div><b>{String(config.language ?? "javascript")}</b><small>{String(config.sourceCode ?? "").split("\n").length} lines · {String(config.sourceCode ?? "").length} characters</small></div>
+              <button className="button" type="button" onClick={() => setCodeEditorOpen(true)}><Pencil size={13} /> Edit code</button>
+            </div>
+            {(config.language === "python" || config.language === "javascript") && (
+              <Field label="Workflow behaviour">
+                <select value={String(config.executionMode ?? "source")} onChange={(event) => set("executionMode", event.target.value)}>
+                  <option value="source">Provide source to the next node</option>
+                  <option value="run">Execute script and await result</option>
+                </select>
+              </Field>
+            )}
+            {config.executionMode === "run" && (config.language === "python" || config.language === "javascript") && (
+              <div className="risk-callout">
+                <AlertTriangle size={16} /><div><b>Local code execution</b><p>Requires command execution permission. The script receives mapped input through the SNDBOX_INPUT environment variable.</p></div>
+              </div>
+            )}
+            {config.executionMode === "run" && <TimeoutField config={config} set={set} />}
+            <Info>HTML, JavaScript, and CSS source blocks can connect directly to a Web Builder node.</Info>
+          </>
+        )}
+        {node.type === "web_builder" && (
+          <>
+            <div className="node-capability-callout web-builder-callout">
+              <ExternalLink size={16} />
+              <div><b>Localhost site</b><p>Combines the three mapped code inputs, starts a loopback-only server, and returns its URL.</p></div>
+            </div>
+            <Field label="Port" hint="Use 0 to choose an available port automatically">
+              <input type="number" min="0" max="65535" value={Number(config.port ?? 0)} onChange={(event) => set("port", Number(event.target.value))} />
+            </Field>
+            <label className="toggle-row">
+              <span><b>Open site after building</b><small>Launch the localhost URL in your default browser.</small></span>
+              <input type="checkbox" checked={Boolean(config.openBrowser)} onChange={(event) => set("openBrowser", event.target.checked)} />
+            </label>
+            <Info>Map HTML, JavaScript, and CSS from three upstream Code nodes in Data mapping above.</Info>
+          </>
+        )}
         {node.type === "run_command" && (
           <>
             <div className="risk-callout">
@@ -1424,6 +1501,25 @@ export function NodeInspector({
           Delete node
         </button>
       </div>
+      {node.type === "code" && (
+        <Suspense fallback={null}>
+          <CodeEditorDialog
+            open={codeEditorOpen}
+            onOpenChange={setCodeEditorOpen}
+            language={String(config.language ?? "javascript") as CodeLanguage}
+            value={String(config.sourceCode ?? "")}
+            onSave={(language, sourceCode) => onChange({
+              ...node,
+              configuration: {
+                ...config,
+                language,
+                sourceCode,
+                executionMode: language === "html" || language === "css" ? "source" : (config.executionMode ?? "source"),
+              },
+            })}
+          />
+        </Suspense>
+      )}
     </aside>
   );
 }

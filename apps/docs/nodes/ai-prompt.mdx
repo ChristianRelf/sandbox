@@ -1,0 +1,69 @@
+---
+title: "AI"
+description: "Send an instruction mid-workflow and wait for the model response. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `ai_prompt` · **Version:** `1` · **Category:** Data
+
+Send an instruction mid-workflow and wait for the model response. This node does not declare an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `connectionId` | string | `""` | Reference to an AI connection whose credential is stored in the operating-system credential vault. |
+| `prompt` | string | `""` | Instruction sent to the selected model. It can be mapped from an earlier node output. |
+| `systemPrompt` | string | `"You are a helpful workflow assistant. Return a concise, useful response."` | System instruction that defines the model's role for this workflow step. |
+| `temperature` | number | `0.2` | Creativity value from 0 to 1. |
+| `maxTokens` | number | `1200` | Maximum number of output tokens requested from the model, from 64 to 32000. |
+| `timeoutMs` | number | `90000` | Maximum time for this operation in milliseconds. |
+
+<Note>The workflow pauses at this node until the selected provider responds, the request is cancelled, or the configured timeout is reached.</Note>
+
+<Note>The credential remains in the host vault. The prompt, system instruction, and mapped context are sent to the selected provider.</Note>
+
+<Note>AI nodes run on the desktop local runner and return the response text, provider-reported usage, and model ID.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "ai_prompt",
+  "version": 1,
+  "configuration": {
+    "connectionId": "",
+    "prompt": "",
+    "systemPrompt": "You are a helpful workflow assistant. Return a concise, useful response.",
+    "temperature": 0.2,
+    "maxTokens": 1200,
+    "timeoutMs": 90000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `prompt` | `string` | Yes | Instruction |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `response` | `string` | No | AI response |
+| `usage` | `object` | No | Token usage |
+| `model` | `string` | No | Model |
+
+## Where it can run
+
+- Desktop local runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

@@ -1,6 +1,8 @@
 import type {
   BrowserProfile,
   BrowserProfileSettings,
+  BugReportDraft,
+  BugReportReceipt,
   ConnectionMetadata,
   ExecutionQuery,
   ExecutionRecord,
@@ -13,6 +15,7 @@ import type {
   WorkflowRevisionSummary,
   WorkflowSummary,
 } from "./types";
+import { createAdditionalTemplateWorkflow } from "./workflowTemplates";
 
 const KEY = "sandbox-preview-workflows";
 const RUNS = "sandbox-preview-runs";
@@ -46,6 +49,8 @@ const blank = (template = "blank"): Workflow => {
     createdAt,
     updatedAt: createdAt,
   };
+  const additionalTemplate = createAdditionalTemplateWorkflow(template, base);
+  if (additionalTemplate) return additionalTemplate;
   if (template === "website-change-monitor")
     return {
       ...base,
@@ -856,6 +861,22 @@ export const previewApi = {
           fieldPath: "configuration.url",
           suggestion: "Enter an http:// or https:// URL.",
         });
+      const missing = (field: string) => !n.inputBindings?.[field] && !String(n.configuration[field] ?? "").trim();
+      const requiredField = n.type === "ai_prompt"
+        ? (missing("connectionId") ? "connectionId" : missing("prompt") ? "prompt" : undefined)
+        : n.type === "code"
+          ? (missing("sourceCode") ? "sourceCode" : undefined)
+          : n.type === "web_builder"
+            ? (["html", "javascript", "css"].find(missing))
+            : undefined;
+      if (requiredField) issues.push({
+        code: "incomplete_node",
+        message: n.type === "web_builder" ? "Web Builder requires mapped HTML, JavaScript, and CSS inputs." : `${n.name} requires ${requiredField.replaceAll(/([A-Z])/g, " $1").toLowerCase()}.`,
+        severity: "error",
+        nodeId: n.id,
+        fieldPath: `configuration.${requiredField}`,
+        suggestion: "Complete this field before running the workflow.",
+      });
     });
     return issues;
   },
@@ -885,6 +906,12 @@ export const previewApi = {
             }
           : n.type === "condition"
             ? { result: true, left: 200, right: 200, operator: "equals" }
+            : n.type === "ai_prompt"
+              ? { response: "Preview AI response", model: "preview-model", usage: { totalTokens: 24 } }
+              : n.type === "code"
+                ? { code: String(n.configuration.sourceCode ?? ""), language: n.configuration.language, result: String(n.configuration.sourceCode ?? "") }
+                : n.type === "web_builder"
+                  ? { url: "http://127.0.0.1:4173/", port: 4173, status: "preview" }
             : { delivered: n.type === "desktop_notification" },
       logs: [
         n.type === "http_request"
@@ -929,6 +956,8 @@ export const previewApi = {
       "copy_path",
       "delete_path",
       "run_command",
+      "code",
+      "web_builder",
       "gmail_create_draft",
       "gmail_send_email",
       "gmail_add_label",
@@ -1182,5 +1211,27 @@ export const previewApi = {
     return JSON.parse(
       localStorage.getItem(CONNECTIONS) ?? "[]",
     ) as ConnectionMetadata[];
+  },
+  async submitBugReport(report: BugReportDraft): Promise<BugReportReceipt> {
+    if (!report.summary.trim() || !report.description.trim())
+      throw new Error("A summary and description are required.");
+    const response = await fetch("/__sndbox/bug-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(report),
+    });
+    const body = await response.text();
+    let payload: BugReportReceipt & { error?: string };
+    try {
+      payload = JSON.parse(body) as BugReportReceipt & { error?: string };
+    } catch {
+      throw new Error(
+        response.ok
+          ? "The bug-report service returned an invalid response."
+          : "The development bug-report service is unavailable.",
+      );
+    }
+    if (!response.ok) throw new Error(payload.error || "Bug report delivery failed.");
+    return payload;
   },
 };

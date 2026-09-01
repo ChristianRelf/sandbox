@@ -4,7 +4,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   Position,
   ReactFlow,
   useNodesState,
@@ -50,6 +49,11 @@ import {
 } from "../catalogue";
 import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
+import {
+  connectWorkflowNodes,
+  isValidWorkflowConnection,
+  WEB_BUILDER_INPUT_PORTS,
+} from "../workflowConnections";
 import type {
   BrowserProfile,
   ExecutionRecord,
@@ -88,7 +92,19 @@ function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handle
   const handleSize = 9;
   const centeredHandleOffset = (workflowNodeDimensions.height - handleSize) / 2;
 
-  if (!isTrigger(node.type)) {
+  if (node.type === "web_builder") {
+    WEB_BUILDER_INPUT_PORTS.forEach((port, index) => {
+      handles.push({
+        id: port.id,
+        type: "target",
+        position: Position.Left,
+        x: -handleSize / 2,
+        y: workflowNodeDimensions.height * (0.31 + index * 0.19) - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+      });
+    });
+  } else if (!isTrigger(node.type)) {
     handles.push({
       id: "input",
       type: "target",
@@ -217,7 +233,6 @@ export function WorkflowEditor() {
   }, [selectedNodeId]);
   const {
     accessibleEditorDefault,
-    showMinimap,
     confirmBeforeLeaving,
     snapToGrid,
     gridSize,
@@ -522,9 +537,20 @@ export function WorkflowEditor() {
         setPendingDeleteNodeId(id);
         return;
       }
+      const nodes = workflow.nodes
+        .filter((candidate) => candidate.id !== id)
+        .map((candidate) => {
+          const inputBindings = Object.fromEntries(
+            Object.entries(candidate.inputBindings ?? {}).filter(
+              ([, binding]) =>
+                binding.kind !== "node_output" || binding.nodeId !== id,
+            ),
+          );
+          return { ...candidate, inputBindings };
+        });
       commit({
         ...workflow,
-        nodes: workflow.nodes.filter((n) => n.id !== id),
+        nodes,
         edges: workflow.edges.filter(
           (e) => e.sourceNodeId !== id && e.targetNodeId !== id,
         ),
@@ -885,34 +911,8 @@ export function WorkflowEditor() {
     [onDisplayNodesChange, workflow, commit],
   );
   const onConnect = (connection: Connection) => {
-    if (
-      !connection.source ||
-      !connection.target ||
-      connection.source === connection.target
-    )
-      return;
-    const target = workflow.nodes.find((n) => n.id === connection.target);
-    if (target && isTrigger(target.type)) return;
-    const exists = workflow.edges.some(
-      (e) =>
-        e.sourceNodeId === connection.source &&
-        e.targetNodeId === connection.target &&
-        e.sourceHandle === (connection.sourceHandle ?? "output"),
-    );
-    if (exists) return;
-    commit({
-      ...workflow,
-      edges: [
-        ...workflow.edges,
-        {
-          id: `edge_${crypto.randomUUID().slice(0, 8)}`,
-          sourceNodeId: connection.source,
-          sourceHandle: connection.sourceHandle ?? "output",
-          targetNodeId: connection.target,
-          targetHandle: connection.targetHandle ?? "input",
-        },
-      ],
-    });
+    const next = connectWorkflowNodes(workflow, connection);
+    if (next) commit(next);
   };
   return (
     <main
@@ -1129,15 +1129,9 @@ export function WorkflowEditor() {
             onNodeClick={(_, node) => setSelectedNodeId(node.id)}
             onPaneClick={() => setSelectedNodeId(undefined)}
             onConnect={onConnect}
-            isValidConnection={(connection) => {
-              const target = workflow.nodes.find(
-                (n) => n.id === connection.target,
-              );
-              return (
-                connection.source !== connection.target &&
-                !Boolean(target && isTrigger(target.type))
-              );
-            }}
+            isValidConnection={(connection) =>
+              isValidWorkflowConnection(workflow, connection)
+            }
             snapToGrid={snapToGrid}
             snapGrid={snapGrid}
             minZoom={0.45}
@@ -1153,14 +1147,6 @@ export function WorkflowEditor() {
               color="var(--border-strong)"
             />
             <Controls showInteractive={false} />
-            {showMinimap && (
-              <MiniMap
-                pannable
-                zoomable
-                nodeColor="var(--border-strong)"
-                maskColor="var(--overlay)"
-              />
-            )}
           </ReactFlow>
           {showCanvasHints && (
             <div className="canvas-hint">
@@ -1534,7 +1520,7 @@ function PermissionReview({
     })
     .filter(Boolean);
   const commandNodes = workflow.nodes.filter(
-    (node) => node.type === "run_command",
+    (node) => node.type === "run_command" || (node.type === "code" && node.configuration.executionMode === "run"),
   );
   const browserProfiles = [
     ...new Set(
@@ -1791,17 +1777,8 @@ function PermissionReview({
                 <div className="command-review" key={node.id}>
                   <AlertTriangle size={15} />
                   <div>
-                    <b>
-                      {String(
-                        node.configuration.executable ||
-                          "Executable not configured",
-                      )}
-                    </b>
-                    <code>
-                      {((node.configuration.arguments as string[]) ?? []).join(
-                        " ",
-                      ) || "No arguments"}
-                    </code>
+                    <b>{node.type === "code" ? `${String(node.configuration.language ?? "javascript")} code` : String(node.configuration.executable || "Executable not configured")}</b>
+                    <code>{node.type === "code" ? `${String(node.configuration.sourceCode ?? "").split("\n").length} lines · executed locally` : (((node.configuration.arguments as string[]) ?? []).join(" ") || "No arguments")}</code>
                   </div>
                 </div>
               ))}
@@ -1883,7 +1860,7 @@ function permissionKindFor(
     return "files";
   if (normalized.includes("network access") || normalized.includes("network domain"))
     return "network";
-  if (nodeType === "run_command") return "command";
+  if (nodeType === "run_command" || nodeType === "code") return "command";
   if (
     nodeType &&
     [

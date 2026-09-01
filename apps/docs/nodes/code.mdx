@@ -1,0 +1,67 @@
+---
+title: "Code"
+description: "Author Python, HTML, JavaScript, or CSS in a full editor. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `code` · **Version:** `1` · **Category:** Data
+
+Author Python, HTML, JavaScript, or CSS in a full editor. This node can change external state or produce an external side effect.
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `language` | string | `"javascript"` | Language used for highlighting, diagnostics, AI-assisted authoring, and optional execution. Values: `python`, `html`, `javascript`, `css`. |
+| `sourceCode` | string | `"// Transform data or provide browser-side JavaScript\n"` | Complete source stored in the workflow. Open Edit code for the full editor and live Problems panel. |
+| `executionMode` | string | `"source"` | Return the source unchanged, or execute supported script languages and wait for their result. Values: `source`, `run`. |
+| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+
+<Note>Edit code opens a dedicated editor for Python, HTML, JavaScript, and CSS with syntax highlighting, live syntax and basic type diagnostics, line and column locations, and AI-assisted code writing.</Note>
+
+<Note>Source mode returns the complete file through `code` without executing it. HTML and CSS always use source mode.</Note>
+
+<Note>Run mode is available for Python and JavaScript, requires command-execution approval, invokes the installed `python` or `node` executable, and waits for completion. Mapped input is available as JSON in `SNDBOX_INPUT`.</Note>
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "code",
+  "version": 1,
+  "configuration": {
+    "language": "javascript",
+    "sourceCode": "// Transform data or provide browser-side JavaScript\n",
+    "executionMode": "source",
+    "timeoutMs": 30000
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input` | `any` | No | Input |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | `string` | No | Source code |
+| `result` | `any` | No | Result |
+| `stdout` | `string` | No | Standard output |
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.

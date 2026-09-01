@@ -1,0 +1,70 @@
+---
+title: "Code and Web Builder"
+description: "Author checked code blocks, optionally run Python or JavaScript, and combine HTML, JavaScript, and CSS into a localhost site."
+icon: "file-code-2"
+---
+
+The Code node stores a complete Python, HTML, JavaScript, or CSS file in the workflow. It can pass that source downstream, or run Python and JavaScript locally and wait for the result. Web Builder combines three source-mode Code nodes into a loopback-only website.
+
+## Edit a Code node
+
+Add **Code** from the Data group, select it, and choose **Edit code**. The editor provides:
+
+- Python, HTML, JavaScript, and CSS language tabs.
+- Syntax highlighting and line numbers.
+- Live syntax diagnostics for all four languages.
+- Basic JavaScript and Python type diagnostics where a mismatch can be inferred locally.
+- A Problems panel with severity, message, line, and column.
+- `Ctrl+S` or `Cmd+S` to save.
+- **Write with AI** to generate or revise the complete file using a connected model.
+
+Diagnostics never execute the code and do not block saving. They are an early warning, not a complete compiler, type system, browser compatibility check, or security review.
+
+## Choose source or run mode
+
+| Mode | Languages | Behavior |
+| --- | --- | --- |
+| **Provide source to the next node** | Python, HTML, JavaScript, CSS | Returns the saved file through `code`; nothing is executed |
+| **Execute script and await result** | Python, JavaScript | Writes a temporary script, invokes `python` or `node`, and waits for completion |
+
+Run mode requires command-execution approval for the current workflow revision and the corresponding interpreter installed on the desktop host. A material code edit revokes the earlier execution approval.
+
+Map any JSON-compatible value into the Code node's `input` port. A running script reads its serialized JSON from the `SNDBOX_INPUT` environment variable. Standard output is returned as both `stdout` and `result`; `result` is parsed as JSON when possible and otherwise remains a string. A non-zero exit, cancellation, missing interpreter, or timeout fails the node.
+
+<Warning>
+  Run mode executes the saved source as a local process with the desktop user's operating-system access. Treat generated and imported code as untrusted until you have reviewed it.
+</Warning>
+
+## Build a localhost site
+
+Create this graph and connect it in control-flow order:
+
+```text
+Manual Trigger → HTML Code → JavaScript Code → CSS Code → Web Builder
+```
+
+The Web Builder card exposes three labeled input connectors. Configure the three Code nodes in source mode, then drag each Code output to its matching Web Builder connector. A connection creates both the control-flow dependency and the `code` output binding:
+
+| Web Builder input | Upstream node | Output path |
+| --- | --- | --- |
+| `html` | HTML Code | `code` |
+| `javascript` | JavaScript Code | `code` |
+| `css` | CSS Code | `code` |
+
+Each connector accepts only a Code node configured for its matching language. All three inputs are required, even when the JavaScript or CSS file is intentionally minimal. Removing one of these visual connections also removes the binding it created.
+
+Set **Port** to `0` to choose an available port, or enter a fixed port from 1 to 65535. Leave **Open site after building** enabled to launch the URL in the default browser.
+
+On success, Web Builder returns:
+
+- `url`: the complete `http://127.0.0.1:<port>/` address.
+- `port`: the bound loopback port.
+- `status`: `serving`.
+
+The page is served at `/`, and `/health` returns a small JSON health response. Rerunning the same Web Builder node stops and replaces its previous server. The combined HTML, JavaScript, and CSS input is limited to 4 MB.
+
+## Localhost boundary
+
+Web Builder binds only to `127.0.0.1`, so it is a local preview tool rather than production hosting or a LAN server. The site remains available while the desktop application and its local engine are running. Closing the app stops the server.
+
+Code running inside the rendered page still has normal browser capabilities and restrictions. It can make network requests allowed by the browser and the destination's CORS policy, so do not place credentials or protected workflow data in generated client-side source.

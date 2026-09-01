@@ -1,6 +1,6 @@
 ---
 title: "Connections"
-description: "Create host-owned Gmail, Discord, and Slack credentials without placing secrets in workflow data."
+description: "Create host-owned AI, Gmail, Discord, and Slack credentials without placing secrets in workflow data."
 icon: "plug-zap"
 ---
 
@@ -8,9 +8,16 @@ Connections are stored by the host and referenced by ID from a workflow. Open **
 
 | Provider | Setup | Implemented nodes |
 | --- | --- | --- |
+| OpenAI | API key and model | AI; also powers AI builder and Code editor |
+| Anthropic | API key and model | AI; also powers AI builder and Code editor |
+| OpenAI-compatible / Ollama | API key, model, and base URL | AI; also powers AI builder and Code editor |
 | Gmail | OAuth PKCE | New Email, Get Email, Create Gmail Draft, Send Email, Add Gmail Label |
 | Discord | Incoming webhook | Discord Webhook, Discord Embed |
 | Slack | Incoming webhook | Slack Webhook |
+
+<Card title="Connect an AI model" icon="sparkles" href="/connections/ai">
+  Pick ChatGPT, Claude, or a local/custom endpoint, then choose a model using the relative token-usage guide.
+</Card>
 
 Connection metadata includes provider, display name, optional account identifier, scopes, creation/last-used/expiry time, and status (`connected`, `expired`, `revoked`, `error`, or `setup_required`). Secret values are not displayed.
 

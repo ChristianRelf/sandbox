@@ -24,8 +24,11 @@ interface PermissionSummary {
 - HTTP and browser work declare network destinations.
 - Browser sessions use specific managed profile IDs.
 - Run Command declares the executable separately from its argument array.
+- Python and JavaScript Code nodes in run mode use the same command-execution boundary. A material source edit revokes the previous approval.
 - Schedule, file-watch, and Gmail triggers require background execution.
 - Gmail, Discord, Slack, and plugin external actions require communication review.
+
+Source-mode Code nodes do not execute their contents. Web Builder starts a server bound only to `127.0.0.1`; it is local-only and is replaced when the same node runs again.
 
 ## Revision-bound approval
 

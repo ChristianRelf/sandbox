@@ -23,6 +23,7 @@ import type { PrivacyAdministration } from "./privacy.js";
 import type { ProductCommerceAdministration } from "./product_commerce.js";
 import { validateDeployment } from "./deployment.js";
 import type { PostgresExecutionCoordinator } from "./execution_coordinator.js";
+import type { BugReportSink } from "./bug_reports.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -32,6 +33,13 @@ const invitationInput = z.object({
   expiresInHours: z.number().int().min(1).max(168).default(72)
 });
 const acceptInvitationInput = z.object({ token: z.string().min(32).max(256) });
+const bugReportInput = z.object({
+  summary: z.string().trim().min(4).max(120),
+  description: z.string().trim().min(10).max(2_000),
+  diagnostics: z.record(z.string().trim().min(1).max(40), z.string().trim().max(300))
+    .refine(value => Object.keys(value).length <= 10, "At most 10 diagnostic fields are accepted.")
+    .default({})
+}).strict();
 const syncedWorkflowInput = z.object({ workflowId: z.string().uuid(), name: z.string().trim().min(1).max(200) });
 const syncConflictResolutionInput = z.object({ revisionId: z.string().uuid() });
 const pluginSubmissionInput = z.object({
@@ -169,6 +177,7 @@ export interface ApiDependencies {
   usageLedger?: Pick<PostgresUsageLedger,"record">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
   executionCoordinator?: Pick<PostgresExecutionCoordinator,"enqueue"|"resolvePublicRunDeployment"|"getPublicRun">;
+  bugReports?: BugReportSink;
   webhookBaseUrl?: string;
   webBaseUrl: string;
   logger?: boolean;
@@ -318,6 +327,17 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
   app.get("/v1/product-plans", async () => {
     if (!dependencies.productCommerce) throw new DomainError("product_commerce_unavailable", "Product plans are not configured.", 503);
     return { items: await dependencies.productCommerce.listPublishedPlans() };
+  });
+
+  app.post("/v1/support/bug-reports", {
+    bodyLimit: 32 * 1024,
+    config: { rateLimit: { max: 4, timeWindow: "15 minutes" } }
+  }, async request => {
+    if (!dependencies.bugReports) {
+      throw new DomainError("bug_reporting_unavailable", "Bug reporting is temporarily unavailable.", 503);
+    }
+    const report = bugReportInput.parse(request.body);
+    return dependencies.bugReports.submit(report);
   });
 
   app.get("/v1/account/commerce", async request => {

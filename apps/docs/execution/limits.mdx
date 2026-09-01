@@ -15,6 +15,13 @@ icon: "gauge"
 | Workflow import/export | 2 MB definition envelope |
 | Manual approval expiry | 1–10080 minutes |
 | Gmail poll interval | 1–60 minutes |
+| AI node instruction | 100000 characters |
+| AI node output request | 64–32000 tokens |
+| AI node timeout | 1000–300000 ms; default 90000 ms |
+| Code source | 2 MB |
+| Python/JavaScript Code timeout | 100–120000 ms; default 30000 ms |
+| Code stdout/stderr | 64 KiB each |
+| Web Builder source | 4 MB combined across HTML, JavaScript, and CSS |
 
 Plugin runtime defaults are 32 MB linear memory, 25 million fuel units, 30 seconds, 1 MB input/output, and 2 MB host responses. A plugin node can request a shorter timeout up to five minutes; host policy can impose a lower bound.
 

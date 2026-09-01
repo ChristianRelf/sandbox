@@ -1,0 +1,24 @@
+---
+title: "Report an app bug"
+description: "Send structured product feedback directly to the sndbox maintainers without configuring a webhook."
+icon: "bug"
+---
+
+Select **Report a bug** immediately above **Commands** in the sidebar. The form asks only **What is your issue?** and **What happened?** before sending the report directly to the sndbox team.
+
+You do not need to create or select a Discord connection. The desktop sends the bounded report to the sndbox control plane, which owns the private support-channel webhook and creates the final Discord embed server-side. The webhook URL is never compiled into or returned to the app.
+
+## Optional diagnostics
+
+Turn on **Add diagnostic data** when runtime context would help reproduce the problem. It contains only:
+
+- app version and current view;
+- operating-system platform;
+- locale and time zone;
+- browser runtime identifier.
+
+The toggle is off by default. Workflow content, code, files, execution payloads, tokens, passwords, and connection credentials are never attached automatically. Do not paste secrets or private workflow data into the two text fields.
+
+## Delivery and abuse protection
+
+The support endpoint enforces strict field lengths and accepts four reports per IP address every 15 minutes. Discord mentions are disabled in generated embeds. If delivery fails, the app keeps the composer open and shows a support reference when one is available so the report can be retried.

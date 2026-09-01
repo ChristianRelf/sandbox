@@ -59,7 +59,11 @@ pub fn start_google_workspace(
     start_google(client_id, redirect_uri, GOOGLE_WORKSPACE_SCOPES)
 }
 
-fn start_google(client_id: &str, redirect_uri: String, scopes: &str) -> Result<(OAuthAttempt, OAuthStart), String> {
+fn start_google(
+    client_id: &str,
+    redirect_uri: String,
+    scopes: &str,
+) -> Result<(OAuthAttempt, OAuthStart), String> {
     let mut state_bytes = [0_u8; 32];
     let mut verifier_bytes = [0_u8; 64];
     rand::rng().fill_bytes(&mut state_bytes);
@@ -107,16 +111,32 @@ pub fn start_code_flow(
     rand::rng().fill_bytes(&mut state_bytes);
     let state = URL_SAFE_NO_PAD.encode(state_bytes);
     let created_at = Utc::now();
-    let attempt = OAuthAttempt { state: state.clone(), verifier: String::new(), redirect_uri: redirect_uri.clone(), created_at };
+    let attempt = OAuthAttempt {
+        state: state.clone(),
+        verifier: String::new(),
+        redirect_uri: redirect_uri.clone(),
+        created_at,
+    };
     let mut url = Url::parse(authorization_endpoint).map_err(|error| error.to_string())?;
     url.query_pairs_mut()
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("response_type", "code")
         .append_pair("state", &state);
-    if !scope.is_empty() { url.query_pairs_mut().append_pair("scope", scope); }
-    for (key, value) in extra { url.query_pairs_mut().append_pair(key, value); }
-    Ok((attempt, OAuthStart { authorization_url: url.into(), expires_at: created_at + Duration::minutes(5), user_code: None }))
+    if !scope.is_empty() {
+        url.query_pairs_mut().append_pair("scope", scope);
+    }
+    for (key, value) in extra {
+        url.query_pairs_mut().append_pair(key, value);
+    }
+    Ok((
+        attempt,
+        OAuthStart {
+            authorization_url: url.into(),
+            expires_at: created_at + Duration::minutes(5),
+            user_code: None,
+        },
+    ))
 }
 
 impl OAuthAttempt {

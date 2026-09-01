@@ -86,6 +86,17 @@ describe("control-plane API", () => {
     await server.close();
   });
 
+  it("accepts bounded first-party bug reports without a user webhook",async()=>{
+    const submit=vi.fn(async()=>({delivered:true as const,provider:"discord" as const,status:204,reportId:"BUG-1234ABCD"}));
+    const deps={...dependencies([]),bugReports:{submit}},server=await createServer(deps);
+    const payload={summary:"Code editor loses diagnostics",description:"The error list disappears after changing language.",diagnostics:{"App version":"0.7.3-beta.1"}};
+    const response=await server.inject({method:"POST",url:"/v1/support/bug-reports",headers:{"idempotency-key":"bug-report-request-0001"},payload});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json()).toEqual({delivered:true,provider:"discord",status:204,reportId:"BUG-1234ABCD"});
+    expect(submit).toHaveBeenCalledWith(payload);expect(deps.sessions.verify).not.toHaveBeenCalled();
+    const invalid=await server.inject({method:"POST",url:"/v1/support/bug-reports",payload:{...payload,extra:"not accepted"}});
+    expect(invalid.statusCode).toBe(400);expect(submit).toHaveBeenCalledTimes(1);await server.close();
+  });
+
   it("discovers only the signed-in account's workspaces and authorized synced workflows",async()=>{
     const deps=dependencies(["workflows.view"]),organisationId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",now=new Date().toISOString();
     vi.mocked(deps.repository.listAccountOrganisations).mockResolvedValue([{id:organisationId,name:"Acme",slug:"acme",role:"developer",createdAt:now,workspaces:[{id:workspaceId,organisationId,name:"Operations",slug:"operations",role:"developer",createdAt:now}]}]);

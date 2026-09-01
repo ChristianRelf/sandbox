@@ -20,6 +20,7 @@ import { PostgresSupportAccess } from "./support_access.js";
 import { PostgresPrivacyService } from "./privacy.js";
 import { PostgresProductCommerce } from "./product_commerce.js";
 import { PostgresExecutionCoordinator } from "./execution_coordinator.js";
+import { DiscordBugReportSink } from "./bug_reports.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -64,6 +65,7 @@ const packageScanner=packageConfiguration
 const runnerSigningConfiguration=integration(["RUNNER_COMMAND_SIGNING_KEY_ID","RUNNER_COMMAND_SIGNING_PRIVATE_KEY_PEM"],"Runner command signing");
 const entitlementSigningConfiguration=integration(["ENTITLEMENT_SIGNING_KEY_ID","ENTITLEMENT_SIGNING_PRIVATE_KEY_PEM"],"Entitlement signing");
 const usageProducerConfiguration=integration(["USAGE_PRODUCER_SECRETS_JSON"],"Usage ingestion");
+const bugReportConfiguration=integration(["BUG_REPORT_DISCORD_WEBHOOK_URL"],"Bug reporting");
 const credentialExpiryNotifier=new PostgresCredentialExpiryNotifier(pool,email);
 const accessReviews=new PostgresServiceAccountAccessReviews(pool);
 const privacy=new PostgresPrivacyService(pool);
@@ -100,6 +102,7 @@ const server = await createServer({
   usageLedger: new PostgresUsageLedger(pool),
   usageProducerAuthenticator: usageProducerConfiguration?new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(usageProducerConfiguration[0])):undefined,
   executionCoordinator: new PostgresExecutionCoordinator(pool),
+  bugReports: bugReportConfiguration?new DiscordBugReportSink(bugReportConfiguration[0]):undefined,
   readiness,
   metrics,
   metricsBearerToken:required("METRICS_BEARER_TOKEN"),

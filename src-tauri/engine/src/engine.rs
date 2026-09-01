@@ -19,9 +19,11 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    io::AsyncReadExt,
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
     process::Command,
     sync::{broadcast, Mutex},
+    task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -65,6 +67,14 @@ pub trait HostServices: Send + Sync {
             "The requested integration is unavailable on this host.".into(),
         ))
     }
+    async fn ai_operation(&self, _payload: Value) -> Result<Value, EngineError> {
+        Err(EngineError::Node(
+            "AI connections are unavailable on this host.".into(),
+        ))
+    }
+    async fn open_local_url(&self, _url: &str) -> Result<(), EngineError> {
+        Ok(())
+    }
     async fn plugin_operation(
         &self,
         _workflow: &Workflow,
@@ -96,6 +106,7 @@ pub struct Engine {
     host: Arc<dyn HostServices>,
     active: Arc<Mutex<HashSet<String>>>,
     events: broadcast::Sender<EngineEvent>,
+    local_sites: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
 }
 
 impl Engine {
@@ -106,6 +117,7 @@ impl Engine {
             host,
             active: Arc::new(Mutex::new(HashSet::new())),
             events,
+            local_sites: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
@@ -859,6 +871,12 @@ impl Engine {
                 self.execute_workflow_state(node, workflow, trigger, outputs, pending_state)
             }
             "run_command" => execute_command(node, workflow, trigger, outputs, cancellation).await,
+            "ai_prompt" => self.execute_ai_prompt(node, cancellation).await,
+            "code" => execute_code(node, workflow, cancellation).await,
+            "web_builder" => {
+                self.execute_web_builder(node, workflow, trigger, outputs)
+                    .await
+            }
             "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option"
             | "press_key" | "wait_for" | "extract_data" | "screenshot" | "download_file"
             | "upload_file" | "close_browser" => {
@@ -950,6 +968,129 @@ impl Engine {
             }
             _ => unreachable!("state dispatcher only receives state nodes"),
         }
+    }
+
+    async fn execute_ai_prompt(
+        &self,
+        node: &WorkflowNode,
+        cancellation: CancellationToken,
+    ) -> Result<NodeResult, EngineError> {
+        let connection_id = node
+            .configuration
+            .get("connectionId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| EngineError::Node("AI requires a connected model.".into()))?;
+        let prompt = node
+            .configuration
+            .get("prompt")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| EngineError::Node("AI requires an instruction.".into()))?;
+        if prompt.chars().count() > 100_000 {
+            return Err(EngineError::Node(
+                "AI instructions are limited to 100,000 characters.".into(),
+            ));
+        }
+        let timeout_ms = node
+            .configuration
+            .get("timeoutMs")
+            .and_then(Value::as_u64)
+            .unwrap_or(90_000)
+            .clamp(1_000, 300_000);
+        let request = self.host.ai_operation(node.configuration.clone());
+        let output = tokio::select! {
+            _ = cancellation.cancelled() => return Err(EngineError::Cancelled),
+            result = tokio::time::timeout(Duration::from_millis(timeout_ms), request) => {
+                result.map_err(|_| EngineError::Node(format!("AI did not respond within {} seconds.", timeout_ms / 1_000)))??
+            }
+        };
+        Ok(NodeResult::new(output).log(format!(
+            "Received a response from AI connection {}.",
+            &connection_id[..connection_id.len().min(8)]
+        )))
+    }
+
+    async fn execute_web_builder(
+        &self,
+        node: &WorkflowNode,
+        workflow: &Workflow,
+        trigger: &Value,
+        outputs: &HashMap<String, Value>,
+    ) -> Result<NodeResult, EngineError> {
+        let configuration = resolve_value(&node.configuration, trigger, outputs)?;
+        let html = required_source(&configuration, "html", "Web Builder requires HTML input.")?;
+        let javascript = required_source(
+            &configuration,
+            "javascript",
+            "Web Builder requires JavaScript input.",
+        )?;
+        let css = required_source(&configuration, "css", "Web Builder requires CSS input.")?;
+        let total_bytes = html.len() + javascript.len() + css.len();
+        if total_bytes > 4 * 1024 * 1024 {
+            return Err(EngineError::Node(
+                "Web Builder source is limited to 4 MB in total.".into(),
+            ));
+        }
+        let port = node
+            .configuration
+            .get("port")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if port > u16::MAX as u64 {
+            return Err(EngineError::Node(
+                "Web Builder port must be between 0 and 65535.".into(),
+            ));
+        }
+        let site_key = format!("{}:{}", workflow.id, node.id);
+        if let Some(previous) = self.local_sites.lock().await.remove(&site_key) {
+            previous.abort();
+        }
+        let listener = TcpListener::bind(("127.0.0.1", port as u16))
+            .await
+            .map_err(|error| {
+                EngineError::Node(format!(
+                    "Web Builder could not bind localhost port {port}: {error}"
+                ))
+            })?;
+        let bound_port = listener
+            .local_addr()
+            .map_err(|error| {
+                EngineError::Node(format!(
+                    "Web Builder could not read its local address: {error}"
+                ))
+            })?
+            .port();
+        let page = Arc::new(compose_local_site(html, javascript, css));
+        let page_bytes = page.len();
+        let handle = tokio::spawn(serve_local_site(listener, page));
+        self.local_sites.lock().await.insert(site_key, handle);
+        let url = format!("http://127.0.0.1:{bound_port}/");
+        let mut result = NodeResult::new(json!({
+            "url": url,
+            "port": bound_port,
+            "status": "serving",
+            "htmlBytes": page_bytes,
+        }))
+        .log(format!("Local site is serving at {url}"));
+        if node
+            .configuration
+            .get("openBrowser")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+        {
+            match self.host.open_local_url(&url).await {
+                Ok(()) => result
+                    .logs
+                    .push("Opened the localhost site in the default browser.".into()),
+                Err(error) => result.logs.push(format!(
+                    "The site is running, but could not be opened automatically: {error}"
+                )),
+            }
+        }
+        Ok(result)
     }
 
     async fn execute_approval(
@@ -1345,6 +1486,8 @@ fn node_has_side_effect(node_type: &str) -> bool {
             | "copy_path"
             | "delete_path"
             | "run_command"
+            | "code"
+            | "web_builder"
             | "gmail_create_draft"
             | "gmail_send_email"
             | "gmail_add_label"
@@ -1369,6 +1512,221 @@ fn normalize_state_value(value: &Value, normalization: &str) -> Value {
         "none" => value.clone(),
         _ => Value::String(text.trim().to_string()),
     }
+}
+
+fn required_source<'a>(
+    configuration: &'a Value,
+    key: &str,
+    message: &str,
+) -> Result<&'a str, EngineError> {
+    configuration
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| EngineError::Node(message.into()))
+}
+
+fn compose_local_site(html: &str, javascript: &str, css: &str) -> String {
+    let style = format!("<style data-sndbox-web-builder>\n{css}\n</style>");
+    let script = format!("<script data-sndbox-web-builder>\n{javascript}\n</script>");
+    let lower = html.to_ascii_lowercase();
+    if lower.contains("<html") {
+        let mut page = html.to_string();
+        if let Some(index) = page.to_ascii_lowercase().rfind("</head>") {
+            page.insert_str(index, &style);
+        } else {
+            page.insert_str(0, &style);
+        }
+        if let Some(index) = page.to_ascii_lowercase().rfind("</body>") {
+            page.insert_str(index, &script);
+        } else {
+            page.push_str(&script);
+        }
+        page
+    } else {
+        format!(
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">{style}</head><body>{html}{script}</body></html>"
+        )
+    }
+}
+
+async fn serve_local_site(listener: TcpListener, page: Arc<String>) {
+    loop {
+        let Ok((mut stream, _)) = listener.accept().await else {
+            break;
+        };
+        let page = page.clone();
+        tokio::spawn(async move {
+            let mut request = [0u8; 8_192];
+            let Ok(read) = stream.read(&mut request).await else {
+                return;
+            };
+            let request_line = String::from_utf8_lossy(&request[..read]);
+            let head_only = request_line.starts_with("HEAD ");
+            let health = request_line.starts_with("GET /health ")
+                || request_line.starts_with("HEAD /health ");
+            let (status, content_type, body) = if health {
+                (
+                    "200 OK",
+                    "application/json; charset=utf-8",
+                    "{\"status\":\"ok\"}".to_string(),
+                )
+            } else if request_line.starts_with("GET / ") || request_line.starts_with("HEAD / ") {
+                (
+                    "200 OK",
+                    "text/html; charset=utf-8",
+                    page.as_str().to_string(),
+                )
+            } else {
+                (
+                    "404 Not Found",
+                    "text/plain; charset=utf-8",
+                    "Not found".to_string(),
+                )
+            };
+            let header = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(header.as_bytes()).await;
+            if !head_only {
+                let _ = stream.write_all(body.as_bytes()).await;
+            }
+            let _ = stream.shutdown().await;
+        });
+    }
+}
+
+async fn execute_code(
+    node: &WorkflowNode,
+    workflow: &Workflow,
+    cancellation: CancellationToken,
+) -> Result<NodeResult, EngineError> {
+    let language = node
+        .configuration
+        .get("language")
+        .and_then(Value::as_str)
+        .unwrap_or("javascript");
+    if !matches!(language, "python" | "html" | "javascript" | "css") {
+        return Err(EngineError::Node(format!(
+            "Code language '{language}' is not supported."
+        )));
+    }
+    let source = node
+        .configuration
+        .get("sourceCode")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if source.len() > 2 * 1024 * 1024 {
+        return Err(EngineError::Node("Code source is limited to 2 MB.".into()));
+    }
+    let mode = node
+        .configuration
+        .get("executionMode")
+        .and_then(Value::as_str)
+        .unwrap_or("source");
+    if mode != "run" || matches!(language, "html" | "css") {
+        return Ok(NodeResult::new(json!({
+            "language": language,
+            "code": source,
+            "result": source,
+            "stdout": "",
+        }))
+        .log(format!("Provided {} source to downstream nodes.", language)));
+    }
+    if !workflow.settings.permissions.command_execution_permitted
+        || workflow.settings.permissions.approval_revision.is_none()
+    {
+        return Err(EngineError::Permission(
+            "Executing a Code node requires command execution approval.".into(),
+        ));
+    }
+    let (executable, extension) = if language == "python" {
+        ("python", "py")
+    } else {
+        ("node", "js")
+    };
+    let code_directory = std::env::temp_dir().join("sndbox-code");
+    tokio::fs::create_dir_all(&code_directory)
+        .await
+        .map_err(|error| {
+            EngineError::Node(format!(
+                "Code could not prepare its temporary directory: {error}"
+            ))
+        })?;
+    let script_path = code_directory.join(format!("{}.{}", Uuid::new_v4(), extension));
+    tokio::fs::write(&script_path, source)
+        .await
+        .map_err(|error| {
+            EngineError::Node(format!("Code could not prepare the script: {error}"))
+        })?;
+    let input = node
+        .configuration
+        .get("input")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let mut command = Command::new(executable);
+    command
+        .arg(&script_path)
+        .env("SNDBOX_INPUT", input.to_string())
+        .kill_on_drop(true)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| {
+        EngineError::Node(format!(
+            "Code could not start {executable}. Install it or switch this node to source mode: {error}"
+        ))
+    })?;
+    let stdout_task = tokio::spawn(read_bounded(child.stdout.take().expect("piped stdout")));
+    let stderr_task = tokio::spawn(read_bounded(child.stderr.take().expect("piped stderr")));
+    let timeout_ms = node
+        .configuration
+        .get("timeoutMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(30_000)
+        .clamp(100, 120_000);
+    let status = tokio::select! {
+        _ = cancellation.cancelled() => {
+            let _ = child.kill().await;
+            let _ = tokio::fs::remove_file(&script_path).await;
+            return Err(EngineError::Cancelled);
+        },
+        result = tokio::time::timeout(Duration::from_millis(timeout_ms), child.wait()) => {
+            match result {
+                Ok(status) => status.map_err(|error| EngineError::Node(format!("Code could not await the script: {error}")))?,
+                Err(_) => {
+                    let _ = child.kill().await;
+                    let _ = tokio::fs::remove_file(&script_path).await;
+                    return Err(EngineError::Node(format!("Code exceeded its {} ms timeout.", timeout_ms)));
+                }
+            }
+        }
+    };
+    let stdout = String::from_utf8_lossy(&stdout_task.await.unwrap_or_default()).to_string();
+    let stderr = String::from_utf8_lossy(&stderr_task.await.unwrap_or_default()).to_string();
+    let _ = tokio::fs::remove_file(&script_path).await;
+    if !status.success() {
+        return Err(EngineError::Node(format!(
+            "Code exited with status {}. {}",
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown".into()),
+            bounded_log(&stderr)
+        )));
+    }
+    let trimmed = stdout.trim();
+    let result = serde_json::from_str::<Value>(trimmed)
+        .unwrap_or_else(|_| Value::String(trimmed.to_string()));
+    Ok(NodeResult::new(json!({
+        "language": language,
+        "code": source,
+        "result": result,
+        "stdout": stdout,
+        "stderr": stderr,
+        "exitCode": status.code(),
+    }))
+    .log(format!("Executed {language} and awaited its result.")))
 }
 
 fn execute_condition(
@@ -2197,6 +2555,24 @@ mod tests {
             Ok(())
         }
     }
+    struct AiTestHost;
+    #[async_trait]
+    impl HostServices for AiTestHost {
+        async fn desktop_notification(
+            &self,
+            _title: &str,
+            _message: &str,
+        ) -> Result<(), EngineError> {
+            Ok(())
+        }
+
+        async fn ai_operation(&self, payload: Value) -> Result<Value, EngineError> {
+            assert_eq!(payload["prompt"], "Summarise the uptime result");
+            Ok(
+                json!({"response":"All services are healthy.","model":"test-model","usage":{"total_tokens":12}}),
+            )
+        }
+    }
     struct PluginDispatchHost(Arc<std::sync::Mutex<Vec<Value>>>);
     #[async_trait]
     impl HostServices for PluginDispatchHost {
@@ -2362,6 +2738,106 @@ mod tests {
             "resolved"
         );
         assert_eq!(calls.lock().unwrap()[0]["input"]["value"], 42);
+    }
+
+    #[tokio::test]
+    async fn ai_node_awaits_and_returns_host_response() {
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(AiTestHost));
+        let ai = node(
+            "ai",
+            "ai_prompt",
+            json!({"connectionId":"connection-1234","prompt":"Summarise the uptime result","timeoutMs":1000}),
+        );
+        let workflow = base(
+            vec![node("trigger", "manual_trigger", json!({})), ai.clone()],
+            vec![],
+        );
+        let result = engine
+            .execute_node(
+                &ai,
+                &workflow,
+                "run-ai",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.output["response"], "All services are healthy.");
+        assert_eq!(result.output["usage"]["total_tokens"], 12);
+    }
+
+    #[tokio::test]
+    async fn code_source_is_available_to_downstream_nodes_without_execution() {
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let code = node(
+            "code",
+            "code",
+            json!({"language":"javascript","sourceCode":"document.body.dataset.ready = 'true';","executionMode":"source"}),
+        );
+        let workflow = base(
+            vec![node("trigger", "manual_trigger", json!({})), code.clone()],
+            vec![],
+        );
+        let result = engine
+            .execute_node(
+                &code,
+                &workflow,
+                "run-code",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.output["language"], "javascript");
+        assert_eq!(
+            result.output["code"],
+            "document.body.dataset.ready = 'true';"
+        );
+    }
+
+    #[tokio::test]
+    async fn web_builder_serves_combined_sources_on_loopback() {
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let builder = node(
+            "builder",
+            "web_builder",
+            json!({
+                "html":"<main id=\"status\">Uptime</main>",
+                "javascript":"document.querySelector('#status').dataset.ready = 'true';",
+                "css":"#status { color: green; }",
+                "port":0,
+                "openBrowser":false
+            }),
+        );
+        let workflow = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                builder.clone(),
+            ],
+            vec![],
+        );
+        let result = engine
+            .execute_node(
+                &builder,
+                &workflow,
+                "run-builder",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let url = result.output["url"].as_str().unwrap();
+        assert!(url.starts_with("http://127.0.0.1:"));
+        let page = reqwest::get(url).await.unwrap().text().await.unwrap();
+        assert!(page.contains("Uptime"));
+        assert!(page.contains("#status { color: green; }"));
+        assert!(page.contains("document.querySelector"));
     }
     #[tokio::test]
     async fn condition_follows_false_branch() {

@@ -23,7 +23,7 @@ type InputBinding =
 | `node_output` | A typed output from an earlier node, optionally narrowed by a path. |
 | `template` | Text containing one or more workflow expressions. |
 | `protected_variable` | A named secret or protected value resolved by the host. |
-| `connection` | A vault-owned Gmail, Discord, Slack, or plugin credential reference. |
+| `connection` | A vault-owned AI, Gmail, Discord, Slack, or plugin credential reference. |
 
 ## Template expressions
 
@@ -36,6 +36,8 @@ Repository templates use expressions such as:
 ```
 
 Use the editor's mapping controls to insert paths instead of typing IDs from memory. The binding panel validates source-node availability and compatible port types.
+
+For a localhost site, map the `code` output from separate HTML, JavaScript, and CSS Code nodes into the Web Builder inputs with the same names. Control edges determine when those nodes run; their input bindings carry the source files. See [Code and Web Builder](/files-and-data/code-and-web-builder).
 
 ## Sensitive values
 

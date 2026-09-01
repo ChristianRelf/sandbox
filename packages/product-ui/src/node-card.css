@@ -21,6 +21,9 @@
 .node-card.node-failed { border-color: rgba(225, 111, 112, 0.7); }
 .node-card.disabled { opacity: 0.5; }
 .node-card:has(.branch) > small { max-width: 128px; }
+.node-card-multi-input { padding-left: 62px; }
+.node-card-multi-input > b,
+.node-card-multi-input > small { max-width: 118px; }
 
 .node-top {
   margin-bottom: 9px;
@@ -93,6 +96,28 @@
 .node-handle:hover {
   border-color: var(--accent, #d6ff4b) !important;
   background: var(--accent, #d6ff4b) !important;
+}
+
+.node-input-label {
+  position: absolute;
+  left: 10px;
+  width: 41px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  color: var(--text-muted, #8f9098);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-align: left;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.node-input-handle {
+  border-color: var(--accent, #d6ff4b) !important;
 }
 
 .node-add {

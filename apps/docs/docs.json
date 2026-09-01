@@ -52,6 +52,7 @@
             "pages": [
               "workflows/dashboard",
               "workflows/editor",
+              "workflows/ai-builder",
               "workflows/variables-and-data",
               "workflows/branches-and-conditions",
               "workflows/schedules-and-triggers",
@@ -83,6 +84,7 @@
               "files-and-data/csv",
               "files-and-data/json",
               "files-and-data/http-requests",
+              "files-and-data/code-and-web-builder",
               "files-and-data/workflow-state",
               "files-and-data/secrets-and-connections"
             ]
@@ -105,6 +107,7 @@
             "group": "Connections",
             "pages": [
               "connections/overview",
+              "connections/ai",
               "connections/gmail",
               "connections/discord",
               "connections/slack"
@@ -153,6 +156,7 @@
               "troubleshooting/browser",
               "troubleshooting/runner",
               "troubleshooting/permissions",
+              "troubleshooting/report-a-bug",
               "troubleshooting/diagnostics"
             ]
           },
@@ -200,6 +204,8 @@
           {
             "group": "Data",
             "pages": [
+              "nodes/ai-prompt",
+              "nodes/code",
               "nodes/set-data",
               "nodes/read-file",
               "nodes/list-folder",
@@ -251,7 +257,8 @@
               "nodes/write-file",
               "nodes/copy-path",
               "nodes/delete-path",
-              "nodes/run-command"
+              "nodes/run-command",
+              "nodes/web-builder"
             ]
           }
         ]

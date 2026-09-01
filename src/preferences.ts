@@ -19,7 +19,6 @@ export interface AppPreferences {
   reduceMotion: boolean;
   increasedContrast: boolean;
   accessibleEditorDefault: boolean;
-  showMinimap: boolean;
   snapToGrid: boolean;
   gridSize: 10 | 20 | 40;
   showCanvasHints: boolean;
@@ -44,7 +43,6 @@ export const defaultPreferences: AppPreferences = {
   reduceMotion: false,
   increasedContrast: false,
   accessibleEditorDefault: false,
-  showMinimap: true,
   snapToGrid: true,
   gridSize: 20,
   showCanvasHints: true,
@@ -83,7 +81,6 @@ export function normalisePreferences(value: unknown, legacy = false): AppPrefere
     reduceMotion: typeof input.reduceMotion === "boolean" ? input.reduceMotion : defaultPreferences.reduceMotion,
     increasedContrast: typeof input.increasedContrast === "boolean" ? input.increasedContrast : defaultPreferences.increasedContrast,
     accessibleEditorDefault: typeof input.accessibleEditorDefault === "boolean" ? input.accessibleEditorDefault : defaultPreferences.accessibleEditorDefault,
-    showMinimap: typeof input.showMinimap === "boolean" ? input.showMinimap : defaultPreferences.showMinimap,
     snapToGrid: typeof input.snapToGrid === "boolean" ? input.snapToGrid : defaultPreferences.snapToGrid,
     gridSize: gridSizes.has(input.gridSize as number) ? input.gridSize as 10 | 20 | 40 : defaultPreferences.gridSize,
     showCanvasHints: typeof input.showCanvasHints === "boolean" ? input.showCanvasHints : defaultPreferences.showCanvasHints,

@@ -3,6 +3,7 @@ import { ProductWorkflowNode } from "@sandbox/product-ui";
 import { Sparkles } from "lucide-react";
 import { definitionFor, isTrigger } from "../catalogue";
 import type { NodeStatus, WorkflowNode } from "../types";
+import { WEB_BUILDER_INPUT_PORTS } from "../workflowConnections";
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   node: WorkflowNode;
@@ -42,6 +43,7 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
         trigger={isTrigger(node.type)}
         condition={node.type === "condition"}
         inputCount={definition.inputs.length}
+        inputPorts={node.type === "web_builder" ? [...WEB_BUILDER_INPUT_PORTS] : undefined}
         outputLabels={definition.outputs.map((port) => port.label)}
         onAdd={onAdd}
       />

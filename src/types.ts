@@ -1,6 +1,7 @@
 export type BuiltInNodeType =
   | "manual_trigger" | "schedule_trigger" | "file_watch_trigger" | "condition" | "set_data" | "delay"
   | "http_request" | "desktop_notification" | "move_file" | "read_file" | "write_file" | "copy_path" | "delete_path" | "list_folder" | "parse_csv" | "parse_json" | "parse_text" | "get_workflow_state" | "set_workflow_state" | "compare_previous" | "run_command"
+  | "ai_prompt" | "code" | "web_builder"
   | "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option" | "press_key"
   | "wait_for" | "extract_data" | "screenshot" | "download_file" | "upload_file" | "close_browser"
   | "gmail_new_email_trigger" | "gmail_get_email" | "gmail_create_draft" | "gmail_send_email" | "gmail_add_label"
@@ -57,6 +58,8 @@ export interface BrowserProfile { id:string; name:string; persistent:boolean; da
 export interface BrowserEngineStatus { available:boolean; protocolVersion:number; sidecarVersion?:string; browserName?:string; browserVersion?:string; error?:string }
 export type ConnectionStatus="connected"|"expired"|"revoked"|"error"|"setup_required";
 export interface ConnectionMetadata { id:string; provider:string; displayName:string; accountIdentifier?:string; scopes:string[]; createdAt:string; lastUsedAt?:string; expiresAt?:string; status:ConnectionStatus; metadata:Record<string,unknown> }
+export interface BugReportDraft { summary:string; description:string; diagnostics?:Record<string,string> }
+export interface BugReportReceipt { delivered:boolean; provider:"discord"|"preview"; status:number; reportId:string }
 export interface AiWorkflowProposal { workflow:Workflow; message:string; addedNodeCount:number; removedNodeCount:number; issues:ValidationIssue[] }
 export interface PendingApproval { id:string; executionId:string; workflowId:string; nodeId:string; action:Record<string,unknown>; status:string; createdAt:string; expiresAt:string; resolvedAt?:string }
 export interface RecordedStep { id:string; action:string; name:string; configuration:Record<string,unknown>; sensitiveInputRequired:boolean }

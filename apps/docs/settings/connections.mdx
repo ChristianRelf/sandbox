@@ -1,14 +1,18 @@
 ---
 title: "Connection settings"
-description: "Create, test, rename, revoke, and audit the references used by communication nodes."
+description: "Create, test, rename, revoke, and audit the references used by AI and communication nodes."
 icon: "plug-zap"
 ---
 
-Gmail setup uses OAuth PKCE. Discord and Slack setup accept incoming webhook URLs, which are moved into the operating-system credential vault rather than stored in workflow JSON.
+AI setup starts with large provider cards for **ChatGPT**, **Claude**, and **Local / custom**. After choosing a provider, select a model from the dropdown; one to five yellow dots show relative token usage. You can also enter an exact custom model ID. The dots are a comparison guide, not an exact price or context-window measurement.
+
+OpenAI and Anthropic connections accept an API key. OpenAI-compatible connections also require a base URL, with HTTPS required except for loopback HTTP endpoints such as Ollama on `localhost`. API keys are moved into the operating-system credential vault rather than stored in workflow JSON.
+
+Gmail setup uses OAuth PKCE. Discord and Slack setup accept incoming webhook URLs and store those secrets in the same host-owned vault.
 
 ## Manage a connection
 
-1. Add the provider and complete its setup.
+1. Choose **Add connection**, select the provider, and complete its setup.
 2. Give the connection a name that identifies its real account or destination.
 3. Use **Test** to verify current access.
 4. Select the named reference in a node.
@@ -17,3 +21,7 @@ Gmail setup uses OAuth PKCE. Discord and Slack setup accept incoming webhook URL
 The status can be connected, expired, revoked, error, or setup required. Last-used and expiry metadata help diagnose access without revealing the credential.
 
 Revocation blocks future use immediately. An exported or synced workflow keeps only a requirement/reference and must be reconnected in its destination environment.
+
+AI connections can power the [AI workflow builder](/workflows/ai-builder), the [AI node](/nodes/ai-prompt), and **Write with AI** in the [Code editor](/files-and-data/code-and-web-builder). Prompts and relevant workflow or code context are sent to the selected provider; the API key is not.
+
+Bug reporting is a first-party sndbox service and does not use a connection from this screen. See [Report an app bug](/troubleshooting/report-a-bug).

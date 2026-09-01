@@ -1,11 +1,18 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
+  ArrowRight,
+  Bot,
   Clock3,
+  Code2,
   Copy,
   Download,
+  FileStack,
   Filter,
   Folder,
+  Globe2,
+  LayoutTemplate,
+  MessagesSquare,
   MoreHorizontal,
   Play,
   Plus,
@@ -23,50 +30,29 @@ import { definitionFor } from "../catalogue";
 import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
 import type { WorkflowSummary } from "../types";
+import {
+  ALL_WORKFLOW_STARTERS,
+  BLANK_WORKFLOW_TEMPLATE,
+  WORKFLOW_TEMPLATES,
+  type WorkflowTemplate,
+  type WorkflowTemplateCategory,
+} from "../workflowTemplates";
 import { Status } from "./Status";
 import { ConfirmDialog, Dialog } from "./ui/Dialog";
 import { EmptyState, ErrorState, LoadingSkeleton } from "./ui/States";
 import { useToast } from "./ui/Toast";
 
-const templates = [
-  {
-    key: "blank",
-    name: "Blank workflow",
-    flow: "Manual trigger",
-    requirements: "No integrations required",
-  },
-  {
-    key: "website-change-monitor",
-    name: "Website Change Monitor",
-    flow: "Schedule → Browser → Extract → Condition → Notify",
-    requirements: "Managed browser profile",
-  },
-  {
-    key: "download-daily-report",
-    name: "Download Daily Report",
-    flow: "Schedule → Browser → Download → Notify",
-    requirements: "Managed browser profile and folder access",
-  },
-  {
-    key: "email-enquiry-draft",
-    name: "Email Enquiry Draft",
-    flow: "New email → Condition → Draft → Notify",
-    requirements: "Gmail connection",
-  },
-  {
-    key: "website-status-discord",
-    name: "Website Status to Discord",
-    flow: "Schedule → HTTP → Condition → Discord",
-    requirements: "Discord webhook connection",
-  },
-  {
-    key: "downloads-organiser",
-    name: "Downloads Folder Organiser",
-    flow: "File watch → Condition → Move file",
-    requirements: "Folder access",
-  },
-];
 type FilterKey = "all" | "favorites" | "scheduled" | "failed" | "archived";
+type DashboardTab = "workflows" | "templates";
+
+const templateIcons = {
+  AI: Bot,
+  Monitoring: Globe2,
+  Browser: LayoutTemplate,
+  Communication: MessagesSquare,
+  Files: FileStack,
+  Developer: Code2,
+} satisfies Record<WorkflowTemplateCategory, typeof Bot>;
 
 export function Dashboard() {
   const { openWorkflow, createWorkflow } = useAppStore();
@@ -75,15 +61,21 @@ export function Dashboard() {
   const [items, setItems] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [tab, setTab] = useState<DashboardTab>("workflows");
   const [search, setSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState<
+    WorkflowTemplateCategory | "all"
+  >("all");
   const [sort, setSort] = useState("modified");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [folder, setFolder] = useState("");
   const [running, setRunning] = useState<string>();
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [template, setTemplate] = useState(templates[0]);
-  const [name, setName] = useState(templates[0].name);
+  const [template, setTemplate] = useState<WorkflowTemplate>(
+    BLANK_WORKFLOW_TEMPLATE,
+  );
+  const [name, setName] = useState(BLANK_WORKFLOW_TEMPLATE.name);
   const [confirm, setConfirm] = useState<{
     kind: "archive" | "purge";
     item: WorkflowSummary;
@@ -105,7 +97,11 @@ export function Dashboard() {
   };
   useEffect(() => {
     void load();
-    const create = () => setCreateOpen(true);
+    const create = () => {
+      setTemplate(BLANK_WORKFLOW_TEMPLATE);
+      setName(BLANK_WORKFLOW_TEMPLATE.name);
+      setCreateOpen(true);
+    };
     window.addEventListener("sandbox:create-workflow", create);
     return () => window.removeEventListener("sandbox:create-workflow", create);
   }, []);
@@ -173,6 +169,29 @@ export function Dashboard() {
               : b.workflow.updatedAt.localeCompare(a.workflow.updatedAt),
       );
   }, [filter, folder, items, search, sort]);
+  const filteredTemplates = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return WORKFLOW_TEMPLATES.filter(
+      (item) =>
+        (templateCategory === "all" || item.category === templateCategory) &&
+        (!needle ||
+          [
+            item.name,
+            item.description,
+            item.flow,
+            item.requirements,
+            item.category,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle)),
+    );
+  }, [search, templateCategory]);
+  const openCreate = (item: WorkflowTemplate = BLANK_WORKFLOW_TEMPLATE) => {
+    setTemplate(item);
+    setName(item.name);
+    setCreateOpen(true);
+  };
   const run = async (id: string) => {
     setRunning(id);
     try {
@@ -255,31 +274,75 @@ export function Dashboard() {
     setSearch("");
     setFilter("all");
     setFolder("");
+    setTemplateCategory("all");
   };
-  const activeFilters = Boolean(search || filter !== "all" || folder);
+  const activeFilters =
+    tab === "templates"
+      ? Boolean(search || templateCategory !== "all")
+      : Boolean(search || filter !== "all" || folder);
   return (
     <main className="content">
       <header className="page-header">
         <div>
           <h1>Workflows</h1>
-          <p>Build, organise, and run automations on this device.</p>
+          <p>
+            {tab === "workflows"
+              ? "Build, organise, and run automations on this device."
+              : "Start faster with reviewed, fully editable workflow templates."}
+          </p>
         </div>
-        <button className="button" onClick={() => void importWorkflow()}>
-          <Upload size={14} />
-          Import
-        </button>
-        <button className="button primary" onClick={() => setCreateOpen(true)}>
+        {tab === "workflows" && (
+          <button className="button" onClick={() => void importWorkflow()}>
+            <Upload size={14} />
+            Import
+          </button>
+        )}
+        <button className="button primary" onClick={() => openCreate()}>
           <Plus size={15} />
           Create workflow
         </button>
       </header>
+      <div className="workflow-library-tabs" role="tablist" aria-label="Workflow library">
+        <button
+          role="tab"
+          aria-selected={tab === "workflows"}
+          className={tab === "workflows" ? "active" : ""}
+          onClick={() => {
+            setTab("workflows");
+            clear();
+          }}
+        >
+          <FileStack size={15} />
+          My workflows
+          <span>{items.filter((item) => !item.metadata.archivedAt).length}</span>
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "templates"}
+          className={tab === "templates" ? "active" : ""}
+          onClick={() => {
+            setTab("templates");
+            clear();
+          }}
+        >
+          <LayoutTemplate size={15} />
+          Templates
+          <span>{WORKFLOW_TEMPLATES.length}</span>
+        </button>
+      </div>
       <div className="toolbar dashboard-toolbar">
         <div className="search">
           <Search size={15} />
           <input
             ref={searchRef}
-            aria-label="Search workflows"
-            placeholder="Search name, description, folder, or tags…"
+            aria-label={
+              tab === "workflows" ? "Search workflows" : "Search templates"
+            }
+            placeholder={
+              tab === "workflows"
+                ? "Search name, description, folder, or tags…"
+                : "Search templates by name, tool, or outcome…"
+            }
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -291,37 +354,56 @@ export function Dashboard() {
             <kbd>/</kbd>
           )}
         </div>
-        <select
-          aria-label="Filter workflows"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value as FilterKey)}
-        >
-          <option value="all">All workflows</option>
-          <option value="favorites">Favorites</option>
-          <option value="scheduled">Scheduled</option>
-          <option value="failed">Failed</option>
-          <option value="archived">Archived</option>
-        </select>
-        <select
-          aria-label="Filter by folder"
-          value={folder}
-          onChange={(event) => setFolder(event.target.value)}
-        >
-          <option value="">All folders</option>
-          {folders.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        <select
-          aria-label="Sort workflows"
-          value={sort}
-          onChange={(event) => setSort(event.target.value)}
-        >
-          <option value="modified">Last modified</option>
-          <option value="name">Name</option>
-          <option value="last-run">Last run</option>
-          <option value="next-run">Next run</option>
-        </select>
+        {tab === "workflows" ? (
+          <>
+            <select
+              aria-label="Filter workflows"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as FilterKey)}
+            >
+              <option value="all">All workflows</option>
+              <option value="favorites">Favorites</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="failed">Failed</option>
+              <option value="archived">Archived</option>
+            </select>
+            <select
+              aria-label="Filter by folder"
+              value={folder}
+              onChange={(event) => setFolder(event.target.value)}
+            >
+              <option value="">All folders</option>
+              {folders.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Sort workflows"
+              value={sort}
+              onChange={(event) => setSort(event.target.value)}
+            >
+              <option value="modified">Last modified</option>
+              <option value="name">Name</option>
+              <option value="last-run">Last run</option>
+              <option value="next-run">Next run</option>
+            </select>
+          </>
+        ) : (
+          <select
+            aria-label="Filter template category"
+            value={templateCategory}
+            onChange={(event) =>
+              setTemplateCategory(
+                event.target.value as WorkflowTemplateCategory | "all",
+              )
+            }
+          >
+            <option value="all">All categories</option>
+            {Object.keys(templateIcons).map((category) => (
+              <option key={category}>{category}</option>
+            ))}
+          </select>
+        )}
         {activeFilters && (
           <button className="button" onClick={clear}>
             <Filter size={13} />
@@ -329,89 +411,144 @@ export function Dashboard() {
           </button>
         )}
         <span className="count">
-          {filtered.length} workflow{filtered.length === 1 ? "" : "s"}
+          {tab === "workflows" ? (
+            <>
+              {filtered.length} workflow{filtered.length === 1 ? "" : "s"}
+            </>
+          ) : (
+            <>
+              {filteredTemplates.length} template
+              {filteredTemplates.length === 1 ? "" : "s"}
+            </>
+          )}
         </span>
       </div>
-      {loading ? (
-        <LoadingSkeleton rows={6} />
-      ) : error ? (
-        <ErrorState
-          title="Workflows could not load"
-          description={error}
-          onRetry={load}
-        />
-      ) : !items.length ? (
-        <EmptyState
-          title="Create your first workflow"
-          description="Start blank or choose a reviewed template. No workflow record is created until you confirm its name."
-          action={
-            <button
-              className="button primary"
-              onClick={() => setCreateOpen(true)}
-            >
-              Create workflow
-            </button>
-          }
-        />
-      ) : !filtered.length ? (
-        <EmptyState
-          title="No matching workflows"
-          description="No workflow matches the current search and filters."
-          action={
-            <button className="button" onClick={clear}>
-              Clear search and filters
-            </button>
-          }
-        />
+      {tab === "templates" ? (
+        filteredTemplates.length ? (
+          <section className="workflow-template-grid" aria-label="Workflow templates">
+            {filteredTemplates.map((item) => {
+              const Icon = templateIcons[item.category];
+              return (
+                <article className="workflow-template-card" key={item.key}>
+                  <header>
+                    <span className="workflow-template-icon">
+                      <Icon size={18} />
+                    </span>
+                    <span className="workflow-template-category">
+                      {item.category}
+                    </span>
+                    {item.featured && <em>Popular</em>}
+                  </header>
+                  <h2>{item.name}</h2>
+                  <p>{item.description}</p>
+                  <div className="workflow-template-flow">{item.flow}</div>
+                  <footer>
+                    <small>{item.requirements}</small>
+                    <button
+                      className="button"
+                      aria-label={`Use ${item.name} template`}
+                      onClick={() => openCreate(item)}
+                    >
+                      Use template
+                      <ArrowRight size={13} />
+                    </button>
+                  </footer>
+                </article>
+              );
+            })}
+          </section>
+        ) : (
+          <EmptyState
+            title="No matching templates"
+            description="Try a different category or search term."
+            action={
+              <button className="button" onClick={clear}>
+                Clear template filters
+              </button>
+            }
+          />
+        )
       ) : (
-        <section className="workflow-table" aria-label="Workflows">
-          <div className="table-head">
-            <span>Name</span>
-            <span>Trigger</span>
-            <span>Last run</span>
-            <span>Next run</span>
-            <span />
-          </div>
-          {filtered.map((item) => (
-            <WorkflowRow
-              key={item.workflow.id}
-              item={item}
-              dateDisplay={dateDisplay}
-              running={running === item.workflow.id}
-              onOpen={() => void openWorkflow(item.workflow.id)}
-              onRun={() => void run(item.workflow.id)}
-              onFavorite={() =>
-                void updateMetadata(item.workflow.id, {
-                  favorite: !item.metadata.favorite,
-                })
-              }
-              onDuplicate={() => void duplicate(item)}
-              onOrganize={() => {
-                setOrganize(item);
-                setOrganizeFolder(item.metadata.folder ?? "");
-                setTags(item.metadata.tags.join(", "));
-              }}
-              onArchive={() => setConfirm({ kind: "archive", item })}
-              onRestore={() =>
-                void api
-                  .restoreWorkflow(item.workflow.id)
-                  .then(load)
-                  .catch((value) => toast.push(String(value), "error"))
-              }
-              onExport={() =>
-                void api
-                  .exportWorkflow(item.workflow.id)
-                  .then(
-                    (path) =>
-                      path &&
-                      toast.push(`Exported ${item.workflow.name}.`, "success"),
-                  )
-                  .catch((error) => toast.push(String(error), "error"))
-              }
-              onPurge={() => setConfirm({ kind: "purge", item })}
+        <>
+          {loading ? (
+            <LoadingSkeleton rows={6} />
+          ) : error ? (
+            <ErrorState
+              title="Workflows could not load"
+              description={error}
+              onRetry={load}
             />
-          ))}
-        </section>
+          ) : !items.length ? (
+            <EmptyState
+              title="Create your first workflow"
+              description="Start blank or choose a reviewed template. No workflow record is created until you confirm its name."
+              action={
+                <button className="button primary" onClick={() => openCreate()}>
+                  Create workflow
+                </button>
+              }
+            />
+          ) : !filtered.length ? (
+            <EmptyState
+              title="No matching workflows"
+              description="No workflow matches the current search and filters."
+              action={
+                <button className="button" onClick={clear}>
+                  Clear search and filters
+                </button>
+              }
+            />
+          ) : (
+            <section className="workflow-table" aria-label="Workflows">
+              <div className="table-head">
+                <span>Name</span>
+                <span>Trigger</span>
+                <span>Last run</span>
+                <span>Next run</span>
+                <span />
+              </div>
+              {filtered.map((item) => (
+                <WorkflowRow
+                  key={item.workflow.id}
+                  item={item}
+                  dateDisplay={dateDisplay}
+                  running={running === item.workflow.id}
+                  onOpen={() => void openWorkflow(item.workflow.id)}
+                  onRun={() => void run(item.workflow.id)}
+                  onFavorite={() =>
+                    void updateMetadata(item.workflow.id, {
+                      favorite: !item.metadata.favorite,
+                    })
+                  }
+                  onDuplicate={() => void duplicate(item)}
+                  onOrganize={() => {
+                    setOrganize(item);
+                    setOrganizeFolder(item.metadata.folder ?? "");
+                    setTags(item.metadata.tags.join(", "));
+                  }}
+                  onArchive={() => setConfirm({ kind: "archive", item })}
+                  onRestore={() =>
+                    void api
+                      .restoreWorkflow(item.workflow.id)
+                      .then(load)
+                      .catch((value) => toast.push(String(value), "error"))
+                  }
+                  onExport={() =>
+                    void api
+                      .exportWorkflow(item.workflow.id)
+                      .then(
+                        (path) =>
+                          path &&
+                          toast.push(`Exported ${item.workflow.name}.`, "success"),
+                      )
+                      .catch((error) => toast.push(String(error), "error"))
+                  }
+                  onPurge={() => setConfirm({ kind: "purge", item })}
+                />
+              ))}
+            </section>
+          )}
+        </>
       )}
       <Dialog
         open={createOpen}
@@ -444,7 +581,7 @@ export function Dashboard() {
             role="radiogroup"
             aria-label="Workflow templates"
           >
-            {templates.map((item) => (
+            {ALL_WORKFLOW_STARTERS.map((item) => (
               <button
                 role="radio"
                 aria-checked={template.key === item.key}

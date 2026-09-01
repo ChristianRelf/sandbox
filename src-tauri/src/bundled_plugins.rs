@@ -22,8 +22,9 @@ struct RegistryTrust {
 }
 
 pub fn install(manager: &PluginManager) -> Result<Vec<InstalledPlugin>, EngineError> {
-    let trust: RegistryTrust = serde_json::from_str(REGISTRY)
-        .map_err(|error| EngineError::Storage(format!("Bundled plugin registry is invalid: {error}")))?;
+    let trust: RegistryTrust = serde_json::from_str(REGISTRY).map_err(|error| {
+        EngineError::Storage(format!("Bundled plugin registry is invalid: {error}"))
+    })?;
     [GOOGLE_WORKSPACE, SLACK, NOTION, GITHUB]
         .into_iter()
         .map(|package| {
@@ -45,7 +46,8 @@ mod tests {
     #[test]
     fn bundled_packages_are_signed_and_expose_thirty_five_nodes() {
         let temp = tempfile::tempdir().unwrap();
-        let manager = PluginManager::new(Database::in_memory().unwrap(), temp.path().into()).unwrap();
+        let manager =
+            PluginManager::new(Database::in_memory().unwrap(), temp.path().into()).unwrap();
         let plugins = install(&manager).unwrap();
         assert_eq!(plugins.len(), 4);
         assert_eq!(
@@ -55,6 +57,8 @@ mod tests {
                 .sum::<usize>(),
             35
         );
-        assert!(plugins.iter().all(|plugin| plugin.state == sandbox_engine::PluginInstallState::Enabled));
+        assert!(plugins
+            .iter()
+            .all(|plugin| plugin.state == sandbox_engine::PluginInstallState::Enabled));
     }
 }

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { isTrigger } from "../catalogue";
 import type { Workflow } from "../types";
+import {
+  connectWorkflowNodes,
+  disconnectWorkflowEdge,
+  isValidWorkflowConnection,
+  WEB_BUILDER_INPUT_PORTS,
+  webBuilderPortForTarget,
+} from "../workflowConnections";
 
 const STEP = 20;
 
@@ -14,8 +21,10 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
   const [sourceId, setSourceId] = useState(workflow.nodes[0]?.id ?? "");
   const [targetId, setTargetId] = useState("");
   const [sourceHandle, setSourceHandle] = useState("output");
+  const [targetHandle, setTargetHandle] = useState("input");
   const source = workflow.nodes.find(node => node.id === sourceId);
   const targets = workflow.nodes.filter(node => node.id !== sourceId && !isTrigger(node.type));
+  const target = workflow.nodes.find(node => node.id === targetId);
 
   useEffect(() => {
     if (!workflow.nodes.some(node => node.id === sourceId)) setSourceId(workflow.nodes[0]?.id ?? "");
@@ -29,6 +38,10 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
     setSourceHandle(source?.type === "condition" ? "true" : "output");
   }, [source?.type, sourceId]);
 
+  useEffect(() => {
+    setTargetHandle(webBuilderPortForTarget(target));
+  }, [target?.id, target?.type]);
+
   const move = (nodeId: string, dx: number, dy: number, direction: string) => {
     const node = workflow.nodes.find(candidate => candidate.id === nodeId);
     if (!node) return;
@@ -39,21 +52,26 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
 
   const connect = () => {
     if (!source || !targetId || source.id === targetId) return;
-    const target = workflow.nodes.find(node => node.id === targetId);
     if (!target || isTrigger(target.type)) return;
-    const exists = workflow.edges.some(edge => edge.sourceNodeId === source.id && edge.targetNodeId === targetId && edge.sourceHandle === sourceHandle);
-    if (exists) {
-      onChange(workflow, `${source.name} is already connected to ${target.name} from ${sourceHandle}.`);
+    const next = connectWorkflowNodes(workflow, {
+      source: source.id,
+      target: targetId,
+      sourceHandle,
+      targetHandle,
+    });
+    if (!next) {
+      onChange(workflow, `That connection is not compatible or the ${targetHandle} input is already connected.`);
       return;
     }
-    onChange({ ...workflow, edges: [...workflow.edges, {
-      id: `edge_${crypto.randomUUID().slice(0, 8)}`,
-      sourceNodeId: source.id,
-      sourceHandle,
-      targetNodeId: targetId,
-      targetHandle: "input",
-    }] }, `Connected ${source.name} to ${target.name}${source.type === "condition" ? ` on the ${sourceHandle} branch` : ""}.`);
+    onChange(next, `Connected ${source.name} to ${target.name}${target.type === "web_builder" ? ` at its ${targetHandle} input` : source.type === "condition" ? ` on the ${sourceHandle} branch` : ""}.`);
   };
+
+  const validConnection = Boolean(source && target && isValidWorkflowConnection(workflow, {
+    source: source?.id ?? null,
+    target: target?.id ?? null,
+    sourceHandle,
+    targetHandle,
+  }));
 
   return <aside className="accessible-workflow-editor" id="accessible-workflow-editor" aria-labelledby="accessible-editor-title" tabIndex={-1}>
     <header><div><h2 id="accessible-editor-title">Accessible graph editor</h2><p>Move, connect, inspect, and remove connections without dragging.</p></div><button className="button" onClick={onAddNode}>Add node</button></header>
@@ -77,7 +95,8 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
         <label htmlFor="accessible-source">From</label><select id="accessible-source" value={sourceId} onChange={event => setSourceId(event.target.value)}>{workflow.nodes.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</select>
         {source?.type === "condition" && <><label htmlFor="accessible-branch">Branch</label><select id="accessible-branch" value={sourceHandle} onChange={event => setSourceHandle(event.target.value)}><option value="true">True</option><option value="false">False</option></select></>}
         <label htmlFor="accessible-target">To</label><select id="accessible-target" value={targetId} onChange={event => setTargetId(event.target.value)} disabled={!targets.length}>{targets.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</select>
-        <button className="button primary" disabled={!source || !targetId} onClick={connect}>Add connection</button>
+        {target?.type === "web_builder" && <><label htmlFor="accessible-target-input">Input</label><select id="accessible-target-input" value={targetHandle} onChange={event => setTargetHandle(event.target.value)}>{WEB_BUILDER_INPUT_PORTS.map(port => <option value={port.id} key={port.id}>{port.label}</option>)}</select></>}
+        <button className="button primary" disabled={!validConnection} onClick={connect}>Add connection</button>
       </div>
     </section>
     <section aria-labelledby="accessible-connections-title">
@@ -85,8 +104,8 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
       {workflow.edges.length === 0 ? <p className="accessible-empty">No connections.</p> : <ul className="accessible-edge-list">{workflow.edges.map(edge => {
         const from = workflow.nodes.find(node => node.id === edge.sourceNodeId)?.name ?? edge.sourceNodeId;
         const to = workflow.nodes.find(node => node.id === edge.targetNodeId)?.name ?? edge.targetNodeId;
-        const description = `${from}${edge.sourceHandle === "output" ? "" : ` (${edge.sourceHandle})`} to ${to}`;
-        return <li key={edge.id}><span>{description}</span><button aria-label={`Remove connection ${description}`} onClick={() => onChange({ ...workflow, edges: workflow.edges.filter(candidate => candidate.id !== edge.id) }, `Removed connection ${description}.`)}>Remove</button></li>;
+        const description = `${from}${edge.sourceHandle === "output" ? "" : ` (${edge.sourceHandle})`} to ${to}${edge.targetHandle === "input" ? "" : ` (${edge.targetHandle} input)`}`;
+        return <li key={edge.id}><span>{description}</span><button aria-label={`Remove connection ${description}`} onClick={() => onChange(disconnectWorkflowEdge(workflow, edge.id), `Removed connection ${description}.`)}>Remove</button></li>;
       })}</ul>}
     </section>
   </aside>;

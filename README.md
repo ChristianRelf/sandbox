@@ -47,6 +47,17 @@ sandbox-engine (independent Rust crate)
 
 The React application never performs privileged workflow execution. `sandbox-engine` has no Tauri or web-view dependency and can move into a separately installed runner later. Host-only capabilities, such as native notifications, cross the `HostServices` trait.
 
+## AI, Code, and localhost sites
+
+- AI connections support OpenAI, Anthropic, and OpenAI-compatible/local endpoints. Provider keys stay in the OS credential vault, while workflows store only connection IDs and model metadata.
+- The AI workflow builder drafts complete graphs for review, including typed input bindings and full Code node source blocks. It never runs or approves the proposed workflow.
+- The AI node sends a mapped instruction during execution and awaits the provider response, cancellation, or timeout.
+- Code nodes provide a full Python, HTML, JavaScript, and CSS editor with live syntax/basic type diagnostics, a Problems panel, and AI-assisted file generation.
+- Python and JavaScript can execute locally after command-execution approval. HTML, JavaScript, and CSS source blocks can feed Web Builder.
+- Web Builder combines three Code outputs into a site served only on `127.0.0.1`, with automatic port selection and an optional browser launch.
+
+The user guides are [AI connections](https://docs.sndbox.app/connections/ai), [Build workflows with AI](https://docs.sndbox.app/workflows/ai-builder), and [Code and Web Builder](https://docs.sndbox.app/files-and-data/code-and-web-builder). Exact configuration and ports are generated in the node reference.
+
 ## Development
 
 Prerequisites: Node.js 20+, Rust stable, the Tauri 2 platform prerequisites, and WebView2 on Windows.
@@ -77,6 +88,9 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Authorization, cookies, API keys, tokens, secrets, and passwords are redacted recursively.
 - Node outputs are limited to 1 MB, logs to 8 KiB per line / 100 lines, and command stdout/stderr to 64 KiB each.
 - Run Command uses an executable plus argument array, never a concatenated shell string. Editing a command revokes its automatic-execution approval.
+- Python and JavaScript Code nodes share the command-execution approval boundary; material source edits revoke approval. Script stdout and stderr are limited to 64 KiB each.
+- AI credentials remain in the OS vault. Prompts and the required workflow or code context are sent to the selected provider.
+- Web Builder binds only to loopback and replaces its previous server when the same workflow node runs again.
 - Closing the main window hides it. Tray Quit stops all local schedules and file watches.
 
 ## Beta limitations

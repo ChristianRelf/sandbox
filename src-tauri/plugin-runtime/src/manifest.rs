@@ -660,7 +660,23 @@ pub fn canonical_manifest(manifest: &Manifest) -> Result<Vec<u8>, PluginError> {
     let mut value =
         serde_json::to_value(unsigned).map_err(|error| PluginError::Manifest(error.to_string()))?;
     if manifest.manifest_version == 1 {
-        if let Some(nodes)=value.get_mut("nodes").and_then(Value::as_array_mut){for node in nodes{if let Some(object)=node.as_object_mut(){for key in ["kind","inputPorts","outputPorts","connectionRequirements","fileInputs","placements","externalEffect"]{object.remove(key);}}}}
+        if let Some(nodes) = value.get_mut("nodes").and_then(Value::as_array_mut) {
+            for node in nodes {
+                if let Some(object) = node.as_object_mut() {
+                    for key in [
+                        "kind",
+                        "inputPorts",
+                        "outputPorts",
+                        "connectionRequirements",
+                        "fileInputs",
+                        "placements",
+                        "externalEffect",
+                    ] {
+                        object.remove(key);
+                    }
+                }
+            }
+        }
     }
     let canonical = canonical_value(value);
     serde_json::to_vec(&canonical).map_err(|error| PluginError::Manifest(error.to_string()))
@@ -685,7 +701,9 @@ fn is_https_url(value: &str) -> bool {
     Url::parse(value).is_ok_and(|url| url.scheme() == "https" && url.host_str().is_some())
 }
 
-fn is_false(value:&bool)->bool{!*value}
+fn is_false(value: &bool) -> bool {
+    !*value
+}
 
 pub(crate) fn safe_relative_path(value: &str) -> bool {
     !value.is_empty()

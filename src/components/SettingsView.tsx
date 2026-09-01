@@ -87,7 +87,7 @@ export function SettingsView() {
             general: "start date unsaved",
             appearance: "theme light dark system accent density sidebar",
             accessibility: "motion contrast keyboard",
-            nodes: "minimap grid canvas editor deletion",
+            nodes: "grid canvas editor deletion",
             connections: "credentials gmail webhook vault",
             browser: "profile chromium viewport proxy",
             beta: "updates channel",
@@ -327,12 +327,6 @@ export function SettingsView() {
               title="Node editor"
               description="Control canvas guidance, node detail, and placement behaviour."
             >
-              <PreferenceToggle
-                label="Show canvas minimap"
-                description="Keep a workflow overview in the lower-right corner."
-                checked={preferences.showMinimap}
-                onChange={(showMinimap) => preferences.update({ showMinimap })}
-              />
               <PreferenceToggle
                 label="Snap nodes to grid"
                 description="Align moved nodes to a consistent canvas grid."

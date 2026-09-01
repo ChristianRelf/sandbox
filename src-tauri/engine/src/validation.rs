@@ -263,6 +263,21 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                 .map(str::is_empty)
                 .unwrap_or(true)
                 .then_some("Run Command requires an executable."),
+            "ai_prompt" => {
+                if missing_string_or_binding(node, "connectionId") {
+                    Some("AI requires a connected model.")
+                } else if missing_string_or_binding(node, "prompt") {
+                    Some("AI requires an instruction.")
+                } else {
+                    None
+                }
+            }
+            "code" => missing_string_or_binding(node, "sourceCode")
+                .then_some("Code requires source before it can run."),
+            "web_builder" => (missing_string_or_binding(node, "html")
+                || missing_string_or_binding(node, "javascript")
+                || missing_string_or_binding(node, "css"))
+            .then_some("Web Builder requires mapped HTML, JavaScript, and CSS inputs."),
             "open_browser" => empty_string(&node.configuration, "profileId")
                 .then_some("Open Browser requires a managed browser profile."),
             "navigate" => {
@@ -419,6 +434,19 @@ fn incomplete_field(node: &crate::WorkflowNode) -> Option<&'static str> {
             "destinationFolder"
         }),
         "run_command" => Some("executable"),
+        "ai_prompt" => Some(if empty_string(config, "connectionId") {
+            "connectionId"
+        } else {
+            "prompt"
+        }),
+        "code" => Some("sourceCode"),
+        "web_builder" => Some(if missing_string_or_binding(node, "html") {
+            "html"
+        } else if missing_string_or_binding(node, "javascript") {
+            "javascript"
+        } else {
+            "css"
+        }),
         "open_browser" => Some("profileId"),
         "click_element" | "select_option" | "extract_data" => Some("locator"),
         "fill_field" => Some(if !has_locator(config) {

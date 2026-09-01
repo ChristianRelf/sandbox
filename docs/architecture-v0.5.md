@@ -10,6 +10,7 @@ Status: GA candidate under active development. The blocker register, not this di
   | SQLite + Rust engine    | encrypted sync  | API + audit + policy             |
   | local scheduler/tray    |                 | PostgreSQL RLS                    |
   | OS credential vault     |                 +----------+------------+----------+
+  | loopback site servers   |                            |            |
   +------------+------------+                            |            |
                | local execution                         | leases     | events
                v                                         v            v
@@ -66,6 +67,9 @@ Local personal workflows bypass organisation identity because they do not use or
 7. Meter input accepts only managed billable deployment types. Local execution cannot enter hosted-runner or managed-browser billing meters. Managed workers sign payload-bound usage events with independently configured HMAC producer keys; the control plane enforces a five-minute freshness window and verifies the execution, deployment, workspace and environment relationship before inserting them.
 8. Invoice inputs include only usage whose latest immutable reconciliation is `matched`. A discrepancy removes the execution from invoice aggregation until a later reconciliation resolves it, and every aggregate carries a digest of its event and reconciliation evidence.
 9. Plugin Wasm remains outside browser, process, filesystem, socket and environment authority except through the existing capability broker.
+10. AI provider keys stay in the OS credential vault. The host sends prompts and the relevant graph or code context to the selected OpenAI, Anthropic, or OpenAI-compatible endpoint; remote compatible endpoints require HTTPS, while HTTP is limited to loopback hosts.
+11. Code source mode is data-only. Python and JavaScript run mode crosses the same revision-bound command-execution gate as Run Command, invokes an explicit interpreter without shell concatenation, bounds output, supports cancellation/timeouts, and removes its temporary script.
+12. Web Builder binds generated sites only to `127.0.0.1`. A workflow/node key owns each server, so rerunning it aborts and replaces the prior listener; application shutdown drops the local engine and its listeners.
 
 ## Unfinished joins
 

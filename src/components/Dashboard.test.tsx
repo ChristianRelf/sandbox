@@ -117,4 +117,37 @@ describe("Dashboard interactions", () => {
       ),
     );
   });
+
+  it("shows fifteen premade templates and creates the selected graph", async () => {
+    vi.spyOn(api, "createWorkflow").mockResolvedValue({
+      ...workflow,
+      id: "status-site",
+      name: "Localhost Status Site",
+    });
+    render(
+      <ToastProvider>
+        <Dashboard />
+      </ToastProvider>,
+    );
+    await screen.findByText("Daily report");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Templates/ }));
+    expect(screen.getAllByText("Use template")).toHaveLength(15);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Use Localhost Status Site template",
+      }),
+    );
+    expect(screen.getByLabelText("Workflow name")).toHaveValue(
+      "Localhost Status Site",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create workflow" }));
+
+    await waitFor(() =>
+      expect(api.createWorkflow).toHaveBeenCalledWith(
+        "localhost-status-site",
+        "Localhost Status Site",
+      ),
+    );
+  });
 });
