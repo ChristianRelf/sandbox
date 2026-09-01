@@ -245,10 +245,6 @@ jobs:
             dockerfile: apps/web/Dockerfile
             context: .
             platforms: linux/amd64,linux/arm64
-          - name: discord-changelog-bot
-            dockerfile: examples/discord-changelog-bot/Dockerfile
-            context: examples/discord-changelog-bot
-            platforms: linux/amd64,linux/arm64
     permissions:
       contents: read
       packages: write

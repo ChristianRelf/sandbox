@@ -53,8 +53,6 @@ jobs:
       SSH_PRIVATE_KEY: ${{ secrets.DROPLET_SSH_PRIVATE_KEY }}
       SSH_KNOWN_HOSTS: ${{ secrets.DROPLET_SSH_KNOWN_HOSTS }}
       GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN || secrets.DISCORD_TOKEN }}
-      DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID || vars.DISCORD_CHANNEL_ID }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -68,8 +66,6 @@ jobs:
           [[ "$DROPLET_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "DROPLET_USER is invalid." >&2; exit 1; }
           [[ "$DROPLET_DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "DROPLET_DEPLOY_PATH must be a simple absolute path." >&2; exit 1; }
           [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]] || { echo "Droplet SSH secrets are not configured in the digitalocean-beta environment." >&2; exit 1; }
-          [[ -n "$DISCORD_BOT_TOKEN" && "$DISCORD_BOT_TOKEN" != *$'\n'* && "$DISCORD_BOT_TOKEN" != *$'\r'* ]] || { echo "DISCORD_BOT_TOKEN must be configured as a single-line secret in the digitalocean-beta environment." >&2; exit 1; }
-          [[ "$DISCORD_CHANNEL_ID" =~ ^[0-9]{17,20}$ ]] || { echo "DISCORD_CHANNEL_ID must be configured as a 17-20 digit secret or variable in the digitalocean-beta environment." >&2; exit 1; }
 
       - name: Configure verified SSH access
         shell: bash
@@ -108,27 +104,6 @@ jobs:
           scp "$archive" "sandbox-droplet:$remote_archive"
           ssh sandbox-droplet "install -d -m 0755 '$DROPLET_DEPLOY_PATH' && tar -xzf '$remote_archive' -C '$DROPLET_DEPLOY_PATH' && rm -f '$remote_archive' && chmod 755 '$DROPLET_DEPLOY_PATH/bootstrap.sh' '$DROPLET_DEPLOY_PATH/deploy.sh'"
 
-      - name: Install Discord bot runtime secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-          local_env="$RUNNER_TEMP/discord-changelog-bot.env"
-          remote_env=".sandbox-discord-bot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.env"
-          {
-            printf 'DISCORD_TOKEN=%s\n' "$DISCORD_BOT_TOKEN"
-            printf 'DISCORD_CHANNEL_ID=%s\n' "$DISCORD_CHANNEL_ID"
-            printf 'GITHUB_REPOSITORY=ChristianRelf/sandbox\n'
-            printf 'POLL_INTERVAL_SECONDS=300\n'
-            printf 'INCLUDE_PRERELEASES=true\n'
-            printf 'POST_LATEST_ON_START=true\n'
-            printf 'STATE_FILE=/app/.data/state.json\n'
-            printf 'HEALTH_FILE=/tmp/ready\n'
-          } > "$local_env"
-          scp "$local_env" "sandbox-droplet:$remote_env"
-          ssh sandbox-droplet "install -m 0600 '$remote_env' '$DROPLET_DEPLOY_PATH/discord-changelog-bot.env' && rm -f '$remote_env'"
-          rm -f "$local_env"
-
       - name: Authenticate the Droplet to GHCR
         shell: bash
         run: printf '%s' "$GHCR_PASSWORD" | ssh sandbox-droplet "docker login ghcr.io --username '$GITHUB_ACTOR' --password-stdin"
@@ -143,15 +118,9 @@ jobs:
         shell: bash
         run: ssh sandbox-droplet 'docker logout ghcr.io >/dev/null 2>&1 || true'
 
-      - name: Remove temporary remote Discord configuration
-        if: always()
-        continue-on-error: true
-        shell: bash
-        run: ssh sandbox-droplet "rm -f '.sandbox-discord-bot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.env'"
-
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
         run: |
           ssh -O exit sandbox-droplet >/dev/null 2>&1 || true
-          rm -f "$HOME/.ssh/digitalocean_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts" "$RUNNER_TEMP/discord-changelog-bot.env"
+          rm -f "$HOME/.ssh/digitalocean_deploy" "$HOME/.ssh/config" "$HOME/.ssh/known_hosts"

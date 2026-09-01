@@ -737,10 +737,12 @@ fn matches_host_version(requirement: &VersionReq, host_version: &Version) -> boo
         return true;
     }
     if host_version.pre.is_empty()
-        || requirement
-            .comparators
-            .iter()
-            .any(|comparator| !comparator.pre.is_empty())
+        || requirement.comparators.iter().any(|comparator| {
+            !comparator.pre.is_empty()
+                && comparator.major == host_version.major
+                && comparator.minor == Some(host_version.minor)
+                && comparator.patch == Some(host_version.patch)
+        })
     {
         return false;
     }
@@ -848,6 +850,17 @@ pub(crate) mod tests {
         assert!(
             !manifest
                 .validate(&Version::parse("0.7.0-beta.2").unwrap(), true)
+                .valid
+        );
+        assert!(
+            manifest
+                .validate(&Version::parse("0.7.4-beta.2").unwrap(), true)
+                .valid
+        );
+
+        assert!(
+            !manifest
+                .validate(&Version::parse("0.7.2-beta.3").unwrap(), true)
                 .valid
         );
 

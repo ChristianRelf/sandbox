@@ -60,28 +60,6 @@ services:
     pids_limit: 128
     mem_limit: 512m
 
-  discord-changelog-bot:
-    image: ghcr.io/christianrelf/sandbox-discord-changelog-bot:${SANDBOX_VERSION:-0.7.4-beta.2}
-    restart: unless-stopped
-    init: true
-    env_file:
-      - ${DISCORD_BOT_ENV_FILE:-./discord-changelog-bot.env}
-    volumes:
-      - discord-changelog-bot-data:/app/.data
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('node:fs').accessSync('/tmp/ready')"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
-    read_only: true
-    tmpfs:
-      - /tmp:size=16m,mode=1777
-    cap_drop: [ALL]
-    security_opt: [no-new-privileges:true]
-    pids_limit: 64
-    mem_limit: 192m
-
   caddy:
     image: caddy:2.11.4-alpine
     restart: unless-stopped
@@ -164,4 +142,3 @@ volumes:
   alloy-data:
   caddy-data:
   caddy-config:
-  discord-changelog-bot-data:

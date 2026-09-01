@@ -211,8 +211,6 @@ Add these environment secrets:
 | `DROPLET_HOST` | The Droplet IPv4 address |
 | `DROPLET_SSH_PRIVATE_KEY` | Complete contents of `sandbox_droplet_deploy` |
 | `DROPLET_SSH_KNOWN_HOSTS` | Complete contents of `sandbox_known_hosts` |
-| `DISCORD_BOT_TOKEN` | Discord bot token for release announcements |
-| `DISCORD_CHANNEL_ID` | Destination Discord channel ID; this may instead be an environment variable |
 
 Copy the private key safely to your clipboard:
 
