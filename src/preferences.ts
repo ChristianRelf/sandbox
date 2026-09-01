@@ -24,6 +24,8 @@ export interface AppPreferences {
   gridSize: 10 | 20 | 40;
   showCanvasHints: boolean;
   showNodeDescriptions: boolean;
+  showAskAiOnNodeInteraction: boolean;
+  showAskAiOnNodeIssues: boolean;
   confirmNodeDeletion: boolean;
   confirmBeforeLeaving: boolean;
   checkForUpdates: boolean;
@@ -47,6 +49,8 @@ export const defaultPreferences: AppPreferences = {
   gridSize: 20,
   showCanvasHints: true,
   showNodeDescriptions: true,
+  showAskAiOnNodeInteraction: true,
+  showAskAiOnNodeIssues: true,
   confirmNodeDeletion: true,
   confirmBeforeLeaving: true,
   checkForUpdates: true,
@@ -84,6 +88,8 @@ export function normalisePreferences(value: unknown, legacy = false): AppPrefere
     gridSize: gridSizes.has(input.gridSize as number) ? input.gridSize as 10 | 20 | 40 : defaultPreferences.gridSize,
     showCanvasHints: typeof input.showCanvasHints === "boolean" ? input.showCanvasHints : defaultPreferences.showCanvasHints,
     showNodeDescriptions: typeof input.showNodeDescriptions === "boolean" ? input.showNodeDescriptions : defaultPreferences.showNodeDescriptions,
+    showAskAiOnNodeInteraction: typeof input.showAskAiOnNodeInteraction === "boolean" ? input.showAskAiOnNodeInteraction : defaultPreferences.showAskAiOnNodeInteraction,
+    showAskAiOnNodeIssues: typeof input.showAskAiOnNodeIssues === "boolean" ? input.showAskAiOnNodeIssues : defaultPreferences.showAskAiOnNodeIssues,
     confirmNodeDeletion: typeof input.confirmNodeDeletion === "boolean" ? input.confirmNodeDeletion : defaultPreferences.confirmNodeDeletion,
     confirmBeforeLeaving: typeof input.confirmBeforeLeaving === "boolean" ? input.confirmBeforeLeaving : defaultPreferences.confirmBeforeLeaving,
     checkForUpdates: typeof input.checkForUpdates === "boolean" ? input.checkForUpdates : defaultPreferences.checkForUpdates,

@@ -5,6 +5,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  Position,
   ReactFlow,
   useNodesState,
   type Connection,
@@ -22,16 +23,17 @@ import {
   ChevronUp,
   Command,
   History,
-  LayoutGrid,
-  MoreHorizontal,
   Play,
   Save,
   ShieldCheck,
+  Sparkles,
   TestTube2,
+  Wrench,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -58,12 +60,20 @@ import type {
   RecordedStep,
   ValidationIssue,
   Workflow,
+  WorkflowNode,
   WorkflowRevisionSummary,
 } from "../types";
 import { BrowserRecorder } from "./BrowserRecorder";
+import {
+  AiWorkflowChat,
+  type AiWorkflowChatContext,
+} from "./AiWorkflowChat";
 import { AccessibleWorkflowEditor } from "./AccessibleWorkflowEditor";
 import { CommandPalette } from "./CommandPalette";
-import { ExecutionInspector } from "./ExecutionInspector";
+import {
+  ExecutionInspector,
+  type PermissionReviewRequest,
+} from "./ExecutionInspector";
 import { NodeInspector } from "./NodeInspector";
 import { WorkflowNodeCard, type WorkflowNodeData } from "./WorkflowNodeCard";
 import { ConfirmDialog, Dialog, FocusDialog } from "./ui/Dialog";
@@ -71,6 +81,61 @@ import { useToast } from "./ui/Toast";
 import { Tooltip } from "./ui/Tooltip";
 
 const nodeTypes = { workflow: WorkflowNodeCard };
+const workflowNodeDimensions = { width: 194, height: 112 } as const;
+
+function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handles"] {
+  const handles: NonNullable<Node<WorkflowNodeData>["handles"]> = [];
+  const handleSize = 9;
+  const centeredHandleOffset = (workflowNodeDimensions.height - handleSize) / 2;
+
+  if (!isTrigger(node.type)) {
+    handles.push({
+      id: "input",
+      type: "target",
+      position: Position.Left,
+      x: -handleSize / 2,
+      y: centeredHandleOffset,
+      width: handleSize,
+      height: handleSize,
+    });
+  }
+
+  if (node.type === "condition") {
+    handles.push(
+      {
+        id: "true",
+        type: "source",
+        position: Position.Right,
+        x: workflowNodeDimensions.width - handleSize / 2,
+        y: workflowNodeDimensions.height * 0.42 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+      },
+      {
+        id: "false",
+        type: "source",
+        position: Position.Right,
+        x: workflowNodeDimensions.width - handleSize / 2,
+        y: workflowNodeDimensions.height * 0.76 - handleSize / 2,
+        width: handleSize,
+        height: handleSize,
+      },
+    );
+  } else {
+    handles.push({
+      id: "output",
+      type: "source",
+      position: Position.Right,
+      x: workflowNodeDimensions.width - handleSize / 2,
+      y: centeredHandleOffset,
+      width: handleSize,
+      height: handleSize,
+    });
+  }
+
+  return handles;
+}
+
 export function WorkflowEditor() {
   const toast = useToast();
   const { activeWorkflow, setView, saveWorkflow } = useAppStore();
@@ -115,12 +180,17 @@ export function WorkflowEditor() {
   const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<string>();
   const [running, setRunning] = useState(false);
   const [permissionOpen, setPermissionOpen] = useState(false);
+  const [permissionRequest, setPermissionRequest] =
+    useState<PermissionReviewRequest>();
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisions, setRevisions] = useState<WorkflowRevisionSummary[]>([]);
   const [pendingRevisionId, setPendingRevisionId] = useState<string>();
   const [pendingSideEffectTest, setPendingSideEffectTest] = useState(false);
   const [testingNode, setTestingNode] = useState(false);
   const [accessibleEditorOpen, setAccessibleEditorOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [aiChatContext, setAiChatContext] =
+    useState<AiWorkflowChatContext>();
   const [announcement, setAnnouncement] = useState("");
   const [browserProfiles, setBrowserProfiles] = useState<BrowserProfile[]>([]);
   const [installedPlugins, setInstalledPlugins] = useState<InstalledPlugin[]>(
@@ -129,8 +199,19 @@ export function WorkflowEditor() {
   const past = useRef<Workflow[]>([]);
   const future = useRef<Workflow[]>([]);
   const validationRequest = useRef(0);
-  const dirty = JSON.stringify(workflow) !== baseline;
+  const dirty = useMemo(
+    () => JSON.stringify(workflow) !== baseline,
+    [workflow, baseline],
+  );
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId);
+  const openPermissionReview = (request?: PermissionReviewRequest) => {
+    setPermissionRequest(request);
+    setPermissionOpen(true);
+  };
+  const closePermissionReview = () => {
+    setPermissionOpen(false);
+    setPermissionRequest(undefined);
+  };
   useEffect(() => {
     if (selectedNodeId) setAuxiliaryTab("inspector");
   }, [selectedNodeId]);
@@ -141,10 +222,16 @@ export function WorkflowEditor() {
     snapToGrid,
     gridSize,
     showCanvasHints,
+    showAskAiOnNodeInteraction,
+    showAskAiOnNodeIssues,
     confirmNodeDeletion,
     editorInspectorWidth,
     update: updatePreferences,
   } = usePreferences();
+  const snapGrid = useMemo<[number, number]>(
+    () => [gridSize, gridSize],
+    [gridSize],
+  );
   const resizeInspector = (event: ReactPointerEvent) => {
     event.preventDefault();
     const startX = event.clientX;
@@ -187,6 +274,24 @@ export function WorkflowEditor() {
       } | null;
       if (target?.workflowId === workflow.id && target.nodeId) {
         setSelectedNodeId(target.nodeId);
+        localStorage.removeItem(key);
+      }
+    } catch {
+      /* ignore invalid local UI state */
+    }
+  }, [workflow.id]);
+  useEffect(() => {
+    try {
+      const key = "sandbox.editor.permission-request.v1";
+      const request = JSON.parse(localStorage.getItem(key) ?? "null") as
+        | (PermissionReviewRequest & { workflowId?: string })
+        | null;
+      if (request?.workflowId === workflow.id && request.message) {
+        setPermissionRequest({
+          nodeId: request.nodeId,
+          message: request.message,
+        });
+        setPermissionOpen(true);
         localStorage.removeItem(key);
       }
     } catch {
@@ -646,32 +751,84 @@ export function WorkflowEditor() {
       }),
     });
   };
-  const nodeWarnings = new Map(
-    issues.filter((i) => i.nodeId).map((i) => [i.nodeId!, i.message]),
+  const nodeWarnings = useMemo(
+    () =>
+      new Map(
+        issues.filter((i) => i.nodeId).map((i) => [i.nodeId!, i.message]),
+      ),
+    [issues],
   );
-  const flowNodes: Node<WorkflowNodeData>[] = workflow.nodes.map((node) => ({
-    id: node.id,
-    type: "workflow",
-    position: node.position,
-    selected: node.id === selectedNodeId,
-    ariaLabel: `${node.name}, ${node.type.replaceAll("_", " ")}, position x ${Math.round(node.position.x)}, y ${Math.round(node.position.y)}`,
-    data: {
-      node,
-      status: (runningNode === node.id
-        ? "running"
-        : (run?.nodeExecutions.find((e) => e.nodeId === node.id)?.status ??
-          "idle")) as NodeStatus,
-      warning: nodeWarnings.get(node.id),
-      onAdd: (sourceId: string) => {
-        const source = workflow.nodes.find((n) => n.id === sourceId)!;
-        setPicker({
-          open: true,
-          sourceId,
-          position: { x: source.position.x + 280, y: source.position.y },
-        });
-      },
-    },
-  }));
+  const nodeExecutions = useMemo(
+    () => new Map(run?.nodeExecutions.map((item) => [item.nodeId, item]) ?? []),
+    [run?.nodeExecutions],
+  );
+  const openAiForNode = useCallback((node: WorkflowNode, issue?: string) => {
+    const summary = definitionFor(node.type).summary(node.configuration);
+    setAiChatContext({
+      key: crypto.randomUUID(),
+      label: node.name,
+      prompt: issue
+        ? `Help me fix the "${node.name}" node in this workflow. The current issue is: ${issue}\n\nReview the node configuration and suggest the safest correction before changing the workflow.`
+        : `Help me improve the "${node.name}" node in this workflow. It is a ${node.type.replaceAll("_", " ")} step configured as: ${summary}. Explain what you would improve before drafting any changes.`,
+    });
+    setAiChatOpen(true);
+  }, []);
+  const flowNodes = useMemo<Node<WorkflowNodeData>[]>(
+    () =>
+      workflow.nodes.map((node) => {
+        const execution = nodeExecutions.get(node.id);
+        const status = (runningNode === node.id
+          ? "running"
+          : (execution?.status ?? "idle")) as NodeStatus;
+        const warning = nodeWarnings.get(node.id);
+        const askAiIssue =
+          warning ??
+          execution?.error?.message ??
+          (status === "failed"
+            ? "This node failed during the latest run."
+            : undefined);
+
+        return {
+          id: node.id,
+          type: "workflow",
+          position: node.position,
+          initialWidth: workflowNodeDimensions.width,
+          initialHeight: workflowNodeDimensions.height,
+          handles: workflowNodeHandles(node),
+          selected: node.id === selectedNodeId,
+          ariaLabel: `${node.name}, ${node.type.replaceAll("_", " ")}, position x ${Math.round(node.position.x)}, y ${Math.round(node.position.y)}`,
+          data: {
+            node,
+            status,
+            warning,
+            askAiIssue,
+            showAskAiOnInteraction: showAskAiOnNodeInteraction,
+            showAskAiOnIssues: showAskAiOnNodeIssues,
+            onAskAi: openAiForNode,
+            onAdd: (sourceId: string) => {
+              const source = workflow.nodes.find(
+                (item) => item.id === sourceId,
+              )!;
+              setPicker({
+                open: true,
+                sourceId,
+                position: { x: source.position.x + 280, y: source.position.y },
+              });
+            },
+          },
+        };
+      }),
+    [
+      workflow.nodes,
+      selectedNodeId,
+      runningNode,
+      nodeExecutions,
+      nodeWarnings,
+      showAskAiOnNodeInteraction,
+      showAskAiOnNodeIssues,
+      openAiForNode,
+    ],
+  );
   const [displayNodes, setDisplayNodes, onDisplayNodesChange] =
     useNodesState<Node<WorkflowNodeData>>(flowNodes);
   useEffect(() => {
@@ -681,43 +838,52 @@ export function WorkflowEditor() {
         return existing ? { ...existing, ...node } : node;
       }),
     );
-  }, [
-    workflow.nodes,
-    selectedNodeId,
-    runningNode,
-    run,
-    issues,
-    setDisplayNodes,
-  ]);
-  const flowEdges: Edge[] = workflow.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.sourceNodeId,
-    target: edge.targetNodeId,
-    sourceHandle: edge.sourceHandle,
-    targetHandle: edge.targetHandle,
-    type: "smoothstep",
-    animated: Boolean(runningNode && edge.sourceNodeId === runningNode),
-    className:
-      run?.nodeExecutions.find((n) => n.nodeId === edge.sourceNodeId)
-        ?.status === "successful"
-        ? "edge-success"
-        : "",
-  }));
-  const onNodesChange = (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
-    onDisplayNodesChange(changes);
-    let changed = false;
-    const nodes = workflow.nodes.map((node) => {
-      const change = changes.find((c) => "id" in c && c.id === node.id);
-      if (change?.type === "position" && change.position) {
-        changed = true;
-        return { ...node, position: change.position };
+  }, [flowNodes, setDisplayNodes]);
+  const flowEdges = useMemo<Edge[]>(
+    () =>
+      workflow.edges.map((edge) => ({
+        id: edge.id,
+        source: edge.sourceNodeId,
+        target: edge.targetNodeId,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        type: "smoothstep",
+        animated: Boolean(runningNode && edge.sourceNodeId === runningNode),
+        className:
+          nodeExecutions.get(edge.sourceNodeId)?.status === "successful"
+            ? "edge-success"
+            : "",
+      })),
+    [workflow.edges, runningNode, nodeExecutions],
+  );
+  const onNodesChange = useCallback(
+    (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
+      onDisplayNodesChange(changes);
+      const settledPositions = new Map<string, WorkflowNode["position"]>();
+      for (const change of changes) {
+        if (change.type === "select" && change.selected) {
+          setSelectedNodeId(change.id);
+        }
+        if (
+          change.type === "position" &&
+          change.position &&
+          change.dragging !== true
+        ) {
+          settledPositions.set(change.id, change.position);
+        }
       }
-      if (change?.type === "select" && change.selected)
-        setSelectedNodeId(node.id);
-      return node;
-    });
-    if (changed) setWorkflow({ ...workflow, nodes });
-  };
+      if (settledPositions.size === 0) return;
+
+      commit({
+        ...workflow,
+        nodes: workflow.nodes.map((node) => {
+          const position = settledPositions.get(node.id);
+          return position ? { ...node, position } : node;
+        }),
+      });
+    },
+    [onDisplayNodesChange, workflow, commit],
+  );
   const onConnect = (connection: Connection) => {
     if (
       !connection.source ||
@@ -785,7 +951,23 @@ export function WorkflowEditor() {
           {workflow.enabled ? "Enabled" : "Disabled"}
         </label>
         <div className="topbar-spacer" />
-        <span className="browser-recorder-wrap">
+        <Tooltip content={aiChatOpen ? "Close AI builder" : "Open AI builder"}>
+          <button
+            className={`ai-chat-trigger ${aiChatOpen ? "active" : ""}`}
+            aria-label={
+              aiChatOpen ? "Close AI workflow builder" : "Open AI workflow builder"
+            }
+            aria-expanded={aiChatOpen}
+            aria-controls="ai-workflow-chat"
+            onClick={() => {
+              if (!aiChatOpen) setAiChatContext(undefined);
+              setAiChatOpen((value) => !value);
+            }}
+          >
+            <Sparkles aria-hidden="true" size={16} />
+          </button>
+        </Tooltip>
+        <span className="browser-recorder-wrap browser-recorder-menu-source" aria-hidden="true">
           <BrowserRecorder
             profiles={browserProfiles}
             onProfileCreated={(profile) =>
@@ -794,43 +976,6 @@ export function WorkflowEditor() {
             onApply={applyRecording}
           />
         </span>
-        <button
-          className="button toolbar-secondary"
-          aria-expanded={accessibleEditorOpen}
-          aria-controls="accessible-workflow-editor"
-          onClick={() =>
-            setAccessibleEditorOpen((value) => {
-              if (!value) setAuxiliaryTab("accessible");
-              return !value;
-            })
-          }
-        >
-          <Accessibility size={14} />
-          Accessible editor
-        </button>
-        <button className="button toolbar-secondary" onClick={tidy}>
-          <LayoutGrid size={14} />
-          Tidy
-        </button>
-        <button
-          className="button toolbar-secondary"
-          onClick={() => setPermissionOpen(true)}
-        >
-          <ShieldCheck size={14} />
-          Permissions
-        </button>
-        <button className="button toolbar-secondary" onClick={() => void openRevisionHistory()}>
-          <History size={14}/>
-          Revisions
-        </button>
-        <button className="button toolbar-secondary" onClick={test}>
-          <TestTube2 size={14} />
-          Validate
-        </button>
-        <button className="button toolbar-secondary" disabled={!selectedNode || testingNode} onClick={()=>void testSelectedNode()}>
-          <TestTube2 size={14}/>
-          {testingNode ? "Testing…" : "Test step"}
-        </button>
         <span
           className={`save-state save-state-${dirty && saveState === "saved" ? "unsaved" : saveState}`}
           role="status"
@@ -846,12 +991,13 @@ export function WorkflowEditor() {
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
-              className="button toolbar-overflow"
-              aria-label="More editor actions"
-              title="More editor actions"
+              className="button toolbar-overflow editor-menu-trigger"
+              aria-label="Workflow actions"
+              title="Workflow actions"
             >
-              <MoreHorizontal size={15} />
-              <span>More</span>
+              <Wrench size={14} />
+              <span>Actions</span>
+              <ChevronDown size={12} />
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
@@ -881,7 +1027,7 @@ export function WorkflowEditor() {
               <DropdownMenu.Item onSelect={tidy}>
                 Tidy workflow
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => setPermissionOpen(true)}>
+              <DropdownMenu.Item onSelect={() => openPermissionReview()}>
                 Review permissions
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => void openRevisionHistory()}>
@@ -935,6 +1081,19 @@ export function WorkflowEditor() {
           {running ? "Running…" : "Run"}
         </button>
       </header>
+      <AiWorkflowChat
+        id="ai-workflow-chat"
+        open={aiChatOpen}
+        workflow={workflow}
+        context={aiChatContext}
+        onOpenChange={setAiChatOpen}
+        onApply={(next, message) => {
+          commit(next);
+          setSelectedNodeId(undefined);
+          setAnnouncement(message);
+          toast.push("AI draft applied. Review and save when it looks right.", "success");
+        }}
+      />
       <div
         className={`editor-body ${selectedNode ? "with-inspector" : ""} ${accessibleEditorOpen ? "with-accessible-editor" : ""}`}
         data-auxiliary-tab={auxiliaryTab}
@@ -980,7 +1139,7 @@ export function WorkflowEditor() {
               );
             }}
             snapToGrid={snapToGrid}
-            snapGrid={[gridSize, gridSize]}
+            snapGrid={snapGrid}
             minZoom={0.45}
             maxZoom={1.8}
             defaultViewport={initialViewport}
@@ -1147,6 +1306,7 @@ export function WorkflowEditor() {
                   setSelectedNodeId(nodeId);
                   setBottomOpen(false);
                 }}
+                onReviewPermissions={openPermissionReview}
               />
             ) : (
               <div className="drawer-empty">
@@ -1223,7 +1383,7 @@ export function WorkflowEditor() {
             group: "Editor",
             name: "Review permissions",
             description: "Inspect local workflow capabilities.",
-            action: () => setPermissionOpen(true),
+            action: () => openPermissionReview(),
           },
           {
             id: "editor-back",
@@ -1248,13 +1408,16 @@ export function WorkflowEditor() {
       {permissionOpen && (
         <PermissionReview
           workflow={workflow}
-          onClose={() => setPermissionOpen(false)}
+          request={permissionRequest}
+          onClose={closePermissionReview}
           onApply={(permissions) => {
             setWorkflow({
               ...workflow,
               settings: { ...workflow.settings, permissions },
             });
-            setPermissionOpen(false);
+            if (permissionRequest)
+              toast.push("Permission granted. Retry the workflow when ready.", "success");
+            closePermissionReview();
           }}
         />
       )}
@@ -1337,16 +1500,29 @@ export function WorkflowEditor() {
   );
 }
 
+type WorkflowPermissionKind =
+  | "network"
+  | "files"
+  | "browser"
+  | "communication"
+  | "external_write"
+  | "command"
+  | "background"
+  | "other";
+
 function PermissionReview({
   workflow,
+  request,
   onClose,
   onApply,
 }: {
   workflow: Workflow;
+  request?: PermissionReviewRequest;
   onClose: () => void;
   onApply: (permissions: PermissionSummary) => void;
 }) {
   const [permissions, setPermissions] = useState(workflow.settings.permissions);
+  const reviewBody = useRef<HTMLElement>(null);
   const domains = workflow.nodes
     .filter((node) => node.type === "http_request")
     .map((node) => {
@@ -1380,12 +1556,64 @@ function PermissionReview({
   const sendNodes = workflow.nodes.filter(
     (node) => node.type === "gmail_send_email",
   );
+  const externalWriteNodes = workflow.nodes.filter((node) =>
+    definitionFor(node.type).externalEffect === "external_write" ||
+    definitionFor(node.type).externalEffect === "destructive_or_high_impact"
+  );
+  const requestedNode = request?.nodeId
+    ? workflow.nodes.find((node) => node.id === request.nodeId)
+    : undefined;
+  const requestedKind = permissionKindFor(
+    requestedNode?.type,
+    request?.message,
+  );
+  const requestedPath =
+    requestedKind === "files" && request
+      ? permissionPathFromMessage(request.message)
+      : undefined;
+
+  useEffect(() => {
+    if (!request) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = reviewBody.current?.querySelector<HTMLElement>(
+        '[data-permission-requested="true"]',
+      );
+      target?.scrollIntoView({ block: "center" });
+      target?.querySelector<HTMLInputElement>("input")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [request, requestedKind]);
+
+  const applyPermissions = () => {
+    let next = { ...permissions };
+    if (request) next = grantRequestedPermission(next, requestedKind, sendNodes.length > 0);
+    const grantNetwork = !request || requestedKind === "network";
+    const grantBrowser = !request || requestedKind === "browser";
+    onApply({
+      ...next,
+      approvedNetworkDomains: grantNetwork
+        ? [...new Set([...next.approvedNetworkDomains, ...domains])]
+        : next.approvedNetworkDomains,
+      approvedBrowserProfileIds: grantBrowser
+        ? [...new Set([...next.approvedBrowserProfileIds, ...browserProfiles])]
+        : next.approvedBrowserProfileIds,
+      approvedFolders:
+        request && requestedKind === "files" && requestedPath
+          ? [...new Set([...next.approvedFolders, requestedPath])]
+          : next.approvedFolders,
+    });
+  };
+
   return (
     <FocusDialog
       open
       onOpenChange={(open) => !open && onClose()}
-      title="Workflow permissions"
-      description="Review exactly what this workflow may access and send."
+      title={request ? "Permission required" : "Workflow permissions"}
+      description={
+        request
+          ? "Review the permission that paused this workflow run."
+          : "Review exactly what this workflow may access and send."
+      }
     >
       <div className="permission-modal">
         <header>
@@ -1393,15 +1621,35 @@ function PermissionReview({
             <ShieldCheck size={18} />
           </span>
           <div>
-            <h2>Workflow permissions</h2>
-            <p>Review exactly what this workflow may access and send.</p>
+            <h2>{request ? "Review permission request" : "Workflow permissions"}</h2>
+            <p>
+              {request
+                ? `${requestedNode?.name ?? "This workflow"} paused until you decide.`
+                : "Review exactly what this workflow may access and send."}
+            </p>
           </div>
         </header>
-        <section>
+        <section ref={reviewBody}>
+          {request && (
+            <div className="permission-request-banner">
+              <AlertTriangle size={16} />
+              <span>
+                <b>{request.message}</b>
+                <small>
+                  Grant only if you trust this workflow. Declining leaves its
+                  permissions unchanged.
+                </small>
+              </span>
+            </div>
+          )}
           <label>Approved network domains</label>
           {domains.length ? (
             domains.map((domain) => (
-              <div className="permission-row" key={domain}>
+              <div
+                className={`permission-row ${requestedKind === "network" ? "permission-requested" : ""}`}
+                data-permission-requested={requestedKind === "network" || undefined}
+                key={domain}
+              >
                 <span>↗</span>
                 <b>{domain}</b>
                 <em>Required by HTTP Request</em>
@@ -1412,7 +1660,18 @@ function PermissionReview({
               No direct network domains requested.
             </div>
           )}
-          <label>Approved folders</label>
+          <label>Approved folders and paths</label>
+          {requestedPath &&
+            !permissions.approvedFolders.includes(requestedPath) && (
+              <div
+                className="permission-row permission-requested"
+                data-permission-requested="true"
+              >
+                <span>+</span>
+                <b>{requestedPath}</b>
+                <em>Requested by this run</em>
+              </div>
+            )}
           {permissions.approvedFolders.length ? (
             permissions.approvedFolders.map((folder) => (
               <div className="permission-row" key={folder}>
@@ -1423,17 +1682,26 @@ function PermissionReview({
           ) : (
             <div className="permission-empty">No folder access approved.</div>
           )}
-          {browserProfiles.length > 0 && (
+          {(browserProfiles.length > 0 || requestedKind === "browser") && (
             <>
               <label>Managed browser profiles</label>
-              {browserProfiles.map((profileId) => (
-                <div className="permission-row" key={profileId}>
-                  <span>◎</span>
-                  <b>{profileId}</b>
-                  <em>Isolated application profile</em>
+              {browserProfiles.length ? (
+                browserProfiles.map((profileId) => (
+                  <div className="permission-row" key={profileId}>
+                    <span>◎</span>
+                    <b>{profileId}</b>
+                    <em>Isolated application profile</em>
+                  </div>
+                ))
+              ) : (
+                <div className="permission-empty">
+                  No managed browser profile is configured.
                 </div>
-              ))}
-              <label className="toggle-row">
+              )}
+              <label
+                className={`toggle-row ${requestedKind === "browser" ? "permission-requested" : ""}`}
+                data-permission-requested={requestedKind === "browser" || undefined}
+              >
                 <span>
                   <b>Permit browser automation</b>
                   <small>
@@ -1472,7 +1740,12 @@ function PermissionReview({
                   </div>
                 </div>
               ))}
-              <label className="toggle-row">
+              <label
+                className={`toggle-row ${requestedKind === "communication" ? "permission-requested" : ""}`}
+                data-permission-requested={
+                  requestedKind === "communication" || undefined
+                }
+              >
                 <span>
                   <b>Permit external communication</b>
                   <small>
@@ -1493,6 +1766,21 @@ function PermissionReview({
                     })
                   }
                 />
+              </label>
+            </>
+          )}
+          {externalWriteNodes.length > 0 && (
+            <>
+              <label>External data changes</label>
+              {externalWriteNodes.map((node) => (
+                <div className="command-review" key={node.id}>
+                  <AlertTriangle size={15} />
+                  <div><b>{node.name}</b><code>{definitionFor(node.type).externalEffect?.replaceAll("_", " ")}</code></div>
+                </div>
+              ))}
+              <label className={`toggle-row ${requestedKind === "external_write" ? "permission-requested" : ""}`} data-permission-requested={requestedKind === "external_write" || undefined}>
+                <span><b>Permit external data writes</b><small>Allows these nodes to change provider data; connection secrets remain host-only.</small></span>
+                <input type="checkbox" checked={Boolean(permissions.externalDataWritePermitted)} onChange={(event) => setPermissions({ ...permissions, externalDataWritePermitted: event.target.checked })} />
               </label>
             </>
           )}
@@ -1517,7 +1805,10 @@ function PermissionReview({
                   </div>
                 </div>
               ))}
-              <label className="toggle-row">
+              <label
+                className={`toggle-row ${requestedKind === "command" ? "permission-requested" : ""}`}
+                data-permission-requested={requestedKind === "command" || undefined}
+              >
                 <span>
                   <b>Permit command execution</b>
                   <small>Changing a command revokes this approval.</small>
@@ -1538,7 +1829,10 @@ function PermissionReview({
               </label>
             </>
           )}
-          <label className="toggle-row">
+          <label
+            className={`toggle-row ${requestedKind === "background" ? "permission-requested" : ""}`}
+            data-permission-requested={requestedKind === "background" || undefined}
+          >
             <span>
               <b>Permit background execution</b>
               <small>
@@ -1563,32 +1857,116 @@ function PermissionReview({
         </section>
         <footer>
           <button className="button" onClick={onClose}>
-            Cancel
+            {request ? "Decline" : "Cancel"}
           </button>
           <button
             className="button primary"
-            onClick={() =>
-              onApply({
-                ...permissions,
-                approvedNetworkDomains: [
-                  ...new Set([
-                    ...permissions.approvedNetworkDomains,
-                    ...domains,
-                  ]),
-                ],
-                approvedBrowserProfileIds: [
-                  ...new Set([
-                    ...permissions.approvedBrowserProfileIds,
-                    ...browserProfiles,
-                  ]),
-                ],
-              })
-            }
+            onClick={applyPermissions}
           >
-            Apply permissions
+            {request ? "Grant permission" : "Apply permissions"}
           </button>
         </footer>
       </div>
     </FocusDialog>
   );
+}
+
+function permissionKindFor(
+  nodeType?: NodeType,
+  message = "",
+): WorkflowPermissionKind {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("approved folder") ||
+    normalized.includes("outside the workflow's approved folders")
+  )
+    return "files";
+  if (normalized.includes("network access") || normalized.includes("network domain"))
+    return "network";
+  if (nodeType === "run_command") return "command";
+  if (
+    nodeType &&
+    [
+      "gmail_create_draft",
+      "gmail_send_email",
+      "gmail_add_label",
+      "discord_webhook",
+      "discord_embed",
+      "slack_webhook",
+    ].includes(nodeType)
+  )
+    return "communication";
+  if (
+    nodeType &&
+    [
+      "open_browser",
+      "navigate",
+      "click_element",
+      "fill_field",
+      "select_option",
+      "press_key",
+      "wait_for",
+      "extract_data",
+      "screenshot",
+      "download_file",
+      "upload_file",
+      "close_browser",
+    ].includes(nodeType)
+  )
+    return "browser";
+  if (nodeType === "http_request") return "network";
+  if (
+    nodeType &&
+    [
+      "file_watch_trigger",
+      "move_file",
+      "read_file",
+      "write_file",
+      "copy_path",
+      "delete_path",
+      "list_folder",
+      "parse_csv",
+      "parse_json",
+      "parse_text",
+    ].includes(nodeType)
+  )
+    return "files";
+  if (normalized.includes("background execution")) return "background";
+  if (normalized.includes("external communication")) return "communication";
+  if (normalized.includes("external data write")) return "external_write";
+  if (normalized.includes("browser")) return "browser";
+  if (normalized.includes("command")) return "command";
+  return "other";
+}
+
+function permissionPathFromMessage(message: string) {
+  return message.match(/^'([^']+)' is outside the workflow's approved folders\./)?.[1];
+}
+
+function grantRequestedPermission(
+  permissions: PermissionSummary,
+  kind: WorkflowPermissionKind,
+  hasSendEmail: boolean,
+): PermissionSummary {
+  if (kind === "command")
+    return {
+      ...permissions,
+      commandExecutionPermitted: true,
+      approvalRevision: crypto.randomUUID(),
+    };
+  if (kind === "communication")
+    return {
+      ...permissions,
+      externalCommunicationPermitted: true,
+      communicationApprovalRevision: hasSendEmail
+        ? crypto.randomUUID()
+        : permissions.communicationApprovalRevision,
+    };
+  if (kind === "external_write")
+    return { ...permissions, externalDataWritePermitted: true };
+  if (kind === "browser")
+    return { ...permissions, browserAutomationPermitted: true };
+  if (kind === "background")
+    return { ...permissions, backgroundExecutionPermitted: true };
+  return permissions;
 }

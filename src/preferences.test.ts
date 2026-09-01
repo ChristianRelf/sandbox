@@ -19,7 +19,19 @@ describe("app preferences", () => {
       gridSize: 40,
       reduceMotion: true,
       startView: "workflows",
-      updateChannel: "beta"
+      updateChannel: "beta",
+      showAskAiOnNodeInteraction: true,
+      showAskAiOnNodeIssues: true,
+    });
+  });
+
+  it("preserves Ask AI node shortcut preferences", () => {
+    expect(normalisePreferences({
+      showAskAiOnNodeInteraction: false,
+      showAskAiOnNodeIssues: false,
+    })).toMatchObject({
+      showAskAiOnNodeInteraction: false,
+      showAskAiOnNodeIssues: false,
     });
   });
 

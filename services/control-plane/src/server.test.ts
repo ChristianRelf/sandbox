@@ -48,7 +48,7 @@ function dependencies(permissions: string[]) {
     createRunnerPairingChallenge: vi.fn(), confirmRunnerPairing: vi.fn(), listRunners: vi.fn(), createRunnerCommand: vi.fn(), revokeRunner: vi.fn(),
     requestWorkflowApproval: vi.fn(), listWorkflowApprovals: vi.fn(async()=>[]), decideWorkflowApproval: vi.fn(), publishWorkflowRevision: vi.fn(), rollbackWorkflowRevision: vi.fn(),
     getGovernancePolicies: vi.fn(async () => ({})), setGovernancePolicy: vi.fn(), listWorkspaceMembers: vi.fn(), updateWorkspaceMemberRole: vi.fn(), removeWorkspaceMember: vi.fn(), revokeInvitation: vi.fn(),
-    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(async()=>[]), createDeployment:vi.fn(), transitionDeployment:vi.fn(), listRunnerPools:vi.fn(async()=>[]), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
+    authenticateRunnerRequest: vi.fn(), recordRunnerHeartbeat: vi.fn(), dequeueRunnerCommands: vi.fn(), updateRunnerCommandStatus: vi.fn(), recordRunnerTriggerEvents: vi.fn(), recordRunSummary: vi.fn(), listWorkspaceActivity: vi.fn(), listDeployments:vi.fn(async()=>[]), createDeployment:vi.fn(), transitionDeployment:vi.fn(), listRunnerPools:vi.fn(async()=>[]), createRunnerPool:vi.fn(), updateRunnerPool:vi.fn(), deleteRunnerPool:vi.fn(),
     listOrganisationRoles:vi.fn(async()=>[]),createOrganisationRole:vi.fn(),updateOrganisationRole:vi.fn(),deleteOrganisationRole:vi.fn(),listSsoConnections:vi.fn(async()=>[]),createSsoConnection:vi.fn(),updateSsoConnection:vi.fn(),deleteSsoConnection:vi.fn(),listScimTokens:vi.fn(async()=>[]),createScimToken:vi.fn(),revokeScimToken:vi.fn(),authenticateScimToken:vi.fn(),listScimUsers:vi.fn(),getScimUser:vi.fn(),upsertScimUser:vi.fn(),
     listWorkspaceEnvironments: vi.fn(), listSharedConnections: vi.fn(), createSharedConnection: vi.fn(), deploySharedConnection: vi.fn(),
     getPluginBillingPlan: vi.fn(), recordMarketplaceCheckout: vi.fn(), applyBillingEvent: vi.fn(), getActiveEntitlement: vi.fn(),
@@ -419,6 +419,19 @@ describe("control-plane API", () => {
     const response = await server.inject({ method: "GET", url: "/v1/runner/commands", headers: { "x-sandbox-runner-id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "x-sandbox-key-id": "device-1", "x-sandbox-request-time": new Date(Date.now()-10*60_000).toISOString(), "x-sandbox-request-nonce": "request-nonce-0001", "x-sandbox-signature": Buffer.alloc(64).toString("base64") } });
     expect(response.statusCode).toBe(400);
     expect(deps.repository.authenticateRunnerRequest).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("persists runner trigger events before acknowledging and rejects secret material", async () => {
+    const deps=dependencies([]),runnerId="dddddddd-dddd-4ddd-8ddd-dddddddddddd",deploymentId="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",revisionId="ffffffff-ffff-4fff-8fff-ffffffffffff",eventId="12345678-1234-4234-8234-123456789abc";
+    vi.mocked(deps.repository.authenticateRunnerRequest).mockResolvedValue({runnerId,accountId:session.accountId,workspaceId,keyId:"device-1"});
+    vi.mocked(deps.repository.recordRunnerTriggerEvents).mockResolvedValue({acceptedEventIds:[eventId],duplicateEventIds:[]});
+    const server=await createServer(deps),headers={"x-sandbox-runner-id":runnerId,"x-sandbox-key-id":"device-1","x-sandbox-request-time":new Date().toISOString(),"x-sandbox-request-nonce":"trigger-event-nonce-0001","x-sandbox-signature":Buffer.alloc(64,7).toString("base64")};
+    const event={eventId,deploymentId,workflowRevisionId:revisionId,nodeId:"github-trigger",pluginId:"com.sndbox.github",pluginVersion:"1.0.0",dedupeKey:"run:42:attempt:2",occurredAt:new Date().toISOString(),payload:{runId:42,conclusion:"success"},providerCheckpoint:{completedAt:new Date().toISOString()}};
+    const accepted=await server.inject({method:"POST",url:"/v1/runner/trigger-events",headers,payload:{events:[event]}});
+    expect(accepted.statusCode,accepted.body).toBe(200);expect(accepted.json()).toEqual({acceptedEventIds:[eventId],duplicateEventIds:[]});expect(deps.repository.recordRunnerTriggerEvents).toHaveBeenCalledWith(expect.objectContaining({runnerId}),[event]);
+    const rejected=await server.inject({method:"POST",url:"/v1/runner/trigger-events",headers:{...headers,"x-sandbox-request-nonce":"trigger-event-nonce-0002"},payload:{events:[{...event,eventId:"22345678-1234-4234-8234-123456789abc",payload:{accessToken:"must-not-persist"}}]}});
+    expect(rejected.statusCode).toBe(400);expect(rejected.json().error.code).toBe("trigger_event_sensitive_data");expect(deps.repository.recordRunnerTriggerEvents).toHaveBeenCalledTimes(1);
     await server.close();
   });
 

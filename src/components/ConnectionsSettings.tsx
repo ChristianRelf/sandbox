@@ -1,42 +1,57 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { listen } from "@tauri-apps/api/event";
 import {
+  ArrowRight,
   Cable,
   CheckCircle2,
+  ChevronDown,
   ExternalLink,
+  Hash,
+  Github,
+  CalendarDays,
+  NotebookText,
   Mail,
   MessageSquare,
-  MoreHorizontal,
-  Plus,
+  Pencil,
   RefreshCcw,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
 import type { ConnectionMetadata } from "../types";
+import { AiConnectionDialog } from "./AiConnectionDialog";
 import { ConfirmDialog, Dialog, FocusDialog } from "./ui/Dialog";
 
-type Provider = "gmail" | "discord" | "slack";
+type WebhookProvider = "discord" | "slack";
 
 export function ConnectionsSettings() {
   const [connections, setConnections] = useState<ConnectionMetadata[]>([]);
-  const [adding, setAdding] = useState<Provider>();
+  const [adding, setAdding] = useState<WebhookProvider>();
+  const [addingAi, setAddingAi] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{
     kind: "error" | "success";
     text: string;
   }>();
   const [renaming, setRenaming] = useState<ConnectionMetadata>();
+  const [githubSetup, setGithubSetup] = useState<ConnectionMetadata>();
+  const [githubResources, setGithubResources] = useState<Array<{ id: string; label: string; metadata: Record<string, unknown> }>>([]);
+  const [githubInstallation, setGithubInstallation] = useState(0);
+  const [githubRepositories, setGithubRepositories] = useState<string[]>([]);
   const [renameName, setRenameName] = useState("");
   const [revoking, setRevoking] = useState<{
     connection: ConnectionMetadata;
     workflows: string[];
   }>();
+
   const load = () =>
     api
       .listConnections()
       .then(setConnections)
       .catch((value) => setNotice({ kind: "error", text: String(value) }));
+
   useEffect(() => {
     void load();
     if (!api.isDesktop) return;
@@ -69,6 +84,28 @@ export function ConnectionsSettings() {
       setBusy(false);
     }
   };
+
+  const connectIntegration = async (
+    provider: "google_workspace" | "slack_oauth" | "notion" | "github_app",
+    label: string,
+  ) => {
+    setBusy(true);
+    setNotice(undefined);
+    try {
+      const started = await api.startIntegrationOAuth(provider);
+      setNotice({
+        kind: "success",
+        text: started.userCode
+          ? `${label} authorization opened. Enter code ${started.userCode} in the provider page; this screen updates after approval.`
+          : `${label} authorization opened in your default browser. This screen updates after the callback is verified.`,
+      });
+    } catch (value) {
+      setNotice({ kind: "error", text: String(value) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const act = async (action: () => Promise<unknown>, success?: string) => {
     setBusy(true);
     setNotice(undefined);
@@ -83,38 +120,147 @@ export function ConnectionsSettings() {
     }
   };
 
+  const prepareDisconnect = (connection: ConnectionMetadata) => {
+    void api
+      .workflowsUsingConnection(connection.id)
+      .then((workflows) => setRevoking({ connection, workflows }))
+      .catch((value) => setNotice({ kind: "error", text: String(value) }));
+  };
+
+  const prepareGithub = async (connection: ConnectionMetadata) => {
+    setBusy(true);setNotice(undefined);
+    try {
+      const resources=await api.listIntegrationResources(connection.id,"github_repository");
+      const installationIds=[...new Set(resources.map((resource)=>Number(resource.metadata.installationId)).filter(Number.isSafeInteger))];
+      const current=Number(connection.metadata.installationId ?? installationIds[0] ?? 0);
+      const selected=Array.isArray(connection.metadata.selectedRepositories)?connection.metadata.selectedRepositories.flatMap((item)=>typeof item==="string"?[item]:item&&typeof item==="object"&&"fullName" in item?[String((item as {fullName:unknown}).fullName)]:[]):[];
+      setGithubResources(resources);setGithubInstallation(current);setGithubRepositories(selected);setGithubSetup(connection);
+    } catch(value){setNotice({kind:"error",text:String(value)});} finally{setBusy(false);}
+  };
+
   return (
-    <section className="settings-section">
-      <div className="settings-heading">
+    <section className="settings-section connections-settings">
+      <header className="connections-header">
         <div>
           <h2>Connections</h2>
           <p>
-            Account metadata is stored in SQLite. Tokens and webhook URLs stay
-            in your operating-system credential store.
+            Give your workflows access to the services they need. Choose a
+            provider to get started.
           </p>
         </div>
-        <div className="connection-add-actions">
-          <button className="button" onClick={connectGmail} disabled={busy}>
-            <Mail size={13} />
-            Connect Gmail
-          </button>
-          <button
-            className="button primary"
-            onClick={() => setAdding("discord")}
-          >
-            <Plus size={13} />
-            Add webhook
-          </button>
+        <div className="connection-security-badge">
+          <ShieldCheck size={16} />
+          <span>
+            <b>Stored securely</b>
+            <small>Secrets stay in your system vault</small>
+          </span>
         </div>
-      </div>
+      </header>
+
       {notice && (
         <div
-          className={`${notice.kind === "error" ? "error-banner" : "success-banner"}`}
+          className={notice.kind === "error" ? "error-banner" : "success-banner"}
         >
           {notice.kind === "success" && <CheckCircle2 size={13} />}
           <span>{notice.text}</span>
         </div>
       )}
+
+      <div className="connection-section-heading">
+        <div>
+          <h3>Add a connection</h3>
+          <p>Select a service and sndbox will guide you through setup.</p>
+        </div>
+      </div>
+      <div className="connection-option-grid">
+        <ConnectionOption
+          icon={<Sparkles size={18} />}
+          name="AI provider"
+          description="Build and edit workflows from the AI chat."
+          method="API key"
+          badge="AI builder"
+          tone="ai"
+          disabled={busy}
+          onClick={() => setAddingAi(true)}
+        />
+        <ConnectionOption
+          icon={<Mail size={18} />}
+          name="Gmail"
+          description="Use email triggers, messages, and drafts."
+          method="Google sign-in"
+          tone="gmail"
+          disabled={busy}
+          onClick={() => void connectGmail()}
+        />
+        <ConnectionOption
+          icon={<CalendarDays size={18} />}
+          name="Google Workspace"
+          description="Use Calendar, Drive, and Sheets actions and polling triggers."
+          method="Google sign-in"
+          badge="11 nodes"
+          tone="google_workspace"
+          disabled={busy}
+          onClick={() => void connectIntegration("google_workspace", "Google Workspace")}
+        />
+        <ConnectionOption
+          icon={<Hash size={18} />}
+          name="Slack OAuth"
+          description="Read channels, send messages, react, and upload files."
+          method="Slack OAuth v2"
+          badge="6 nodes"
+          tone="slack_oauth"
+          disabled={busy}
+          onClick={() => void connectIntegration("slack_oauth", "Slack")}
+        />
+        <ConnectionOption
+          icon={<NotebookText size={18} />}
+          name="Notion"
+          description="Query and update pages in connected data sources."
+          method="Notion OAuth"
+          badge="5 nodes"
+          tone="notion"
+          disabled={busy}
+          onClick={() => void connectIntegration("notion", "Notion")}
+        />
+        <ConnectionOption
+          icon={<Github size={18} />}
+          name="GitHub"
+          description="Automate issues, pull requests, reviews, and Actions."
+          method="GitHub App device flow"
+          badge="13 nodes"
+          tone="github_app"
+          disabled={busy}
+          onClick={() => void connectIntegration("github_app", "GitHub")}
+        />
+        <ConnectionOption
+          icon={<MessageSquare size={18} />}
+          name="Discord"
+          description="Send workflow updates to a Discord channel."
+          method="Webhook URL"
+          tone="discord"
+          disabled={busy}
+          onClick={() => setAdding("discord")}
+        />
+        <ConnectionOption
+          icon={<Hash size={18} />}
+          name="Slack"
+          description="Post notifications to your Slack workspace."
+          method="Webhook URL"
+          tone="slack"
+          disabled={busy}
+          onClick={() => setAdding("slack")}
+        />
+      </div>
+
+      <div className="connection-section-heading saved-connections-heading">
+        <div>
+          <h3>Saved connections</h3>
+          <p>Test, rename, or disconnect services already linked to sndbox.</p>
+        </div>
+        <span className="connection-count">
+          {connections.length} {connections.length === 1 ? "connection" : "connections"}
+        </span>
+      </div>
       {connections.length ? (
         <div className="connection-list">
           {connections.map((connection) => (
@@ -123,9 +269,8 @@ export function ConnectionsSettings() {
               <div className="connection-identity">
                 <b>{connection.displayName}</b>
                 <small>
-                  {connection.accountIdentifier ??
-                    providerName(connection.provider)}{" "}
-                  ·{" "}
+                  {connection.accountIdentifier ?? providerName(connection.provider)}
+                  <span aria-hidden="true"> · </span>
                   {connection.scopes.length
                     ? `${connection.scopes.length} granted scope${connection.scopes.length === 1 ? "" : "s"}`
                     : "Credential stored securely"}
@@ -133,71 +278,81 @@ export function ConnectionsSettings() {
               </div>
               <span className={`connection-state ${connection.status}`}>
                 <i />
-                {connection.status.replace("_", " ")}
+                {connection.status.replaceAll("_", " ")}
               </span>
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() =>
-                  act(
-                    () => api.testConnection(connection.id),
-                    `${connection.displayName} is available in the OS credential store.`,
-                  )
-                }
-              >
-                <RefreshCcw size={12} />
-                Test
-              </button>
-              <button
-                className="icon-button"
-                title="Rename"
-                aria-label={`Rename ${connection.displayName}`}
-                onClick={() => {
-                  setRenaming(connection);
-                  setRenameName(connection.displayName);
-                }}
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              <button
-                className="icon-button danger-text"
-                title="Revoke and delete secret"
-                aria-label={`Revoke and delete ${connection.displayName}`}
-                onClick={() =>
-                  void api
-                    .workflowsUsingConnection(connection.id)
-                    .then((workflows) => setRevoking({ connection, workflows }))
-                    .catch((value) =>
-                      setNotice({ kind: "error", text: String(value) }),
+              <div className="connection-row-actions">
+                <button
+                  className="button"
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      () => api.testConnection(connection.id),
+                      `${connection.displayName} is available in the OS credential store.`,
                     )
-                }
-              >
-                <Trash2 size={13} />
-              </button>
+                  }
+                >
+                  <RefreshCcw size={12} />
+                  Test connection
+                </button>
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      className="button connection-manage-button"
+                      aria-label={`Manage ${connection.displayName}`}
+                    >
+                      Manage
+                      <ChevronDown size={12} />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                      <DropdownMenu.Content className="menu" align="end" sideOffset={5}>
+                      {connection.provider === "github_app" && <DropdownMenu.Item onSelect={() => void prepareGithub(connection)}><Github size={13} />Choose repositories</DropdownMenu.Item>}
+                      <DropdownMenu.Item
+                        onSelect={() => {
+                          setRenaming(connection);
+                          setRenameName(connection.displayName);
+                        }}
+                      >
+                        <Pencil size={13} />
+                        Rename
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item
+                        className="danger"
+                        onSelect={() => prepareDisconnect(connection)}
+                      >
+                        <Trash2 size={13} />
+                        Disconnect
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="connections-empty">
-          <Cable size={20} />
+          <span className="connections-empty-icon">
+            <Cable size={18} />
+          </span>
           <div>
-            <b>No connections</b>
-            <span>
-              Connect Gmail with PKCE or store an incoming webhook securely.
-            </span>
+            <b>No saved connections yet</b>
+            <span>Choose a service above. It will appear here once connected.</span>
           </div>
         </div>
       )}
       <div className="vault-assurance">
         <ShieldCheck size={14} />
         <span>
-          Workflow JSON contains only a credential ID. Exported workflows
-          replace it with an unresolved connection requirement.
+          Credentials never appear in workflow files or exports. Workflows only
+          store a reference to the secure credential.
         </span>
       </div>
+
       {adding && (
         <WebhookModal
-          initialProvider={adding === "gmail" ? "discord" : adding}
+          initialProvider={adding}
           busy={busy}
           onClose={() => setAdding(undefined)}
           onSave={(provider, name, url) =>
@@ -208,6 +363,17 @@ export function ConnectionsSettings() {
           }
         />
       )}
+      <AiConnectionDialog
+        open={addingAi}
+        onOpenChange={setAddingAi}
+        onConnected={(connection) => {
+          setConnections((current) => [...current, connection]);
+          setNotice({
+            kind: "success",
+            text: `${connection.displayName} connected securely.`,
+          });
+        }}
+      />
       <Dialog
         open={Boolean(renaming)}
         onOpenChange={(open) => !open && setRenaming(undefined)}
@@ -243,19 +409,39 @@ export function ConnectionsSettings() {
           />
         </label>
       </Dialog>
+      <Dialog
+        open={Boolean(githubSetup)}
+        onOpenChange={(open) => !open && setGithubSetup(undefined)}
+        title="Choose GitHub App access"
+        description="Select one installation and the exact repositories this connection may use. Workflows cannot silently switch repositories."
+        footer={<><button className="button" onClick={()=>setGithubSetup(undefined)}>Cancel</button><button className="button primary" disabled={busy||!githubInstallation||!githubRepositories.length} onClick={()=>{if(githubSetup)void act(()=>api.configureGithubInstallation(githubSetup.id,githubInstallation,githubRepositories),"GitHub repository access updated.").then(()=>setGithubSetup(undefined));}}>Save access</button></>}
+      >
+        <div className="settings-modal connection-modal">
+          <Field label="Installation">
+            <select value={githubInstallation||""} onChange={(event)=>{const next=Number(event.target.value);setGithubInstallation(next);setGithubRepositories([]);}}>
+              <option value="">Select installation…</option>
+              {[...new Set(githubResources.map((resource)=>Number(resource.metadata.installationId)).filter(Number.isSafeInteger))].map((id)=><option key={id} value={id}>{String(githubResources.find((resource)=>Number(resource.metadata.installationId)===id)?.metadata.owner??`Installation ${id}`)}</option>)}
+            </select>
+          </Field>
+          <div className="checks">
+            {githubResources.filter((resource)=>Number(resource.metadata.installationId)===githubInstallation).map((resource)=><label key={resource.id}><input type="checkbox" checked={githubRepositories.includes(resource.id)} onChange={(event)=>setGithubRepositories(event.target.checked?[...new Set([...githubRepositories,resource.id])]:githubRepositories.filter((name)=>name!==resource.id))}/>{resource.label}</label>)}
+          </div>
+          {!githubResources.some((resource)=>Number(resource.metadata.installationId)===githubInstallation)&&<p className="field-hint">No repositories are accessible through this installation.</p>}
+        </div>
+      </Dialog>
       <ConfirmDialog
         open={Boolean(revoking)}
         onOpenChange={(open) => !open && setRevoking(undefined)}
-        title="Revoke connection?"
-        description="The credential will be deleted from the operating-system vault. Affected workflows will require reconnection."
-        confirmLabel="Revoke connection"
+        title="Disconnect service?"
+        description="The credential will be deleted from your system vault. Affected workflows will need to be reconnected."
+        confirmLabel="Disconnect"
         dangerous
         busy={busy}
         onConfirm={() => {
           if (revoking)
             void act(
               () => api.revokeConnection(revoking.connection.id),
-              `${revoking.connection.displayName} was revoked.`,
+              `${revoking.connection.displayName} was disconnected.`,
             ).then(() => setRevoking(undefined));
         }}
       >
@@ -281,16 +467,58 @@ export function ConnectionsSettings() {
   );
 }
 
+function ConnectionOption({
+  icon,
+  name,
+  description,
+  method,
+  badge,
+  tone,
+  disabled,
+  onClick,
+}: {
+  icon: ReactNode;
+  name: string;
+  description: string;
+  method: string;
+  badge?: string;
+  tone: "ai" | "gmail" | "discord" | "slack" | "google_workspace" | "slack_oauth" | "notion" | "github_app";
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`connection-option ${tone}`}
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={`Connect ${name}`}
+    >
+      <span className="connection-option-icon">{icon}</span>
+      <span className="connection-option-copy">
+        <span className="connection-option-title">
+          <b>{name}</b>
+          {badge && <em>{badge}</em>}
+        </span>
+        <small>{description}</small>
+        <span className="connection-method">{method}</span>
+      </span>
+      <span className="connection-option-arrow">
+        <ArrowRight size={15} />
+      </span>
+    </button>
+  );
+}
+
 function WebhookModal({
   initialProvider,
   busy,
   onClose,
   onSave,
 }: {
-  initialProvider: "discord" | "slack";
+  initialProvider: WebhookProvider;
   busy: boolean;
   onClose: () => void;
-  onSave: (provider: "discord" | "slack", name: string, url: string) => void;
+  onSave: (provider: WebhookProvider, name: string, url: string) => void;
 }) {
   const [provider, setProvider] = useState(initialProvider);
   const [name, setName] = useState(
@@ -298,20 +526,21 @@ function WebhookModal({
   );
   const [url, setUrl] = useState("");
   const valid = validWebhook(provider, url);
+
   return (
     <FocusDialog
       open
       onOpenChange={(open) => !open && onClose()}
-      title="Add incoming webhook"
-      description="The complete URL is written directly to the operating-system credential store."
+      title={`Connect ${providerName(initialProvider)}`}
+      description="Add an incoming webhook so workflows can send channel updates."
     >
       <div className="settings-modal connection-modal">
         <header>
           <div>
-            <h2>Add incoming webhook</h2>
+            <h2>Connect {providerName(provider)}</h2>
             <p>
-              The complete URL is written directly to the operating-system
-              credential store.
+              Paste an incoming webhook URL. It will be encrypted by your
+              operating-system credential store.
             </p>
           </div>
         </header>
@@ -320,7 +549,7 @@ function WebhookModal({
             <select
               value={provider}
               onChange={(event) => {
-                const next = event.target.value as "discord" | "slack";
+                const next = event.target.value as WebhookProvider;
                 setProvider(next);
                 setName(next === "discord" ? "Discord alerts" : "Slack alerts");
               }}
@@ -372,7 +601,7 @@ function WebhookModal({
             disabled={busy || !name.trim() || !valid}
             onClick={() => onSave(provider, name, url)}
           >
-            {busy ? "Saving…" : "Store securely"}
+            {busy ? "Saving…" : `Connect ${providerName(provider)}`}
           </button>
         </footer>
       </div>
@@ -381,22 +610,44 @@ function WebhookModal({
 }
 
 function ProviderIcon({ provider }: { provider: string }) {
+  const isAiProvider =
+    provider === "openai" ||
+    provider === "anthropic" ||
+    provider === "openai_compatible";
+
   return (
-    <span className="connection-provider">
+    <span className={`connection-provider ${provider}`} aria-hidden="true">
       {provider === "gmail" ? (
-        <Mail size={15} />
+        <Mail size={17} />
+      ) : provider === "google_workspace" ? (
+        <CalendarDays size={17} />
+      ) : provider === "github_app" ? (
+        <Github size={17} />
+      ) : provider === "notion" ? (
+        <NotebookText size={17} />
+      ) : isAiProvider ? (
+        <Sparkles size={17} />
       ) : provider === "discord" ? (
-        <MessageSquare size={15} />
+        <MessageSquare size={17} />
+      ) : provider === "slack" || provider === "slack_oauth" ? (
+        <Hash size={17} />
       ) : (
-        <ExternalLink size={15} />
+        <ExternalLink size={17} />
       )}
     </span>
   );
 }
+
 function providerName(provider: string) {
+  if (provider === "google_workspace") return "Google Workspace";
+  if (provider === "slack_oauth") return "Slack OAuth";
+  if (provider === "github_app") return "GitHub";
+  if (provider === "openai_compatible") return "OpenAI-compatible";
+  if (provider === "openai") return "OpenAI";
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
-function validWebhook(provider: "discord" | "slack", value: string) {
+
+function validWebhook(provider: WebhookProvider, value: string) {
   try {
     const url = new URL(value);
     return (
@@ -411,6 +662,7 @@ function validWebhook(provider: "discord" | "slack", value: string) {
     return false;
   }
 }
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field">

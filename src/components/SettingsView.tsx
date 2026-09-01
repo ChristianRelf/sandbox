@@ -371,6 +371,22 @@ export function SettingsView() {
                 }
               />
               <PreferenceToggle
+                label="Ask AI on hover or selection"
+                description="Show an Ask AI shortcut above a node when it is hovered or selected."
+                checked={preferences.showAskAiOnNodeInteraction}
+                onChange={(showAskAiOnNodeInteraction) =>
+                  preferences.update({ showAskAiOnNodeInteraction })
+                }
+              />
+              <PreferenceToggle
+                label="Ask AI for node issues"
+                description="Keep the Ask AI shortcut visible on nodes with validation issues or failed runs."
+                checked={preferences.showAskAiOnNodeIssues}
+                onChange={(showAskAiOnNodeIssues) =>
+                  preferences.update({ showAskAiOnNodeIssues })
+                }
+              />
+              <PreferenceToggle
                 label="Confirm configured node deletion"
                 description="Ask before deleting a node that already contains configuration."
                 checked={preferences.confirmNodeDeletion}
@@ -528,7 +544,7 @@ export function SettingsView() {
               </SelectPreference>
               <div className="settings-release-card">
                 <span>Installed version</span>
-                <strong>sndbox 0.7.2-beta.4</strong>
+                <strong>sndbox 0.8.0-beta.1</strong>
                 <small>
                   Desktop installers and Linux runners are verified against the
                   same immutable release tag.

@@ -798,7 +798,14 @@ impl Engine {
             "manual_trigger"
             | "schedule_trigger"
             | "file_watch_trigger"
-            | "gmail_new_email_trigger" => Ok(NodeResult::new(
+            | "gmail_new_email_trigger"
+            | "google.calendar.event_changed"
+            | "google.drive.file_changed"
+            | "google.sheets.row_added"
+            | "slack.channel_message_posted"
+            | "notion.data_source_page_changed"
+            | "github.issue_or_pull_request_changed"
+            | "github.workflow_run_completed" => Ok(NodeResult::new(
                 json!({"executionTime":Utc::now(),"workflowId":workflow.id,"triggerType":node.node_type,"event":trigger}),
             )),
             "condition" => execute_condition(node, trigger, outputs),

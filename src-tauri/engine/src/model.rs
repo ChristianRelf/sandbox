@@ -190,6 +190,8 @@ pub struct PermissionSummary {
     #[serde(default)]
     pub external_communication_permitted: bool,
     #[serde(default)]
+    pub external_data_write_permitted: bool,
+    #[serde(default)]
     pub communication_approval_revision: Option<String>,
 }
 

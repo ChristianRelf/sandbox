@@ -3,7 +3,7 @@ import type { BuiltInNodeType, InstalledPlugin, NodePortDefinition, NodeType, Pl
 
 export type NodeGroup = "Triggers" | "Logic" | "Data" | "Browser" | "Network" | "Communication" | "System" | "Plugins";
 export type NodePlacement="local"|"paired_runner"|"hosted_runner"|"managed_browser";
-export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string; inputs:NodePortDefinition[]; outputs:NodePortDefinition[]; sideEffect:boolean; placements:NodePlacement[] }
+export interface NodeDefinition { type:NodeType; name:string; description:string; group:NodeGroup; icon:LucideIcon; defaults:Record<string,unknown>; summary:(config:Record<string,unknown>)=>string; inputs:NodePortDefinition[]; outputs:NodePortDefinition[]; sideEffect:boolean; placements:NodePlacement[]; configurationSchema?:Record<string,unknown>; connectionRequirements?:PluginManifestNode["connectionRequirements"]; fileInputs?:PluginManifestNode["fileInputs"]; externalEffect?:PluginManifestNode["externalEffect"] }
 type NodeDefinitionInput=Omit<NodeDefinition,"inputs"|"outputs"|"sideEffect"|"placements">&Partial<Pick<NodeDefinition,"inputs"|"outputs"|"sideEffect"|"placements">>;
 export interface PluginNodeChoice { plugin:InstalledPlugin; node:PluginManifestNode }
 const BASE_NODE_DEFINITIONS:NodeDefinitionInput[] = [
@@ -77,7 +77,9 @@ const BROWSER_TYPES=new Set<NodeType>(["open_browser","navigate","click_element"
 const normalizeDefinition=(definition:NodeDefinitionInput):NodeDefinition=>{const contract=NODE_PORTS[definition.type as BuiltInNodeType];return{...definition,inputs:definition.inputs??contract?.inputs??[],outputs:definition.outputs??contract?.outputs??[{key:"result",label:"Result",type:"any"}],sideEffect:definition.sideEffect??SIDE_EFFECTS.has(definition.type),placements:definition.placements??(BROWSER_TYPES.has(definition.type)?["local","paired_runner","managed_browser"]:["local","paired_runner","hosted_runner"])}};
 export const NODE_DEFINITIONS:NodeDefinition[]=BASE_NODE_DEFINITIONS.map(normalizeDefinition);
 const UNKNOWN_PLUGIN_DEFINITION:NodeDefinition={type:"unknown.plugin",name:"Plugin node",description:"Pinned third-party node",group:"Plugins",icon:Blocks,defaults:{},summary:()=>"Pinned sandbox plugin",inputs:[],outputs:[{key:"result",label:"Result",type:"any"}],sideEffect:true,placements:["local","paired_runner","hosted_runner"]};
-export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)??{...UNKNOWN_PLUGIN_DEFINITION,type};
+const PLUGIN_DEFINITIONS=new Map<NodeType,NodeDefinition>();
+const PLUGIN_TRIGGERS=new Set<NodeType>();
+export const definitionFor=(type:NodeType)=>NODE_DEFINITIONS.find(item=>item.type===type)??PLUGIN_DEFINITIONS.get(type)??{...UNKNOWN_PLUGIN_DEFINITION,type};
 export const createNode=(type:NodeType,position:{x:number;y:number}):WorkflowNode=>{const definition=definitionFor(type);return{id:`${type}_${crypto.randomUUID().slice(0,8)}`,type,version:1,name:definition.name,position,configuration:structuredClone(definition.defaults),disabled:false,inputBindings:{}}};
 export const createPluginNode=(choice:PluginNodeChoice,position:{x:number;y:number}):WorkflowNode=>({
   id:`plugin_${crypto.randomUUID().slice(0,8)}`,
@@ -90,8 +92,14 @@ export const createPluginNode=(choice:PluginNodeChoice,position:{x:number;y:numb
   inputBindings:{},
   plugin:{pluginId:choice.plugin.pluginId,pluginVersion:choice.plugin.version,packageIntegrity:choice.plugin.packageIntegrity,publisherId:choice.plugin.publisherId,input:{},credentialReferences:{}},
 });
-export const enabledPluginNodes=(plugins:InstalledPlugin[]):PluginNodeChoice[]=>plugins.filter(plugin=>plugin.state==="enabled").flatMap(plugin=>plugin.manifest.nodes.map(node=>({plugin,node})));
-export const isTrigger=(type:NodeType)=>["manual_trigger","schedule_trigger","file_watch_trigger","gmail_new_email_trigger"].includes(type);
+export const enabledPluginNodes=(plugins:InstalledPlugin[]):PluginNodeChoice[]=>plugins.filter(plugin=>plugin.state==="enabled").flatMap(plugin=>plugin.manifest.nodes.map(node=>{
+  const trigger=node.kind==="polling_trigger";
+  if(trigger)PLUGIN_TRIGGERS.add(node.nodeType);
+  const placements:NodePlacement[]=(node.placements??["desktop","self_hosted"]).flatMap(value=>value==="desktop"?["local"]:value==="self_hosted"?["paired_runner"]:[]);
+  PLUGIN_DEFINITIONS.set(node.nodeType,{type:node.nodeType,name:node.displayName,description:node.description,group:trigger?"Triggers":"Plugins",icon:Blocks,defaults:defaultsFromSchema(node.configurationSchema),summary:config=>String(config.repository??config.channelId??config.dataSourceId??config.spreadsheetId??(config.connectionId?"Connection selected":"Configure node")),inputs:node.inputPorts??[],outputs:node.outputPorts??[{key:"result",label:"Result",type:"any"}],sideEffect:node.externalEffect!=="read",placements:placements.length?placements:["local","paired_runner"],configurationSchema:node.configurationSchema,connectionRequirements:node.connectionRequirements,fileInputs:node.fileInputs,externalEffect:node.externalEffect});
+  return{plugin,node};
+}));
+export const isTrigger=(type:NodeType)=>["manual_trigger","schedule_trigger","file_watch_trigger","gmail_new_email_trigger"].includes(type)||PLUGIN_TRIGGERS.has(type);
 const locatorSummary=(config:Record<string,unknown>,fallback:string)=>{const locator=config.locator as {accessibleName?:string;primary?:{name?:string;value?:string}}|undefined;return locator?.accessibleName||locator?.primary?.name||locator?.primary?.value||fallback};
 function defaultsFromSchema(schema:Record<string,unknown>):Record<string,unknown>{
   if(schema.default&&typeof schema.default==="object"&&!Array.isArray(schema.default))return structuredClone(schema.default as Record<string,unknown>);

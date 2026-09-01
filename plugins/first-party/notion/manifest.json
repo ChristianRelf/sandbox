@@ -1,0 +1,560 @@
+{
+  "manifestVersion": 2,
+  "pluginId": "com.sndbox.notion",
+  "name": "Notion",
+  "description": "First-party Notion workflow integration.",
+  "version": "1.0.0",
+  "publisherId": "com.sndbox",
+  "minimumHostVersion": ">=0.8.0-beta.1",
+  "homepage": "https://sndbox.dev/integrations",
+  "documentation": "https://docs.sndbox.dev/integrations",
+  "supportUrl": "https://sndbox.dev/support",
+  "licence": "Proprietary",
+  "categories": [
+    "productivity",
+    "first-party"
+  ],
+  "keywords": [
+    "notion",
+    "automation"
+  ],
+  "icon": "assets/icon.svg",
+  "nodes": [
+    {
+      "nodeType": "notion.data_source_page_changed",
+      "nodeVersion": 1,
+      "displayName": "Notion Page Changed",
+      "description": "Starts when a page in a data source changes.",
+      "category": "Triggers",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "notion"
+          },
+          "dataSourceId": {
+            "type": "string",
+            "title": "Data source ID"
+          },
+          "filter": {
+            "type": "object",
+            "title": "Filter",
+            "default": {},
+            "additionalProperties": true
+          },
+          "pollIntervalSeconds": {
+            "type": "integer",
+            "title": "Poll interval (seconds)",
+            "minimum": 60,
+            "maximum": 300,
+            "default": 120
+          }
+        },
+        "required": [
+          "connectionId",
+          "dataSourceId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "notion"
+      ],
+      "capabilities": [
+        "credential_operations:notion",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/notion.data_source_page_changed.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "polling_trigger",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "page",
+          "label": "Page",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "notion",
+          "permissions": [
+            "content.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "notion.query_data_source",
+      "nodeVersion": 1,
+      "displayName": "Query Notion Data Source",
+      "description": "Queries pages in a Notion data source.",
+      "category": "Data",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "notion"
+          },
+          "dataSourceId": {
+            "type": "string",
+            "title": "Data source ID"
+          },
+          "filter": {
+            "type": "object",
+            "title": "Filter",
+            "default": {},
+            "additionalProperties": true
+          },
+          "sorts": {
+            "type": "array",
+            "title": "Sorts",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Maximum results",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 100
+          }
+        },
+        "required": [
+          "connectionId",
+          "dataSourceId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "notion"
+      ],
+      "capabilities": [
+        "credential_operations:notion",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/notion.query_data_source.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "notion",
+          "permissions": [
+            "content.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "notion.get_page",
+      "nodeVersion": 1,
+      "displayName": "Get Notion Page",
+      "description": "Gets a page and its properties.",
+      "category": "Data",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "notion"
+          },
+          "pageId": {
+            "type": "string",
+            "title": "Page ID"
+          }
+        },
+        "required": [
+          "connectionId",
+          "pageId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "notion"
+      ],
+      "capabilities": [
+        "credential_operations:notion",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/notion.get_page.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "notion",
+          "permissions": [
+            "content.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "notion.create_page",
+      "nodeVersion": 1,
+      "displayName": "Create Notion Page",
+      "description": "Creates a page in a data source or under a page.",
+      "category": "Data",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "notion"
+          },
+          "parentId": {
+            "type": "string",
+            "title": "Parent page or data source ID"
+          },
+          "parentType": {
+            "type": "string",
+            "title": "Parent type",
+            "enum": [
+              "page_id",
+              "data_source_id"
+            ],
+            "default": "data_source_id"
+          },
+          "properties": {
+            "type": "object",
+            "title": "Properties",
+            "default": {},
+            "additionalProperties": true
+          },
+          "children": {
+            "type": "array",
+            "title": "Content blocks",
+            "items": {
+              "type": "object"
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "connectionId",
+          "parentId",
+          "properties"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "notion"
+      ],
+      "capabilities": [
+        "credential_operations:notion",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/notion.create_page.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "notion",
+          "permissions": [
+            "content.insert"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "notion.update_page",
+      "nodeVersion": 1,
+      "displayName": "Update Notion Page",
+      "description": "Updates page properties or archive state.",
+      "category": "Data",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "notion"
+          },
+          "pageId": {
+            "type": "string",
+            "title": "Page ID"
+          },
+          "properties": {
+            "type": "object",
+            "title": "Properties",
+            "default": {},
+            "additionalProperties": true
+          },
+          "archived": {
+            "type": "boolean",
+            "title": "Archived",
+            "default": false
+          }
+        },
+        "required": [
+          "connectionId",
+          "pageId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "notion"
+      ],
+      "capabilities": [
+        "credential_operations:notion",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/notion.update_page.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "notion",
+          "permissions": [
+            "content.update"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    }
+  ],
+  "credentials": [
+    {
+      "credentialType": "notion",
+      "displayName": "Notion connection",
+      "operations": [
+        "notion.data_source_page_changed",
+        "notion.query_data_source",
+        "notion.get_page",
+        "notion.create_page",
+        "notion.update_page"
+      ],
+      "scopes": [
+        "read_content",
+        "update_content",
+        "insert_content"
+      ],
+      "configurationSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "type": "structured_logging"
+    },
+    {
+      "type": "credential_operations",
+      "credentialType": "notion",
+      "operations": [
+        "notion.data_source_page_changed",
+        "notion.query_data_source",
+        "notion.get_page",
+        "notion.create_page",
+        "notion.update_page"
+      ]
+    },
+    {
+      "type": "external_communication"
+    }
+  ],
+  "networkDomains": [],
+  "storageRequirements": {
+    "temporaryBytes": 0,
+    "persistentBytes": 0,
+    "isolateByMajorVersion": false
+  },
+  "migrations": [],
+  "entrypoints": [
+    {
+      "id": "main",
+      "path": "components/main.wasm",
+      "export": "execute"
+    }
+  ],
+  "packageIntegrity": "sha256:1e9cfe9eb72618785cb21a5741de926722dadf3b66f83763711419b608767a39",
+  "signature": {
+    "algorithm": "ed25519",
+    "keyId": "first-party-2026",
+    "value": "kbWKNCfhkOP+O0xJ4Q+lglbCE4UZPp/H+kk0jIfTRJmgwo79UaBNMs+yO3nBqqrwrCDAmppwYGPkw//d9AmaAQ=="
+  },
+  "pricing": {
+    "model": "free"
+  },
+  "privacyPolicy": "https://sndbox.dev/privacy"
+}

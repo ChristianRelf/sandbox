@@ -4,7 +4,7 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use sandbox_engine::{schedule::next_run, Workflow};
 use serde_json::json;
 use std::{
-    collections::hash_map::Entry,
+    collections::{hash_map::Entry, HashSet},
     path::Path,
     sync::{atomic::Ordering, Arc},
     time::Duration,
@@ -177,7 +177,68 @@ pub fn start_background_services(app: AppHandle, state: &AppState) {
             }
         }
     });
+    let provider_engine = state.engine.clone();
+    let provider_paused = state.paused.clone();
+    let provider_cancellations = state.cancellations.clone();
+    let provider_adapter = state.provider_adapter.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(15));
+        loop {
+            interval.tick().await;
+            if provider_paused.load(Ordering::SeqCst) { continue; }
+            let Ok(workflows)=provider_engine.database().list_workflows() else { continue; };
+            for summary in workflows {
+                let workflow=summary.workflow;
+                if !workflow.enabled || !workflow.settings.permissions.background_execution_permitted { continue; }
+                let Some(trigger)=workflow.nodes.iter().find(|node|node.id==workflow.trigger_node_id) else { continue; };
+                let Some(provider)=polling_provider(&trigger.node_type) else { continue; };
+                let Some(connection_id)=trigger.configuration.get("connectionId").and_then(serde_json::Value::as_str).filter(|value|!value.is_empty()).map(str::to_string) else { continue; };
+                let plugin_id=trigger.plugin.as_ref().map(|pin|pin.plugin_id.clone()).unwrap_or_else(||format!("com.sndbox.{provider}"));
+                let plugin_version=trigger.plugin.as_ref().map(|pin|pin.plugin_version.clone()).unwrap_or_else(||"1.0.0".into());
+                let state=provider_engine.database().poll_cursor(&workflow.id,&trigger.id,"desktop",&connection_id,&plugin_id,&plugin_version).ok().flatten();
+                if state.as_ref().and_then(|(_,_,next,_)|*next).is_some_and(|next|next>Utc::now()){continue;}
+                let baseline_complete=state.as_ref().is_some_and(|(_,baseline,_,_)|*baseline);
+                let cursor=state.as_ref().map(|(cursor,_,_,_)|cursor.clone()).filter(|value|!value.is_null());
+                let failures=state.as_ref().map_or(0,|(_,_,_,failures)|*failures);
+                let poll_seconds=trigger.configuration.get("pollIntervalSeconds").and_then(serde_json::Value::as_i64).unwrap_or(if trigger.node_type=="github.workflow_run_completed"{90}else{120}).clamp(60,300);
+                let next_poll=Utc::now()+chrono::Duration::seconds(poll_seconds);
+                let adapter=provider_adapter.clone();let operation=trigger.node_type.clone();let config=trigger.configuration.clone();let credential=connection_id.clone();
+                let batch=tauri::async_runtime::spawn_blocking(move||adapter.poll(&credential,provider,&operation,&config,cursor.as_ref())).await;
+                let Ok(batch)=batch else { continue; };
+                match batch {
+                    Ok(batch)=>{
+                        let accepted=provider_engine.database().save_poll_checkpoint(&workflow.id,&trigger.id,"desktop",&connection_id,&plugin_id,&plugin_version,&batch.cursor,true,next_poll,&batch.event_keys).unwrap_or_default().into_iter().collect::<HashSet<_>>();
+                        if baseline_complete {
+                            for (event,key) in batch.events.into_iter().zip(batch.event_keys) {
+                                if accepted.contains(&key){spawn_run(provider_engine.clone(),provider_cancellations.clone(),workflow.clone(),json!({"type":trigger.node_type,"event":event,"polledAt":Utc::now()}));}
+                            }
+                        }
+                    }
+                    Err(error)=>{let message=error.to_string();let _=provider_engine.database().save_poll_failure(&workflow.id,&trigger.id,"desktop",&connection_id,&plugin_id,&plugin_version,Utc::now()+provider_backoff(&message,failures),&message);}
+                }
+            }
+        }
+    });
     start_file_watch_service(app, state);
+}
+
+fn polling_provider(node_type:&str)->Option<&'static str>{
+    match node_type {
+        "google.calendar.event_changed"|"google.drive.file_changed"|"google.sheets.row_added"=>Some("google_workspace"),
+        "slack.channel_message_posted"=>Some("slack_oauth"),
+        "notion.data_source_page_changed"=>Some("notion"),
+        "github.issue_or_pull_request_changed"|"github.workflow_run_completed"=>Some("github_app"),
+        _=>None,
+    }
+}
+
+fn provider_backoff(message: &str, prior_failures: u32) -> chrono::Duration {
+    if let Some(seconds) = message.split("retry after ").nth(1).and_then(|value| value.split(|character: char| !character.is_ascii_digit()).next()).and_then(|value| value.parse::<i64>().ok()) {
+        return chrono::Duration::seconds(seconds.clamp(1, 3_600));
+    }
+    let exponential = 60_i64.saturating_mul(1_i64 << prior_failures.min(4));
+    let jitter = i64::from(Utc::now().timestamp_subsec_millis() % 17);
+    chrono::Duration::seconds((exponential + jitter).min(900))
 }
 
 fn due_schedule_workflows(

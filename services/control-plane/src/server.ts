@@ -72,6 +72,14 @@ const governancePolicyInput = z.object({ policyKey: z.enum(Object.keys(governanc
 const memberRoleInput = z.object({ role: z.enum(["owner", "administrator", "developer", "operator", "viewer"]) });
 const runnerHeartbeatInput = z.object({ currentWorkload: z.number().int().min(0).max(10_000), status: z.enum(["online", "paused", "draining", "maintenance"]).default("online") });
 const runnerCommandStatusInput = z.object({ status: z.enum(["accepted", "rejected", "completed"]), resultSummary: z.record(z.string(), z.unknown()).nullable().default(null) });
+const runnerTriggerEventsInput = z.object({
+  events: z.array(z.object({
+    eventId: z.string().uuid(), deploymentId: z.string().uuid(), workflowRevisionId: z.string().uuid(),
+    nodeId: z.string().min(1).max(200), pluginId: z.string().min(3).max(200), pluginVersion: z.string().min(1).max(50),
+    dedupeKey: z.string().min(1).max(500), occurredAt: z.string().datetime({ offset: true }),
+    payload: z.record(z.string(), z.unknown()), providerCheckpoint: z.record(z.string(), z.unknown()).nullable().default(null)
+  }).strict()).min(1).max(100)
+}).strict();
 const webhookDeliveryStatusInput = z.object({ outcome: z.enum(["delivered", "retry", "failed"]) }).strict();
 const sharedConnectionInput = z.object({
   environmentId: z.string().uuid(), provider: z.string().regex(/^[a-z0-9._-]+$/).max(100), displayName: z.string().trim().min(1).max(120), accountIdentity: z.string().trim().max(200).nullable().default(null),
@@ -916,6 +924,13 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     return { updated: true };
   });
 
+  app.post("/v1/runner/trigger-events", async request => {
+    const device = await authenticateRunnerDevice(request, dependencies.repository);
+    const input = runnerTriggerEventsInput.parse(request.body);
+    for (const event of input.events) assertSafeTriggerEvent(event.payload, event.providerCheckpoint);
+    return dependencies.repository.recordRunnerTriggerEvents(device, input.events);
+  });
+
   app.post("/v1/runner/run-summaries", async request => {
     const device = await authenticateRunnerDevice(request, dependencies.repository);
     const summary = runSummarySchema.parse(request.body);
@@ -1412,6 +1427,21 @@ function singleHeader(request: FastifyRequest, name: string): string {
   const value = request.headers[name];
   if (typeof value !== "string" || !value || value.length > 512) throw new DomainError("required_header_missing", `Required authentication header '${name}' is missing or invalid.`, 401);
   return value;
+}
+
+function assertSafeTriggerEvent(payload: unknown, checkpoint: unknown): void {
+  const forbiddenKey = /^(?:authorization|token|access_?token|refresh_?token|client_?secret|password|secret|webhook_?secret|local_?path|absolute_?path)$/i;
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 20) throw new DomainError("trigger_event_payload_invalid", "Trigger event payload nesting is too deep.", 400);
+    if (Array.isArray(value)) { for (const item of value) visit(item, depth + 1); return; }
+    if (!value || typeof value !== "object") return;
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (forbiddenKey.test(key)) throw new DomainError("trigger_event_sensitive_data", "Trigger events cannot contain credentials, secrets, or local filesystem paths.", 400);
+      visit(item, depth + 1);
+    }
+  };
+  visit(payload, 0);
+  visit(checkpoint, 0);
 }
 
 function validateWebhookSchema(value: unknown, schema: Record<string, unknown> | null): string | null {

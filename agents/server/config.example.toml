@@ -11,9 +11,9 @@ plugin_cache = "/var/lib/sandbox-runner/plugins"
 allowed_working_directories = ["/srv/automation"]
 approved_network_targets = []
 log_level = "info"
-update_channel = "beta"
+update_channel = "preview"
 update_mode = "notify_only"
-pinned_version_range = ">=0.7.2-beta.4,<0.8"
+pinned_version_range = ">=0.8.0-beta.1,<0.9"
 drain_timeout_seconds = 60
 enable_managed_chromium = false
 allow_simple_commands = false

@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, FolderOpen, LocateFixed, Trash2 } from "lucide-react";
+import { AlertTriangle, FolderOpen, LocateFixed, RefreshCcw, Trash2 } from "lucide-react";
 import {
   Children,
   cloneElement,
@@ -60,10 +60,11 @@ export function NodeInspector({
   useEffect(() => {
     if (
       definition.group === "Communication" ||
-      node.type === "gmail_new_email_trigger"
+      node.type === "gmail_new_email_trigger" ||
+      Boolean(node.plugin)
     )
       void api.listConnections().then(setConnections);
-  }, [definition.group, node.type]);
+  }, [definition.group, node.type, node.plugin]);
   useEffect(() => {
     const controls = document.querySelectorAll<HTMLElement>(
       ".inspector [data-validation-managed]",
@@ -133,6 +134,17 @@ export function NodeInspector({
         { ...node, configuration: { ...config, [key]: selected } },
         approvePath(selected),
       );
+  };
+  const chooseFileGrant = async (key: string, maximumBytes?: number) => {
+    if (!api.isDesktop) return;
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title: "Grant this file to one workflow execution",
+    });
+    if (typeof selected !== "string") return;
+    const grant = await api.createFileGrant(selected, maximumBytes);
+    onChange({ ...node, configuration: { ...config, [key]: grant.grantId } });
   };
   const testLocator = async (locator: StructuredLocator) => {
     if (!api.isDesktop)
@@ -1338,17 +1350,45 @@ export function NodeInspector({
               {node.plugin.packageIntegrity.slice(7, 19)}). Updates never change
               this node automatically.
             </div>
-            <JsonField
-              label="Plugin configuration"
+            {definition.externalEffect === "external_write" && node.type !== "github.request_reviewers" && (
+              <div className="risk-callout">
+                <AlertTriangle size={16} />
+                <div><b>External write</b><p>This node changes data in the connected service.</p></div>
+              </div>
+            )}
+            {node.type === "github.request_reviewers" && (
+              <div className="risk-callout">
+                <AlertTriangle size={16} />
+                <div><b>Externally visible action</b><p>Requesting reviewers sends GitHub notifications to the selected users and teams.</p></div>
+              </div>
+            )}
+            {definition.externalEffect === "destructive_or_high_impact" && (
+              <div className="risk-callout">
+                <AlertTriangle size={16} />
+                <div><b>{node.type === "github.merge_pull_request" ? "External write: merges code" : "High-impact external write"}</b><p>This operation can merge or otherwise make consequential changes. Review every mapped value.</p></div>
+              </div>
+            )}
+            <PluginSchemaForm
+              nodeType={node.type}
+              schema={definition.configurationSchema ?? {}}
               value={config}
-              onChange={(value) =>
+              connections={connections}
+              connectionRequirements={definition.connectionRequirements ?? []}
+              fileInputs={definition.fileInputs ?? []}
+              onChooseFile={chooseFileGrant}
+              onChange={(value, connectionId) =>
                 onChange({
                   ...node,
-                  configuration: (value &&
-                  typeof value === "object" &&
-                  !Array.isArray(value)
-                    ? value
-                    : {}) as Record<string, unknown>,
+                  configuration: value,
+                  plugin: connectionId !== undefined
+                    ? {
+                        ...node.plugin!,
+                        credentialReferences: {
+                          ...(node.plugin!.credentialReferences ?? {}),
+                          connection: connectionId,
+                        },
+                      }
+                    : node.plugin,
                 })
               }
             />
@@ -1386,6 +1426,103 @@ export function NodeInspector({
       </div>
     </aside>
   );
+}
+
+function PluginSchemaForm({
+  nodeType,
+  schema,
+  value,
+  connections,
+  connectionRequirements,
+  fileInputs,
+  onChooseFile,
+  onChange,
+}: {
+  nodeType: string;
+  schema: Record<string, unknown>;
+  value: Record<string, unknown>;
+  connections: ConnectionMetadata[];
+  connectionRequirements: Array<{ reference: string; provider: string; permissions: string[]; required: boolean }>;
+  fileInputs: Array<{ key: string; required: boolean; maximumBytes?: number; acceptedMimeTypes?: string[] }>;
+  onChooseFile: (key: string, maximumBytes?: number) => Promise<void>;
+  onChange: (value: Record<string, unknown>, connectionId?: string) => void;
+}) {
+  const [resourceOptions,setResourceOptions]=useState<Record<string,Array<{id:string;label:string}>>>({});
+  const [loadingResource,setLoadingResource]=useState<string>();
+  const properties = (schema.properties && typeof schema.properties === "object"
+    ? schema.properties
+    : {}) as Record<string, Record<string, unknown>>;
+  const required = new Set(Array.isArray(schema.required) ? schema.required.map(String) : []);
+  const patch = (key: string, next: unknown, connectionId?: string) =>
+    onChange({ ...value, [key]: next }, connectionId);
+  const loadResource=async(key:string,kind:string)=>{
+    const connectionId=String(value.connectionId??"");if(!connectionId)return;
+    setLoadingResource(key);
+    try{const items=await api.listIntegrationResources(connectionId,kind,kind==="github_workflow"||kind==="github_branch"?String(value.repository??""):undefined);setResourceOptions((current)=>({...current,[key]:items.map((item)=>({id:item.id,label:item.label}))}));}finally{setLoadingResource(undefined);}
+  };
+  return (
+    <div className="plugin-schema-form">
+      {Object.entries(properties).map(([key, property]) => {
+        const label = String(property.title ?? key.replaceAll(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase()));
+        const description = typeof property.description === "string" ? property.description : undefined;
+        const format = String(property.format ?? "");
+        if (format === "connection") {
+          const provider = String(property["x-sndbox-provider"] ?? connectionRequirements[0]?.provider ?? "");
+          const available = connections.filter((connection) => connection.provider === provider && connection.status === "connected");
+          return (
+            <Field key={key} label={label} hint={description}>
+              <select value={String(value[key] ?? "")} onChange={(event) => patch(key, event.target.value, event.target.value)}>
+                <option value="">Select connection…</option>
+                {available.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName}</option>)}
+              </select>
+              {!available.length && <small className="field-hint">Add an available {provider.replaceAll("_", " ")} connection in Settings.</small>}
+            </Field>
+          );
+        }
+        if (format === "file-grant") {
+          const definition = fileInputs.find((input) => input.key === key);
+          return (
+            <Field key={key} label={label} hint="The opaque grant expires after 15 minutes and is consumed after upload.">
+              <div className="path-input">
+                <input readOnly value={value[key] ? `Secure grant ${String(value[key]).slice(0, 8)}…` : ""} placeholder="No file granted" />
+                <button className="button" type="button" onClick={() => void onChooseFile(key, definition?.maximumBytes)}><FolderOpen size={14} /> Choose file</button>
+              </div>
+            </Field>
+          );
+        }
+        const resourceKind=pluginResourceKind(nodeType,key);
+        if(resourceKind){const options=resourceOptions[key]??[];const listId=`resource-${key}-${nodeType.replaceAll(".","-")}`;return <Field key={key} label={label} hint={description}><div className="path-input"><input list={listId} required={required.has(key)} value={String(value[key]??property.default??"")} onFocus={()=>{if(!options.length)void loadResource(key,resourceKind);}} onChange={(event)=>patch(key,event.target.value)} placeholder={resourceKind==="github_branch"?"Choose or enter an expression":"Choose or enter a value"}/><datalist id={listId}>{options.map((option)=><option key={option.id} value={option.id}>{option.label}</option>)}</datalist><button type="button" className="button" disabled={!value.connectionId||loadingResource===key} onClick={()=>void loadResource(key,resourceKind)}><RefreshCcw size={13}/>{loadingResource===key?"Loading…":"Browse"}</button></div></Field>;}
+        if (Array.isArray(property.enum)) {
+          return <Field key={key} label={label} hint={description}><select value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value)}>{property.enum.map((option) => <option key={String(option)} value={String(option)}>{String(option).replaceAll("_", " ")}</option>)}</select></Field>;
+        }
+        if (property.type === "boolean") {
+          return <label key={key} className="toggle-row"><span><b>{label}</b>{description && <small>{description}</small>}</span><input type="checkbox" checked={Boolean(value[key] ?? property.default)} onChange={(event) => patch(key, event.target.checked)} /></label>;
+        }
+        if (property.type === "integer" || property.type === "number") {
+          return <Field key={key} label={label} hint={description}><input type="number" required={required.has(key)} min={Number(property.minimum ?? undefined)} max={Number(property.maximum ?? undefined)} value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value === "" ? undefined : Number(event.target.value))} /></Field>;
+        }
+        if (property.type === "array" && (property.items as Record<string, unknown> | undefined)?.type === "string") {
+          return <Field key={key} label={label} hint={description ?? "One value per line"}><textarea rows={3} value={Array.isArray(value[key]) ? (value[key] as unknown[]).join("\n") : ""} onChange={(event) => patch(key, event.target.value.split("\n").map((item) => item.trim()).filter(Boolean))} /></Field>;
+        }
+        if (property.type === "object" || property.type === "array") {
+          return <JsonField key={key} label={label} value={value[key] ?? property.default ?? (property.type === "array" ? [] : {})} onChange={(next) => patch(key, next)} />;
+        }
+        const multiline = /body|description|comment|message/i.test(key);
+        return <Field key={key} label={label} hint={description}>{multiline ? <textarea rows={3} required={required.has(key)} value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value)} /> : <input required={required.has(key)} value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value)} />}</Field>;
+      })}
+    </div>
+  );
+}
+
+function pluginResourceKind(nodeType:string,key:string):string|undefined{
+  if(key==="repository"&&nodeType.startsWith("github."))return "github_repository";
+  if(key==="workflow"&&nodeType.startsWith("github."))return "github_workflow";
+  if(["head","base","branch","ref"].includes(key)&&nodeType.startsWith("github."))return "github_branch";
+  if(key==="channelId"&&nodeType.startsWith("slack."))return "slack_channel";
+  if(key==="dataSourceId"&&nodeType.startsWith("notion."))return "notion_data_source";
+  if(key==="calendarId"&&nodeType.startsWith("google.calendar."))return "google_calendar";
+  if(key==="spreadsheetId"&&nodeType.startsWith("google.sheets."))return "google_spreadsheet";
+  return undefined;
 }
 
 function LocatorEditor({

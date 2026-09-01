@@ -11,6 +11,7 @@ const GMAIL_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GMAIL_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 pub const GMAIL_REVOKE_URL: &str = "https://oauth2.googleapis.com/revoke";
 pub const GMAIL_SCOPES: &str = "openid email https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.send";
+pub const GOOGLE_WORKSPACE_SCOPES: &str = "openid email https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets";
 
 #[derive(Debug, Clone)]
 pub struct OAuthAttempt {
@@ -25,9 +26,11 @@ pub struct OAuthAttempt {
 pub struct OAuthStart {
     pub authorization_url: String,
     pub expires_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_code: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenResponse {
     pub access_token: String,
     pub refresh_token: Option<String>,
@@ -46,6 +49,17 @@ pub fn start_gmail(
     client_id: &str,
     redirect_uri: String,
 ) -> Result<(OAuthAttempt, OAuthStart), String> {
+    start_google(client_id, redirect_uri, GMAIL_SCOPES)
+}
+
+pub fn start_google_workspace(
+    client_id: &str,
+    redirect_uri: String,
+) -> Result<(OAuthAttempt, OAuthStart), String> {
+    start_google(client_id, redirect_uri, GOOGLE_WORKSPACE_SCOPES)
+}
+
+fn start_google(client_id: &str, redirect_uri: String, scopes: &str) -> Result<(OAuthAttempt, OAuthStart), String> {
     let mut state_bytes = [0_u8; 32];
     let mut verifier_bytes = [0_u8; 64];
     rand::rng().fill_bytes(&mut state_bytes);
@@ -65,19 +79,44 @@ pub fn start_gmail(
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", GMAIL_SCOPES)
+        .append_pair("scope", scopes)
         .append_pair("state", &state)
         .append_pair("code_challenge", &challenge)
         .append_pair("code_challenge_method", "S256")
         .append_pair("access_type", "offline")
-        .append_pair("prompt", "consent");
+        .append_pair("prompt", "consent")
+        .append_pair("include_granted_scopes", "true");
     Ok((
         attempt,
         OAuthStart {
             authorization_url: url.into(),
             expires_at: created_at + Duration::minutes(5),
+            user_code: None,
         },
     ))
+}
+
+pub fn start_code_flow(
+    authorization_endpoint: &str,
+    client_id: &str,
+    redirect_uri: String,
+    scope: &str,
+    extra: &[(&str, &str)],
+) -> Result<(OAuthAttempt, OAuthStart), String> {
+    let mut state_bytes = [0_u8; 32];
+    rand::rng().fill_bytes(&mut state_bytes);
+    let state = URL_SAFE_NO_PAD.encode(state_bytes);
+    let created_at = Utc::now();
+    let attempt = OAuthAttempt { state: state.clone(), verifier: String::new(), redirect_uri: redirect_uri.clone(), created_at };
+    let mut url = Url::parse(authorization_endpoint).map_err(|error| error.to_string())?;
+    url.query_pairs_mut()
+        .append_pair("client_id", client_id)
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("state", &state);
+    if !scope.is_empty() { url.query_pairs_mut().append_pair("scope", scope); }
+    for (key, value) in extra { url.query_pairs_mut().append_pair(key, value); }
+    Ok((attempt, OAuthStart { authorization_url: url.into(), expires_at: created_at + Duration::minutes(5), user_code: None }))
 }
 
 impl OAuthAttempt {

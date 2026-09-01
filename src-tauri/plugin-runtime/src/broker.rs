@@ -145,6 +145,15 @@ pub struct HttpResponse {
 )]
 pub enum HostRequest {
     HttpRequest(HttpRequest),
+    ProviderRequest {
+        connection_reference: String,
+        provider: String,
+        action: String,
+        #[serde(default)]
+        arguments: Value,
+        #[serde(default)]
+        file_grants: Vec<String>,
+    },
     CredentialOperation {
         credential_reference: String,
         credential_type: String,
@@ -377,6 +386,51 @@ impl CapabilityBroker {
         context.ensure_active()?;
         match request {
             HostRequest::HttpRequest(request) => self.http(context, request),
+            HostRequest::ProviderRequest {
+                connection_reference,
+                provider,
+                action,
+                arguments,
+                file_grants,
+            } => {
+                let capability = format!("credential_operations:{provider}");
+                context.require(&capability)?;
+                if !context
+                    .approved_credential_operations
+                    .get(&provider)
+                    .is_some_and(|operations| operations.contains(&action))
+                {
+                    return Err(PluginError::Permission(format!(
+                        "Provider operation '{provider}.{action}' is not declared."
+                    )));
+                }
+                let credential_id = context
+                    .approved_credential_references
+                    .get(&connection_reference)
+                    .ok_or_else(|| {
+                        PluginError::Permission(format!(
+                            "Connection reference '{connection_reference}' is not assigned."
+                        ))
+                    })?;
+                let value = self.credentials.execute(
+                    credential_id,
+                    &provider,
+                    &action,
+                    &json!({"arguments": arguments, "fileGrants": file_grants}),
+                )?;
+                if contains_secret_material(&value) {
+                    return Err(PluginError::Host(
+                        "Provider adapter returned secret-like material; response was blocked."
+                            .into(),
+                    ));
+                }
+                Ok(HostResponse {
+                    value,
+                    diagnostics: vec![format!(
+                        "Provider operation {provider}.{action} completed through the host."
+                    )],
+                })
+            }
             HostRequest::CredentialOperation {
                 credential_reference,
                 credential_type,

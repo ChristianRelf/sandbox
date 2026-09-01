@@ -1,0 +1,683 @@
+{
+  "manifestVersion": 2,
+  "pluginId": "com.sndbox.slack",
+  "name": "Slack",
+  "description": "First-party Slack workflow integration.",
+  "version": "1.0.0",
+  "publisherId": "com.sndbox",
+  "minimumHostVersion": ">=0.8.0-beta.1",
+  "homepage": "https://sndbox.dev/integrations",
+  "documentation": "https://docs.sndbox.dev/integrations",
+  "supportUrl": "https://sndbox.dev/support",
+  "licence": "Proprietary",
+  "categories": [
+    "productivity",
+    "first-party"
+  ],
+  "keywords": [
+    "slack",
+    "automation"
+  ],
+  "icon": "assets/icon.svg",
+  "nodes": [
+    {
+      "nodeType": "slack.channel_message_posted",
+      "nodeVersion": 1,
+      "displayName": "Slack Message Posted",
+      "description": "Starts when a channel receives a new message.",
+      "category": "Triggers",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "includeBotMessages": {
+            "type": "boolean",
+            "title": "Include bot messages",
+            "default": false
+          },
+          "includeThreadReplies": {
+            "type": "boolean",
+            "title": "Include thread replies",
+            "default": false
+          },
+          "pollIntervalSeconds": {
+            "type": "integer",
+            "title": "Poll interval (seconds)",
+            "minimum": 60,
+            "maximum": 300,
+            "default": 120
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/slack.channel_message_posted.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "polling_trigger",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "message",
+          "label": "Message",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "messages.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "slack.list_channel_messages",
+      "nodeVersion": 1,
+      "displayName": "List Slack Messages",
+      "description": "Lists recent messages in a channel.",
+      "category": "Communication",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "oldest": {
+            "type": "string",
+            "title": "Oldest timestamp"
+          },
+          "latest": {
+            "type": "string",
+            "title": "Latest timestamp"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Maximum results",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 15
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/slack.list_channel_messages.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "messages.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "slack.send_message",
+      "nodeVersion": 1,
+      "displayName": "Send Slack Message",
+      "description": "Posts a message to a channel.",
+      "category": "Communication",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "text": {
+            "type": "string",
+            "title": "Message"
+          },
+          "blocks": {
+            "type": "object",
+            "title": "Blocks",
+            "default": {},
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/slack.send_message.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "messages.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "slack.reply_to_thread",
+      "nodeVersion": 1,
+      "displayName": "Reply to Slack Thread",
+      "description": "Replies inside an existing message thread.",
+      "category": "Communication",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "threadTs": {
+            "type": "string",
+            "title": "Thread timestamp"
+          },
+          "text": {
+            "type": "string",
+            "title": "Message"
+          },
+          "blocks": {
+            "type": "object",
+            "title": "Blocks",
+            "default": {},
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId",
+          "threadTs",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/slack.reply_to_thread.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "messages.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "slack.add_reaction",
+      "nodeVersion": 1,
+      "displayName": "Add Slack Reaction",
+      "description": "Adds an emoji reaction to a message.",
+      "category": "Communication",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Message timestamp"
+          },
+          "emoji": {
+            "type": "string",
+            "title": "Emoji name"
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId",
+          "timestamp",
+          "emoji"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/slack.add_reaction.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "reactions.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "slack.upload_file",
+      "nodeVersion": 1,
+      "displayName": "Upload Slack File",
+      "description": "Streams a granted local file using Slack external upload.",
+      "category": "Communication",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "slack_oauth"
+          },
+          "channelId": {
+            "type": "string",
+            "title": "Channel"
+          },
+          "fileGrant": {
+            "type": "string",
+            "title": "File",
+            "format": "file-grant"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "initialComment": {
+            "type": "string",
+            "title": "Initial comment"
+          },
+          "threadTs": {
+            "type": "string",
+            "title": "Thread timestamp"
+          }
+        },
+        "required": [
+          "connectionId",
+          "channelId",
+          "fileGrant"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "slack_oauth"
+      ],
+      "capabilities": [
+        "credential_operations:slack_oauth",
+        "structured_logging",
+        "external_communication",
+        "file_picker_read"
+      ],
+      "timeoutMs": 120000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/slack.upload_file.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "slack_oauth",
+          "permissions": [
+            "files.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [
+        {
+          "key": "fileGrant",
+          "required": true,
+          "maximumBytes": 1073741824,
+          "acceptedMimeTypes": [
+            "*/*"
+          ]
+        }
+      ],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    }
+  ],
+  "credentials": [
+    {
+      "credentialType": "slack_oauth",
+      "displayName": "Slack connection",
+      "operations": [
+        "slack.channel_message_posted",
+        "slack.list_channel_messages",
+        "slack.send_message",
+        "slack.reply_to_thread",
+        "slack.add_reaction",
+        "slack.upload_file"
+      ],
+      "scopes": [
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "reactions:write",
+        "files:write",
+        "users:read"
+      ],
+      "configurationSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "type": "structured_logging"
+    },
+    {
+      "type": "credential_operations",
+      "credentialType": "slack_oauth",
+      "operations": [
+        "slack.channel_message_posted",
+        "slack.list_channel_messages",
+        "slack.send_message",
+        "slack.reply_to_thread",
+        "slack.add_reaction",
+        "slack.upload_file"
+      ]
+    },
+    {
+      "type": "external_communication"
+    },
+    {
+      "type": "file_picker_read",
+      "maxBytes": 1073741824
+    }
+  ],
+  "networkDomains": [],
+  "storageRequirements": {
+    "temporaryBytes": 0,
+    "persistentBytes": 0,
+    "isolateByMajorVersion": false
+  },
+  "migrations": [],
+  "entrypoints": [
+    {
+      "id": "main",
+      "path": "components/main.wasm",
+      "export": "execute"
+    }
+  ],
+  "packageIntegrity": "sha256:448ddfece170b914e198679cb8b290c191486f752ea0792894db2555b6cb801d",
+  "signature": {
+    "algorithm": "ed25519",
+    "keyId": "first-party-2026",
+    "value": "xXE5p9LN5vjZQF1t4wZQQ4YIvRxuJELZ5UvLqLUVLjKgBWdSJx/vwEAEYTBg4wUBRzDAfBpMqi2dzwprDH3PDA=="
+  },
+  "pricing": {
+    "model": "free"
+  },
+  "privacyPolicy": "https://sndbox.dev/privacy"
+}

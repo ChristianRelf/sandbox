@@ -105,6 +105,18 @@ impl Database {
                 ))
                 .map_err(storage)?;
         }
+        if version < 10 {
+            connection
+                .execute_batch(include_str!(
+                    "../migrations/010_first_party_integrations.sql"
+                ))
+                .map_err(storage)?;
+        }
+        if version < 11 {
+            connection
+                .execute_batch(include_str!("../migrations/011_poll_backoff.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         backfill_workflow_revisions(&connection)?;
         Ok(())
@@ -116,6 +128,138 @@ impl Database {
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(storage)
+    }
+
+    pub fn create_file_grant(
+        &self,
+        absolute_path: &str,
+        maximum_bytes: u64,
+        expires_at: DateTime<Utc>,
+    ) -> Result<String, EngineError> {
+        let id = Uuid::new_v4().to_string();
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "INSERT INTO file_grants(id,absolute_path,maximum_bytes,expires_at,consumed_at) VALUES(?,?,?,?,NULL)",
+                params![id, absolute_path, maximum_bytes.min(i64::MAX as u64) as i64, expires_at.to_rfc3339()],
+            )
+            .map_err(storage)?;
+        Ok(id)
+    }
+
+    pub fn resolve_file_grant(&self, id: &str) -> Result<Option<(String, u64)>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let value: Option<(String, i64, String, Option<String>)> = connection
+            .query_row(
+                "SELECT absolute_path,maximum_bytes,expires_at,consumed_at FROM file_grants WHERE id=?",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(storage)?;
+        Ok(value.and_then(|(path, maximum, expires, consumed)| {
+            let expiry = DateTime::parse_from_rfc3339(&expires).ok()?.with_timezone(&Utc);
+            (consumed.is_none() && expiry > Utc::now()).then_some((path, maximum.max(0) as u64))
+        }))
+    }
+
+    pub fn consume_file_grant(&self, id: &str) -> Result<bool, EngineError> {
+        let changed = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .execute(
+                "UPDATE file_grants SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>?",
+                params![Utc::now().to_rfc3339(), id, Utc::now().to_rfc3339()],
+            )
+            .map_err(storage)?;
+        Ok(changed == 1)
+    }
+
+    pub fn poll_cursor(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        runner_id: &str,
+        connection_id: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+    ) -> Result<Option<(Value, bool, Option<DateTime<Utc>>, u32)>, EngineError> {
+        self.connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
+            .query_row(
+                "SELECT cursor_json,baseline_complete,next_poll_at,failure_count FROM integration_poll_cursors WHERE workflow_id=? AND node_id=? AND runner_id=? AND connection_id=? AND plugin_id=? AND plugin_version=?",
+                params![workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version],
+                |row| {
+                    let cursor: Option<String> = row.get(0)?;
+                    let baseline: bool = row.get(1)?;
+                    let next: Option<String> = row.get(2)?;
+                    let failures: u32 = row.get(3)?;
+                    Ok((cursor.and_then(|value| serde_json::from_str(&value).ok()).unwrap_or(Value::Null), baseline, next.as_deref().map(parse_time), failures))
+                },
+            )
+            .optional()
+            .map_err(storage)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_poll_failure(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        runner_id: &str,
+        connection_id: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+        next_poll_at: DateTime<Utc>,
+        error: &str,
+    ) -> Result<(), EngineError> {
+        self.connection.lock().map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO integration_poll_cursors(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version,cursor_json,baseline_complete,last_polled_at,next_poll_at,last_error,failure_count) VALUES(?,?,?,?,?,?,NULL,0,?,?,?,1) ON CONFLICT(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version) DO UPDATE SET last_polled_at=excluded.last_polled_at,next_poll_at=excluded.next_poll_at,last_error=excluded.last_error,failure_count=integration_poll_cursors.failure_count+1",
+            params![workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version,Utc::now().to_rfc3339(),next_poll_at.to_rfc3339(),error.chars().take(4096).collect::<String>()],
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_poll_checkpoint(
+        &self,
+        workflow_id: &str,
+        node_id: &str,
+        runner_id: &str,
+        connection_id: &str,
+        plugin_id: &str,
+        plugin_version: &str,
+        cursor: &Value,
+        baseline_complete: bool,
+        next_poll_at: DateTime<Utc>,
+        event_keys: &[String],
+    ) -> Result<Vec<String>, EngineError> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let transaction = connection.transaction().map_err(storage)?;
+        let now = Utc::now();
+        let mut accepted = Vec::new();
+        for event_key in event_keys {
+            let inserted = transaction.execute(
+                "INSERT OR IGNORE INTO integration_poll_dedup(workflow_id,node_id,event_key,observed_at) VALUES(?,?,?,?)",
+                params![workflow_id,node_id,event_key,now.to_rfc3339()],
+            ).map_err(storage)?;
+            if inserted == 1 { accepted.push(event_key.clone()); }
+        }
+        transaction.execute(
+            "INSERT INTO integration_poll_cursors(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version,cursor_json,baseline_complete,last_polled_at,next_poll_at,last_error,failure_count) VALUES(?,?,?,?,?,?,?,?,?,?,NULL,0) ON CONFLICT(workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version) DO UPDATE SET cursor_json=excluded.cursor_json,baseline_complete=excluded.baseline_complete,last_polled_at=excluded.last_polled_at,next_poll_at=excluded.next_poll_at,last_error=NULL,failure_count=0",
+            params![workflow_id,node_id,runner_id,connection_id,plugin_id,plugin_version,serde_json::to_string(cursor).map_err(storage)?,baseline_complete,now.to_rfc3339(),next_poll_at.to_rfc3339()],
+        ).map_err(storage)?;
+        transaction.commit().map_err(storage)?;
+        Ok(accepted)
     }
 
     pub fn set_setting<T: Serialize>(&self, key: &str, value: &T) -> Result<(), EngineError> {
@@ -1852,7 +1996,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 9);
+            assert_eq!(db.schema_version().unwrap(), 11);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -1863,7 +2007,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_every_supported_database_version_to_nine() {
+    fn migrates_every_supported_database_version_to_eleven() {
         let migrations = [
             include_str!("../migrations/001_initial.sql"),
             include_str!("../migrations/002_schedule_state.sql"),
@@ -1873,8 +2017,10 @@ mod tests {
             include_str!("../migrations/006_plugin_execution.sql"),
             include_str!("../migrations/007_runner_command_receipts.sql"),
             include_str!("../migrations/008_workflow_metadata.sql"),
+            include_str!("../migrations/009_workflow_revisions_and_state.sql"),
+            include_str!("../migrations/010_first_party_integrations.sql"),
         ];
-        for version in 1..=8 {
+        for version in 1..=10 {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join(format!("v{version}.db"));
             {
@@ -1889,10 +2035,106 @@ mod tests {
             let upgraded = Database::open(&path).unwrap();
             assert_eq!(
                 upgraded.schema_version().unwrap(),
-                9,
+                11,
                 "failed migration from v{version}"
             );
         }
+    }
+
+    #[test]
+    fn file_grants_are_one_time_and_poll_checkpoints_are_durable() {
+        let db = Database::in_memory().unwrap();
+        db.save_workflow(workflow()).unwrap();
+
+        let grant = db
+            .create_file_grant(
+                "C:/workflow/input.bin",
+                4_096,
+                Utc::now() + chrono::Duration::minutes(5),
+            )
+            .unwrap();
+        assert_eq!(
+            db.resolve_file_grant(&grant).unwrap(),
+            Some(("C:/workflow/input.bin".into(), 4_096))
+        );
+        assert!(db.consume_file_grant(&grant).unwrap());
+        assert!(!db.consume_file_grant(&grant).unwrap());
+        assert!(db.resolve_file_grant(&grant).unwrap().is_none());
+
+        let event_keys = vec!["event-1".to_string(), "event-2".to_string()];
+        let checkpoint = json!({"pageToken":"next"});
+        let next_poll = Utc::now() + chrono::Duration::minutes(2);
+        let accepted = db
+            .save_poll_checkpoint(
+                "w",
+                "t",
+                "runner",
+                "connection",
+                "com.sndbox.github",
+                "1.0.0",
+                &checkpoint,
+                true,
+                next_poll,
+                &event_keys,
+            )
+            .unwrap();
+        assert_eq!(accepted, event_keys);
+        assert!(db
+            .save_poll_checkpoint(
+                "w",
+                "t",
+                "runner",
+                "connection",
+                "com.sndbox.github",
+                "1.0.0",
+                &checkpoint,
+                true,
+                next_poll,
+                &event_keys,
+            )
+            .unwrap()
+            .is_empty());
+
+        let state = db
+            .poll_cursor(
+                "w",
+                "t",
+                "runner",
+                "connection",
+                "com.sndbox.github",
+                "1.0.0",
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.0, checkpoint);
+        assert!(state.1);
+        assert_eq!(state.3, 0);
+
+        db.save_poll_failure(
+            "w",
+            "t",
+            "runner",
+            "connection",
+            "com.sndbox.github",
+            "1.0.0",
+            next_poll,
+            "rate limited; retry after 120",
+        )
+        .unwrap();
+        assert_eq!(
+            db.poll_cursor(
+                "w",
+                "t",
+                "runner",
+                "connection",
+                "com.sndbox.github",
+                "1.0.0",
+            )
+            .unwrap()
+            .unwrap()
+            .3,
+            1
+        );
     }
 
     #[test]

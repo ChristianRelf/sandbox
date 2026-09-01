@@ -12,13 +12,14 @@ pub use broker::{
 };
 pub use error::PluginError;
 pub use manifest::{
-    permission_diff, permission_summary, Capability, CredentialDefinition, Entrypoint, HttpMethod,
-    Manifest, ManifestValidation, MigrationDefinition, NetworkDomain, NodeDefinition, Pricing,
+    canonical_manifest, permission_diff, permission_summary, Capability, ConnectionRequirement, CredentialDefinition,
+    Entrypoint, ExternalEffect, FileInputDefinition, HttpMethod, Manifest, ManifestValidation,
+    MigrationDefinition, NetworkDomain, NodeDefinition, NodeKind, NodePlacement, NodePort, Pricing,
     Signature, StorageRequirements,
 };
 pub use package::{package_digest, PackageTrustStore, RevocationList, VerifiedPackage};
 pub use runtime::{PluginRuntime, RuntimeLimits, SandboxDiagnostic};
 pub use schema::validate_schema_instance;
 
-pub const HOST_VERSION: &str = "0.7.2-beta.4";
-pub const MANIFEST_VERSION: u32 = 1;
+pub const HOST_VERSION: &str = "0.8.0-beta.1";
+pub const MANIFEST_VERSION: u32 = 2;

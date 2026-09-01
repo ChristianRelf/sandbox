@@ -3,7 +3,7 @@ import type { AuditEvent, BuiltInRole, DeploymentRecord, MarketplaceListing, Per
 import { permissions as allPermissions, rolePermissionMatrix } from "@sandbox/contracts";
 import { Pool, type PoolClient } from "pg";
 import { satisfies } from "semver";
-import type { AccountOrganisationRecord, AuthenticatedSession, ControlPlaneRepository, DeploymentCreationInput, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, OrganisationRoleRecord, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, RunnerPoolInput, RunnerPoolRecord, ScimManagedUserInput, ScimManagedUserRecord, ScimTokenSummary, SharedConnectionRecord, SsoConnectionInput, SsoConnectionRecord, SyncedWorkflowInput, SyncedWorkflowRecord, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
+import type { AccountOrganisationRecord, AuthenticatedSession, ControlPlaneRepository, DeploymentCreationInput, InvitationInput, InvitationRecord, MarketplacePackage, MarketplaceQuery, OrganisationInput, OrganisationRoleRecord, PluginSubmissionInput, PluginSubmissionRecord, PublisherInput, RunnerCommandInput, RunnerDeviceRequestInput, RunnerDeviceSession, RunnerPairingChallengeInput, RunnerPairingConfirmationInput, RunnerPoolInput, RunnerPoolRecord, RunnerTriggerEventInput, ScimManagedUserInput, ScimManagedUserRecord, ScimTokenSummary, SharedConnectionRecord, SsoConnectionInput, SsoConnectionRecord, SyncedWorkflowInput, SyncedWorkflowRecord, SyncWriteResult, WebhookEndpointRecord, WorkflowApprovalRecord } from "./types.js";
 import { DomainError } from "./types.js";
 import { verifyRunnerRequestSignature } from "./runner_protocol.js";
 import type { BillingEvent } from "./billing.js";
@@ -878,6 +878,30 @@ export class PostgresRepository implements ControlPlaneRepository {
         [status, redact(resultSummary), commandId, device.runnerId, device.workspaceId]
       );
       return (result.rowCount ?? 0) > 0;
+    });
+  }
+
+  async recordRunnerTriggerEvents(device: RunnerDeviceSession, events: RunnerTriggerEventInput[]): Promise<{ acceptedEventIds: string[]; duplicateEventIds: string[] }> {
+    return this.withAccount(device.accountId, async client => {
+      const acceptedEventIds: string[] = [];
+      const duplicateEventIds: string[] = [];
+      for (const event of events) {
+        const deployment = await client.query(
+          `SELECT 1 FROM workflow_deployments
+            WHERE id=$1 AND workspace_id=$2 AND workflow_revision_id=$3
+              AND target_type='self_hosted_runner' AND target_runner_id=$4 AND status='active'`,
+          [event.deploymentId, device.workspaceId, event.workflowRevisionId, device.runnerId]
+        );
+        if (!deployment.rowCount) throw new DomainError("trigger_event_lease_invalid", "The polling trigger is not leased to this runner for the active workflow revision.", 403);
+        const inserted = await client.query(
+          `INSERT INTO runner_trigger_events(id,workspace_id,deployment_id,workflow_revision_id,runner_id,node_id,plugin_id,plugin_version,dedupe_key,payload,provider_checkpoint,occurred_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           ON CONFLICT(deployment_id,node_id,dedupe_key) DO NOTHING RETURNING id`,
+          [event.eventId, device.workspaceId, event.deploymentId, event.workflowRevisionId, device.runnerId, event.nodeId, event.pluginId, event.pluginVersion, event.dedupeKey, event.payload, event.providerCheckpoint, event.occurredAt]
+        );
+        (inserted.rowCount ? acceptedEventIds : duplicateEventIds).push(event.eventId);
+      }
+      return { acceptedEventIds, duplicateEventIds };
     });
   }
 

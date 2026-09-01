@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AiWorkflowProposal,
   AccountStatus,
   AccountOrganisation,
   BrowserEngineStatus,
@@ -267,6 +268,10 @@ export const api = {
     tauri
       ? invoke<ConnectionMetadata[]>("list_connections")
       : previewApi.listConnections(),
+  buildWorkflowWithAi: (connectionId: string, message: string, workflow: Workflow) =>
+    tauri
+      ? invoke<AiWorkflowProposal>("build_workflow_with_ai", { connectionId, message, workflow })
+      : Promise.reject(new Error("AI workflow building requires the desktop application so credentials stay in the operating-system vault.")),
   createConnection: (
     provider: string,
     displayName: string,
@@ -310,6 +315,26 @@ export const api = {
             "Gmail OAuth requires the desktop application and SANDBOX_GMAIL_CLIENT_ID.",
           ),
         ),
+  startIntegrationOAuth: (provider: "google_workspace" | "slack_oauth" | "notion" | "github_app") =>
+    tauri
+      ? invoke<{ authorizationUrl: string; expiresAt: string; userCode?: string }>(
+          "start_integration_oauth",
+          { provider },
+        )
+      : Promise.reject(new Error("Integration OAuth requires the desktop application.")),
+  listIntegrationResources: (connectionId: string, kind: string, parent?: string) =>
+    tauri
+      ? invoke<Array<{ id: string; label: string; metadata: Record<string, unknown> }>>("list_integration_resources", { connectionId, kind, parent })
+      : Promise.resolve([]),
+  configureGithubInstallation: (connectionId: string, installationId: number, repositories: string[]) =>
+    invoke<ConnectionMetadata>("configure_github_installation", { connectionId, installationId, repositories }),
+  createFileGrant: (path: string, maximumBytes = 1024 * 1024 * 1024) =>
+    tauri
+      ? invoke<{ grantId: string; expiresAt: string; name: string; size: number }>(
+          "create_file_grant",
+          { path, maximumBytes },
+        )
+      : Promise.reject(new Error("Secure file grants require the desktop application.")),
   accountStatus: () =>
     tauri
       ? invoke<AccountStatus>("account_status")

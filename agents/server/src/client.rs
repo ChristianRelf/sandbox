@@ -6,6 +6,9 @@ use reqwest::{Client, Method, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{Map, Value};
 use uuid::Uuid;
+use url::Url;
+
+const MAX_PLUGIN_PACKAGE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -17,6 +20,8 @@ pub enum ClientError {
     Rejected(StatusCode),
     #[error("control-plane response was invalid: {0}")]
     Response(String),
+    #[error("plugin package download was rejected: {0}")]
+    PackageDownload(String),
 }
 
 #[derive(Clone)]
@@ -74,6 +79,26 @@ impl DeviceClient {
         )
         .await
         .map(|_| ())
+    }
+
+    pub async fn download_plugin_package(&self, download_url: &str) -> Result<Vec<u8>, ClientError> {
+        let url = Url::parse(download_url).map_err(|_| ClientError::PackageDownload("URL is invalid".into()))?;
+        let control = Url::parse(&self.base_url).map_err(|_| ClientError::PackageDownload("control-plane URL is invalid".into()))?;
+        if url.scheme() != "https" && !(url.scheme() == "http" && control.host_str() == Some("localhost") && url.host_str() == Some("localhost")) {
+            return Err(ClientError::PackageDownload("URL must use HTTPS".into()));
+        }
+        let response = self.client.get(url).send().await?;
+        if !response.status().is_success() { return Err(ClientError::Rejected(response.status())); }
+        if response.content_length().is_some_and(|size| size > MAX_PLUGIN_PACKAGE_BYTES as u64) {
+            return Err(ClientError::PackageDownload("package exceeds 32 MB".into()));
+        }
+        let bytes = response.bytes().await?;
+        if bytes.len() > MAX_PLUGIN_PACKAGE_BYTES { return Err(ClientError::PackageDownload("package exceeds 32 MB".into())); }
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn trigger_events(&self, events: Vec<RunnerTriggerEvent>) -> Result<TriggerEventAcknowledgement, ClientError> {
+        self.post("/v1/runner/trigger-events", serde_json::json!({ "events": events })).await
     }
 
     async fn post<T: DeserializeOwned>(&self, path: &str, body: Value) -> Result<T, ClientError> {
@@ -185,6 +210,28 @@ pub enum RunnerCommandAction {
 #[derive(Deserialize)]
 struct CommandPage {
     items: Vec<RunnerCommand>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunnerTriggerEvent {
+    pub event_id: String,
+    pub deployment_id: String,
+    pub workflow_revision_id: String,
+    pub node_id: String,
+    pub plugin_id: String,
+    pub plugin_version: String,
+    pub dedupe_key: String,
+    pub occurred_at: String,
+    pub payload: Value,
+    pub provider_checkpoint: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TriggerEventAcknowledgement {
+    pub accepted_event_ids: Vec<String>,
+    pub duplicate_event_ids: Vec<String>,
 }
 
 fn canonical_request(

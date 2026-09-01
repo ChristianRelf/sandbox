@@ -1603,6 +1603,40 @@ pub fn list_connections(state: State<'_, AppState>) -> Result<Vec<ConnectionMeta
 }
 
 #[tauri::command]
+pub fn create_file_grant(
+    path: String,
+    maximum_bytes: u64,
+    state: State<'_, AppState>,
+) -> Result<Value> {
+    let canonical = std::fs::canonicalize(&path)
+        .map_err(|error| format!("The selected file is unavailable: {error}"))?;
+    let metadata = std::fs::metadata(&canonical)
+        .map_err(|error| format!("The selected file cannot be inspected: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Secure file grants can reference files only, not directories.".into());
+    }
+    let maximum_bytes = maximum_bytes.clamp(1, 1024 * 1024 * 1024);
+    if metadata.len() > maximum_bytes {
+        return Err(format!(
+            "The selected file is {} bytes, above this node's {}-byte limit.",
+            metadata.len(), maximum_bytes
+        ));
+    }
+    let expires_at = Utc::now() + chrono::Duration::minutes(15);
+    let grant_id = state
+        .engine
+        .database()
+        .create_file_grant(&canonical.to_string_lossy(), maximum_bytes, expires_at)
+        .map_err(err)?;
+    Ok(json!({
+        "grantId": grant_id,
+        "expiresAt": expires_at,
+        "name": canonical.file_name().and_then(|value| value.to_str()).unwrap_or("file"),
+        "size": metadata.len()
+    }))
+}
+
+#[tauri::command]
 pub fn create_connection(
     provider: String,
     display_name: String,
@@ -1719,7 +1753,7 @@ pub async fn revoke_connection(
         .map_err(err)?
         .ok_or_else(|| "Connection no longer exists.".to_string())?;
     if state.credential_vault.exists(&id)? {
-        if connection.provider == "gmail" {
+        if connection.provider == "gmail" || connection.provider == "google_workspace" {
             let secret = state.credential_vault.get(&id)?;
             let token = secret.get("refreshToken").or_else(|| secret.get("accessToken")).and_then(Value::as_str).ok_or_else(|| "The Gmail token is unavailable. Delete the local connection if it was already revoked at Google.".to_string())?;
             let response = reqwest::Client::builder()
@@ -2029,9 +2063,9 @@ fn validate_connection_input(
 ) -> Result<()> {
     if !matches!(
         provider.to_lowercase().as_str(),
-        "gmail" | "discord" | "slack"
+        "gmail" | "discord" | "slack" | "google_workspace" | "slack_oauth" | "notion" | "github_app" | "openai" | "anthropic" | "openai_compatible"
     ) {
-        return Err("Only Gmail, Discord, and Slack connections are supported in v0.2.0.".into());
+        return Err("This connection provider is not supported.".into());
     }
     if display_name.trim().is_empty() {
         return Err("Connection name is required.".into());
@@ -2177,6 +2211,147 @@ pub async fn start_gmail_oauth(
     });
     Ok(start)
 }
+
+#[tauri::command]
+pub async fn start_integration_oauth(
+    provider: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<oauth::OAuthStart> {
+    if provider == "github_app" {
+        return start_github_device_oauth(app, state).await;
+    }
+    let (port, client_id_env, client_secret_env, authorization_endpoint, token_endpoint, scopes, extra) = match provider.as_str() {
+        "google_workspace" => (0, "SANDBOX_GOOGLE_WORKSPACE_CLIENT_ID", None, "https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", oauth::GOOGLE_WORKSPACE_SCOPES, vec![]),
+        "slack_oauth" => (42_818, "SANDBOX_SLACK_CLIENT_ID", Some("SANDBOX_SLACK_CLIENT_SECRET"), "https://slack.com/oauth/v2/authorize", "https://slack.com/api/oauth.v2.access", "channels:history,channels:read,chat:write,reactions:write,files:write,users:read", vec![]),
+        "notion" => (42_819, "SANDBOX_NOTION_CLIENT_ID", Some("SANDBOX_NOTION_CLIENT_SECRET"), "https://api.notion.com/v1/oauth/authorize", "https://api.notion.com/v1/oauth/token", "", vec![("owner", "user")]),
+        _ => return Err("Unsupported OAuth integration provider.".into()),
+    };
+    let client_id = configured_secret(client_id_env, &provider)?;
+    let client_secret = client_secret_env.map(|name| configured_secret(name, &provider)).transpose()?;
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.map_err(|error| format!("sndbox could not open the local OAuth callback: {error}"))?;
+    let address = listener.local_addr().map_err(err)?;
+    let redirect_uri = format!("http://127.0.0.1:{}/oauth/callback", address.port());
+    let (attempt, start) = if provider == "google_workspace" {
+        oauth::start_google_workspace(&client_id, redirect_uri.clone())?
+    } else {
+        oauth::start_code_flow(authorization_endpoint, &client_id, redirect_uri.clone(), scopes, &extra)?
+    };
+    app.opener().open_url(&start.authorization_url, None::<&str>).map_err(|error| format!("The authorization page could not be opened: {error}"))?;
+    let database = state.engine.database().clone();
+    let vault = state.credential_vault.clone();
+    let emitted_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result: Result<ConnectionMetadata> = async {
+            let (mut stream, _) = tokio::time::timeout(std::time::Duration::from_secs(300), listener.accept()).await.map_err(|_| "Authorization expired after five minutes.".to_string())?.map_err(|error| format!("OAuth callback could not be accepted: {error}"))?;
+            let mut request = vec![0_u8; 16 * 1024];
+            let count = stream.read(&mut request).await.map_err(err)?;
+            let target = String::from_utf8_lossy(&request[..count]).lines().next().and_then(|line| line.split_whitespace().nth(1)).ok_or_else(|| "OAuth callback request was invalid.".to_string())?.to_string();
+            let code = attempt.validate_callback(&format!("http://127.0.0.1:{}{}", address.port(), target))?;
+            let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).redirect(reqwest::redirect::Policy::none()).build().map_err(err)?;
+            let token: Value = match provider.as_str() {
+                "google_workspace" => serde_json::to_value(oauth::exchange_gmail_code(&client,&client_id,&attempt,&code).await?).map_err(err)?,
+                "slack_oauth" => provider_token_json(client.post(token_endpoint).form(&[("client_id",client_id.as_str()),("client_secret",client_secret.as_deref().unwrap_or("")),("code",code.as_str()),("redirect_uri",redirect_uri.as_str())]).send().await.map_err(err)?,"Slack").await?,
+                "notion" => provider_token_json(client.post(token_endpoint).basic_auth(&client_id,client_secret.as_deref()).json(&json!({"grant_type":"authorization_code","code":code,"redirect_uri":redirect_uri})).send().await.map_err(err)?,"Notion").await?,
+                _ => unreachable!(),
+            };
+            let access = token.get("access_token").or_else(||token.get("accessToken")).and_then(Value::as_str).ok_or_else(||"The provider did not return an access token.".to_string())?.to_string();
+            let (display_name, account_identifier, metadata, granted_scopes) = match provider.as_str() {
+                "google_workspace" => {
+                    let profile = provider_token_json(client.get("https://www.googleapis.com/oauth2/v2/userinfo").bearer_auth(&access).send().await.map_err(err)?,"Google profile").await?;
+                    let email=profile.get("email").and_then(Value::as_str).unwrap_or("Google Workspace").to_string();
+                    (email.clone(),Some(email),json!({"authType":"oauth2_pkce","incrementalAuthorization":true}),token.get("scope").and_then(Value::as_str).unwrap_or(oauth::GOOGLE_WORKSPACE_SCOPES).split([' ', ',']).filter(|value|!value.is_empty()).map(str::to_string).collect())
+                }
+                "slack_oauth" => {
+                    let auth=provider_token_json(client.post("https://slack.com/api/auth.test").bearer_auth(&access).send().await.map_err(err)?,"Slack profile").await?;
+                    if auth.get("ok").and_then(Value::as_bool)!=Some(true){return Err("Slack could not validate the new connection.".into());}
+                    let team=auth.get("team").and_then(Value::as_str).unwrap_or("Slack workspace").to_string();
+                    (team.clone(),auth.get("user").and_then(Value::as_str).map(str::to_string),json!({"teamId":auth.get("team_id"),"userId":auth.get("user_id"),"authType":"oauth_v2"}),token.get("scope").and_then(Value::as_str).unwrap_or(scopes).split(',').filter(|value|!value.is_empty()).map(str::to_string).collect())
+                }
+                "notion" => {
+                    let workspace=token.get("workspace_name").and_then(Value::as_str).unwrap_or("Notion workspace").to_string();
+                    (workspace.clone(),token.get("workspace_id").and_then(Value::as_str).map(str::to_string),json!({"workspaceId":token.get("workspace_id"),"workspaceIcon":token.get("workspace_icon"),"botId":token.get("bot_id"),"owner":token.get("owner"),"authType":"oauth2"}),vec!["read_content".into(),"update_content".into(),"insert_content".into()])
+                }
+                _ => unreachable!(),
+            };
+            let connection=ConnectionMetadata{id:Uuid::new_v4().to_string(),provider:provider.clone(),display_name,account_identifier,scopes:granted_scopes,created_at:Utc::now(),last_used_at:None,expires_at:token.get("expires_in").or_else(||token.get("expiresIn")).and_then(Value::as_i64).map(|seconds|Utc::now()+chrono::Duration::seconds(seconds)),status:ConnectionStatus::Connected,metadata};
+            let secret=json!({"accessToken":access,"refreshToken":token.get("refresh_token").or_else(||token.get("refreshToken")),"tokenType":token.get("token_type").or_else(||token.get("tokenType"))});
+            vault.put(&connection.id,&secret)?;
+            if let Err(error)=database.save_connection(&connection){let _=vault.delete(&connection.id);return Err(error.to_string());}
+            write_oauth_response(&mut stream,true,"sndbox is connected. You can close this tab and return to the desktop app.").await;
+            Ok(connection)
+        }.await;
+        match result { Ok(connection)=>{let _=emitted_app.emit("connection-updated",connection);},Err(error)=>{let _=emitted_app.emit("connection-error",error);} }
+    });
+    Ok(start)
+}
+
+#[tauri::command]
+pub async fn list_integration_resources(connection_id:String,kind:String,parent:Option<String>,state:State<'_,AppState>)->Result<Vec<crate::provider_adapter::ProviderResource>>{
+    let connection_id=checked_uuid(&connection_id,"Connection")?;
+    if kind.len()>80||!kind.chars().all(|character|character.is_ascii_lowercase()||character=='_'){return Err("Resource picker kind is invalid.".into());}
+    let adapter=state.provider_adapter.clone();
+    tauri::async_runtime::spawn_blocking(move||adapter.list_resources(&connection_id,&kind,parent.as_deref()).map_err(|error|error.to_string())).await.map_err(|error|format!("Resource picker worker failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn configure_github_installation(connection_id:String,installation_id:u64,repositories:Vec<String>,state:State<'_,AppState>)->Result<ConnectionMetadata>{
+    let connection_id=checked_uuid(&connection_id,"Connection")?;
+    if repositories.is_empty()||repositories.len()>500{return Err("Select between 1 and 500 repositories.".into());}
+    let adapter=state.provider_adapter.clone();let lookup_id=connection_id.clone();
+    let available=tauri::async_runtime::spawn_blocking(move||adapter.list_resources(&lookup_id,"github_repository",None).map_err(|error|error.to_string())).await.map_err(|error|format!("GitHub repository picker failed: {error}"))??;
+    let selected=repositories.iter().map(|name|{
+        validate_repository_name(name)?;
+        available.iter().find(|resource|resource.id==*name&&resource.metadata.get("installationId").and_then(Value::as_u64)==Some(installation_id)).map(|resource|json!({"repositoryId":resource.metadata.get("repositoryId"),"fullName":resource.id,"owner":resource.metadata.get("owner"),"permissions":resource.metadata.get("permissions")})).ok_or_else(||format!("Repository '{name}' is not accessible through the selected GitHub App installation."))
+    }).collect::<Result<Vec<_>>>()?;
+    let mut connection=state.engine.database().get_connection(&connection_id).map_err(err)?.ok_or_else(||"The GitHub connection no longer exists.".to_string())?;
+    if connection.provider!="github_app"{return Err("The selected connection is not a GitHub App connection.".into());}
+    if !connection.metadata.get("installations").and_then(Value::as_array).is_some_and(|items|items.iter().any(|item|item.get("id").and_then(Value::as_u64)==Some(installation_id))){return Err("The selected GitHub App installation is not accessible to this account.".into());}
+    connection.status=ConnectionStatus::Connected;
+    connection.metadata["installationId"]=json!(installation_id);
+    connection.metadata["accessibleOwner"]=selected.first().and_then(|item|item.get("owner")).cloned().unwrap_or(Value::Null);
+    connection.metadata["selectedRepositories"]=Value::Array(selected);
+    connection.metadata["grantedPermissionSnapshot"]=connection.metadata.get("installations").and_then(Value::as_array).and_then(|items|items.iter().find(|item|item.get("id").and_then(Value::as_u64)==Some(installation_id))).and_then(|item|item.get("permissions")).cloned().unwrap_or_else(||json!({}));
+    connection.metadata["lastSuccessfulValidationTime"]=json!(Utc::now());
+    if let Some(object)=connection.metadata.as_object_mut(){object.remove("attentionReason");object.remove("lastValidationFailureAt");}
+    state.engine.database().save_connection(&connection).map_err(err)?;
+    Ok(connection)
+}
+
+fn validate_repository_name(value:&str)->Result<()> {let parts=value.split('/').collect::<Vec<_>>();if parts.len()!=2||parts.iter().any(|part|part.is_empty()||!part.chars().all(|character|character.is_ascii_alphanumeric()||matches!(character,'-'|'_'|'.'))){Err("Repository must use owner/name format.".into())}else{Ok(())}}
+
+async fn start_github_device_oauth(app: AppHandle, state: State<'_, AppState>) -> Result<oauth::OAuthStart> {
+    let client_id=configured_secret("SANDBOX_GITHUB_APP_CLIENT_ID","github_app")?;
+    let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).redirect(reqwest::redirect::Policy::none()).build().map_err(err)?;
+    let device=provider_token_json(client.post("https://github.com/login/device/code").header("accept","application/json").form(&[("client_id",client_id.as_str())]).send().await.map_err(err)?,"GitHub device authorization").await?;
+    let verification=device.get("verification_uri").and_then(Value::as_str).ok_or_else(||"GitHub did not return a verification URL.".to_string())?.to_string();
+    let user_code=device.get("user_code").and_then(Value::as_str).ok_or_else(||"GitHub did not return a user code.".to_string())?.to_string();
+    let device_code=device.get("device_code").and_then(Value::as_str).ok_or_else(||"GitHub did not return a device code.".to_string())?.to_string();
+    let expires_in=device.get("expires_in").and_then(Value::as_i64).unwrap_or(900);
+    let interval=device.get("interval").and_then(Value::as_u64).unwrap_or(5).max(5);
+    app.opener().open_url(&verification,None::<&str>).map_err(|error|format!("The GitHub authorization page could not be opened: {error}"))?;
+    let database=state.engine.database().clone();let vault=state.credential_vault.clone();let emitted_app=app.clone();
+    let client_id_for_poll=client_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let result:Result<ConnectionMetadata>=async{
+            let deadline=Utc::now()+chrono::Duration::seconds(expires_in);let mut wait=interval;
+            let token=loop{if Utc::now()>=deadline{return Err("GitHub device authorization expired.".into());}tokio::time::sleep(std::time::Duration::from_secs(wait)).await;let response=provider_token_json(client.post("https://github.com/login/oauth/access_token").header("accept","application/json").form(&[("client_id",client_id_for_poll.as_str()),("device_code",device_code.as_str()),("grant_type","urn:ietf:params:oauth:grant-type:device_code")]).send().await.map_err(err)?,"GitHub device token").await?;match response.get("error").and_then(Value::as_str){Some("authorization_pending")=>continue,Some("slow_down")=>{wait+=5;continue},Some(error)=>return Err(format!("GitHub authorization failed: {error}.")),None=>break response}};
+            let access=token.get("access_token").and_then(Value::as_str).ok_or_else(||"GitHub did not return an access token.".to_string())?.to_string();
+            let profile=provider_token_json(client.get("https://api.github.com/user").bearer_auth(&access).header("accept","application/vnd.github+json").header("X-GitHub-Api-Version","2026-03-10").header("user-agent","sndbox/0.8").send().await.map_err(err)?,"GitHub profile").await?;
+            let installations=provider_token_json(client.get("https://api.github.com/user/installations").bearer_auth(&access).header("accept","application/vnd.github+json").header("X-GitHub-Api-Version","2026-03-10").header("user-agent","sndbox/0.8").send().await.map_err(err)?,"GitHub installations").await?;
+            let login=profile.get("login").and_then(Value::as_str).unwrap_or("GitHub account").to_string();
+            let installation_summaries=installations.get("installations").and_then(Value::as_array).cloned().unwrap_or_default().into_iter().map(|item|json!({"id":item.get("id"),"account":item.get("account").and_then(|value|value.get("login")),"repositorySelection":item.get("repository_selection"),"permissions":item.get("permissions")})).collect::<Vec<_>>();
+            if installation_summaries.is_empty(){return Err("Authorize or install the sndbox GitHub App for at least one account, then connect again.".into());}
+            let connection=ConnectionMetadata{id:Uuid::new_v4().to_string(),provider:"github_app".into(),display_name:login.clone(),account_identifier:Some(login),scopes:vec!["metadata:read".into(),"issues:write".into(),"pull_requests:write".into(),"actions:write".into(),"contents:write".into()],created_at:Utc::now(),last_used_at:None,expires_at:token.get("expires_in").and_then(Value::as_i64).map(|seconds|Utc::now()+chrono::Duration::seconds(seconds)),status:ConnectionStatus::SetupRequired,metadata:json!({"authType":"github_app_device_flow","avatarUrl":profile.get("avatar_url"),"installations":installation_summaries,"installationId":null,"selectedRepositories":[],"lastSuccessfulValidationTime":null,"attentionReason":"Select an installation and repositories."})};
+            vault.put(&connection.id,&json!({"accessToken":access,"refreshToken":token.get("refresh_token"),"tokenType":token.get("token_type")}))?;if let Err(error)=database.save_connection(&connection){let _=vault.delete(&connection.id);return Err(error.to_string());}Ok(connection)
+        }.await;match result{Ok(connection)=>{let _=emitted_app.emit("connection-updated",connection);},Err(error)=>{let _=emitted_app.emit("connection-error",error);}}
+    });
+    Ok(oauth::OAuthStart{authorization_url:verification,expires_at:Utc::now()+chrono::Duration::seconds(expires_in),user_code:Some(user_code)})
+}
+
+fn configured_secret(name:&str,provider:&str)->Result<String>{std::env::var(name).ok().filter(|value|!value.trim().is_empty()).ok_or_else(||format!("{provider} OAuth is not configured in this build. Set {name} and restart sndbox."))}
+
+async fn provider_token_json(response:reqwest::Response,provider:&str)->Result<Value>{let status=response.status();let body:Value=response.json().await.map_err(|error|format!("{provider} returned invalid JSON: {error}"))?;if !status.is_success(){return Err(format!("{provider} failed with HTTP {status}: {}",body.get("error_description").or_else(||body.get("error")).and_then(Value::as_str).unwrap_or("unknown error")));}Ok(body)}
 
 async fn write_oauth_response(stream: &mut tokio::net::TcpStream, success: bool, message: &str) {
     let title = if success {

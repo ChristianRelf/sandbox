@@ -123,6 +123,66 @@ pub struct CredentialDefinition {
     pub configuration_schema: Value,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeKind {
+    Action,
+    PollingTrigger,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NodePlacement {
+    Desktop,
+    SelfHosted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalEffect {
+    Read,
+    ExternalWrite,
+    DestructiveOrHighImpact,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NodePort {
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub value_type: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sensitive: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionRequirement {
+    pub reference: String,
+    pub provider: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permissions: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FileInputDefinition {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted_mime_types: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeDefinition {
@@ -146,6 +206,20 @@ pub struct NodeDefinition {
     #[serde(default)]
     pub migration_handlers: Vec<String>,
     pub execution_entrypoint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<NodeKind>,
+    #[serde(default)]
+    pub input_ports: Vec<NodePort>,
+    #[serde(default)]
+    pub output_ports: Vec<NodePort>,
+    #[serde(default)]
+    pub connection_requirements: Vec<ConnectionRequirement>,
+    #[serde(default)]
+    pub file_inputs: Vec<FileInputDefinition>,
+    #[serde(default)]
+    pub placements: Vec<NodePlacement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_effect: Option<ExternalEffect>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -255,7 +329,7 @@ impl Manifest {
         let mut warnings = Vec::new();
         let id = Regex::new(r"^[a-z0-9]+(?:[.-][a-z0-9]+)+$").expect("static regex");
         let node_id = Regex::new(r"^[a-z][a-z0-9_.-]{2,127}$").expect("static regex");
-        if self.manifest_version != MANIFEST_VERSION {
+        if !(1..=MANIFEST_VERSION).contains(&self.manifest_version) {
             errors.push(format!(
                 "Unsupported manifestVersion {}.",
                 self.manifest_version
@@ -369,6 +443,42 @@ impl Manifest {
             ] {
                 if let Err(error) = validate_declared_schema(schema) {
                     errors.push(format!("Node '{}' {label} {error}.", node.node_type));
+                }
+            }
+            if self.manifest_version >= 2 {
+                if node.kind.is_none() {
+                    errors.push(format!("Node '{}' must declare a v2 kind.", node.node_type));
+                }
+                if node.placements.is_empty() {
+                    errors.push(format!(
+                        "Node '{}' must declare at least one v2 placement.",
+                        node.node_type
+                    ));
+                }
+                if node.external_effect.is_none() {
+                    errors.push(format!(
+                        "Node '{}' must declare a v2 externalEffect.",
+                        node.node_type
+                    ));
+                }
+                if matches!(node.kind, Some(NodeKind::PollingTrigger))
+                    && !matches!(node.external_effect, Some(ExternalEffect::Read))
+                {
+                    errors.push(format!(
+                        "Polling trigger '{}' must be read-only.",
+                        node.node_type
+                    ));
+                }
+                let references = node
+                    .connection_requirements
+                    .iter()
+                    .map(|requirement| requirement.reference.as_str())
+                    .collect::<BTreeSet<_>>();
+                if references.len() != node.connection_requirements.len() {
+                    errors.push(format!(
+                        "Node '{}' has duplicate connection requirement references.",
+                        node.node_type
+                    ));
                 }
             }
         }
@@ -547,8 +657,11 @@ pub fn canonical_manifest(manifest: &Manifest) -> Result<Vec<u8>, PluginError> {
     let mut unsigned = manifest.clone();
     unsigned.package_integrity.clear();
     unsigned.signature = Signature::default();
-    let value =
+    let mut value =
         serde_json::to_value(unsigned).map_err(|error| PluginError::Manifest(error.to_string()))?;
+    if manifest.manifest_version == 1 {
+        if let Some(nodes)=value.get_mut("nodes").and_then(Value::as_array_mut){for node in nodes{if let Some(object)=node.as_object_mut(){for key in ["kind","inputPorts","outputPorts","connectionRequirements","fileInputs","placements","externalEffect"]{object.remove(key);}}}}
+    }
     let canonical = canonical_value(value);
     serde_json::to_vec(&canonical).map_err(|error| PluginError::Manifest(error.to_string()))
 }
@@ -571,6 +684,8 @@ fn canonical_value(value: Value) -> Value {
 fn is_https_url(value: &str) -> bool {
     Url::parse(value).is_ok_and(|url| url.scheme() == "https" && url.host_str().is_some())
 }
+
+fn is_false(value:&bool)->bool{!*value}
 
 pub(crate) fn safe_relative_path(value: &str) -> bool {
     !value.is_empty()
@@ -657,6 +772,13 @@ pub(crate) mod tests {
                 documentation: "docs/weather.md".into(),
                 migration_handlers: vec![],
                 execution_entrypoint: "main".into(),
+                kind: None,
+                input_ports: vec![],
+                output_ports: vec![],
+                connection_requirements: vec![],
+                file_inputs: vec![],
+                placements: vec![],
+                external_effect: None,
             }],
             credentials: vec![],
             capabilities: vec![Capability::Network, Capability::StructuredLogging],

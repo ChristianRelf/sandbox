@@ -148,7 +148,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         <SndboxMark className="brand-mark" size={26} />
         {!collapsed && (
           <span>
-            sndbox <small>0.7 beta</small>
+            sndbox <small>0.7.2 beta</small>
           </span>
         )}
       </div>

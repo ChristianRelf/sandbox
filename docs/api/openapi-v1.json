@@ -4268,6 +4268,83 @@
         }
       }
     },
+    "/v1/runner/trigger-events": {
+      "post": {
+        "operationId": "post_v1_runner_trigger_events",
+        "tags": [
+          "runner"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1RunnerTriggerEventsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "runnerDevice": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1RunnerTriggerEventsInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/runner/webhook-deliveries": {
       "get": {
         "operationId": "get_v1_runner_webhook_deliveries",
@@ -11587,6 +11664,22 @@
           }
         ],
         "description": "Successful response for POST /v1/runner/commands/{commandId}/status."
+      },
+      "PostV1RunnerTriggerEventsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/runner/trigger-events."
+      },
+      "PostV1RunnerTriggerEventsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/runner/trigger-events."
       },
       "PostV1RunnerRunSummariesInput": {
         "allOf": [

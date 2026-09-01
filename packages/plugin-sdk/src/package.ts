@@ -31,6 +31,25 @@ export function canonicalManifest(manifest: PluginManifest): Uint8Array {
   const unsigned: PluginManifest = structuredClone(manifest);
   unsigned.packageIntegrity = "";
   unsigned.signature = { algorithm: "ed25519", keyId: "", value: "" };
+  for (const node of unsigned.nodes) {
+    for (const port of [...(node.inputPorts ?? []), ...(node.outputPorts ?? [])]) {
+      if (port.required === false) delete port.required;
+      if (port.sensitive === false) delete port.sensitive;
+    }
+    for (const requirement of node.connectionRequirements ?? []) {
+      if (requirement.required === false) delete (requirement as { required?: boolean }).required;
+      if (!requirement.permissions.length) delete (requirement as { permissions?: string[] }).permissions;
+    }
+    for (const file of node.fileInputs ?? []) {
+      if (file.required === false) delete (file as { required?: boolean }).required;
+      if (!file.acceptedMimeTypes?.length) delete file.acceptedMimeTypes;
+    }
+    if (unsigned.manifestVersion === 1) {
+      delete node.kind; delete node.inputPorts; delete node.outputPorts; delete node.connectionRequirements; delete node.fileInputs; delete node.placements; delete node.externalEffect;
+    } else {
+      node.inputPorts ??= []; node.outputPorts ??= []; node.connectionRequirements ??= []; node.fileInputs ??= []; node.placements ??= [];
+    }
+  }
   return encoder.encode(JSON.stringify(sortValue(unsigned)));
 }
 

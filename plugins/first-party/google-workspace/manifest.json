@@ -1,0 +1,1206 @@
+{
+  "manifestVersion": 2,
+  "pluginId": "com.sndbox.google-workspace",
+  "name": "Google Workspace",
+  "description": "First-party Google Workspace workflow integration.",
+  "version": "1.0.0",
+  "publisherId": "com.sndbox",
+  "minimumHostVersion": ">=0.8.0-beta.1",
+  "homepage": "https://sndbox.dev/integrations",
+  "documentation": "https://docs.sndbox.dev/integrations",
+  "supportUrl": "https://sndbox.dev/support",
+  "licence": "Proprietary",
+  "categories": [
+    "productivity",
+    "first-party"
+  ],
+  "keywords": [
+    "google-workspace",
+    "automation"
+  ],
+  "icon": "assets/icon.svg",
+  "nodes": [
+    {
+      "nodeType": "google.calendar.event_changed",
+      "nodeVersion": 1,
+      "displayName": "Calendar Event Changed",
+      "description": "Starts when a calendar event is created or updated.",
+      "category": "Triggers",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "calendarId": {
+            "type": "string",
+            "title": "Calendar",
+            "default": "primary"
+          },
+          "pollIntervalSeconds": {
+            "type": "integer",
+            "title": "Poll interval (seconds)",
+            "minimum": 60,
+            "maximum": 300,
+            "default": 120
+          }
+        },
+        "required": [
+          "connectionId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.calendar.event_changed.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "polling_trigger",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "event",
+          "label": "Event",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "calendar.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.drive.file_changed",
+      "nodeVersion": 1,
+      "displayName": "Drive File Changed",
+      "description": "Starts when a Drive file changes.",
+      "category": "Triggers",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "driveId": {
+            "type": "string",
+            "title": "Shared drive ID"
+          },
+          "query": {
+            "type": "string",
+            "title": "Filter query"
+          },
+          "pollIntervalSeconds": {
+            "type": "integer",
+            "title": "Poll interval (seconds)",
+            "minimum": 60,
+            "maximum": 300,
+            "default": 120
+          }
+        },
+        "required": [
+          "connectionId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.drive.file_changed.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "polling_trigger",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "file",
+          "label": "File",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "drive.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.sheets.row_added",
+      "nodeVersion": 1,
+      "displayName": "Sheets Row Added",
+      "description": "Starts when rows are appended to a sheet.",
+      "category": "Triggers",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "spreadsheetId": {
+            "type": "string",
+            "title": "Spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "title": "Range",
+            "default": "Sheet1!A:Z"
+          },
+          "headerRow": {
+            "type": "integer",
+            "title": "Header row",
+            "minimum": 1,
+            "default": 1
+          },
+          "pollIntervalSeconds": {
+            "type": "integer",
+            "title": "Poll interval (seconds)",
+            "minimum": 60,
+            "maximum": 300,
+            "default": 120
+          }
+        },
+        "required": [
+          "connectionId",
+          "spreadsheetId",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.sheets.row_added.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "polling_trigger",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "row",
+          "label": "Row",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "sheets.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.calendar.list_events",
+      "nodeVersion": 1,
+      "displayName": "List Calendar Events",
+      "description": "Lists events in a time window.",
+      "category": "Productivity",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "calendarId": {
+            "type": "string",
+            "title": "Calendar",
+            "default": "primary"
+          },
+          "timeMin": {
+            "type": "string",
+            "title": "Starts after",
+            "format": "date-time"
+          },
+          "timeMax": {
+            "type": "string",
+            "title": "Ends before",
+            "format": "date-time"
+          },
+          "query": {
+            "type": "string",
+            "title": "Search"
+          }
+        },
+        "required": [
+          "connectionId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.calendar.list_events.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "calendar.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.calendar.create_event",
+      "nodeVersion": 1,
+      "displayName": "Create Calendar Event",
+      "description": "Creates a calendar event.",
+      "category": "Productivity",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "calendarId": {
+            "type": "string",
+            "title": "Calendar",
+            "default": "primary"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string",
+            "title": "Time zone"
+          },
+          "attendees": {
+            "type": "array",
+            "title": "Attendees",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "connectionId",
+          "summary",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/google.calendar.create_event.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "calendar.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "google.calendar.update_event",
+      "nodeVersion": 1,
+      "displayName": "Update Calendar Event",
+      "description": "Updates selected event fields.",
+      "category": "Productivity",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "calendarId": {
+            "type": "string",
+            "title": "Calendar",
+            "default": "primary"
+          },
+          "eventId": {
+            "type": "string",
+            "title": "Event ID"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "format": "date-time"
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "format": "date-time"
+          },
+          "timeZone": {
+            "type": "string",
+            "title": "Time zone"
+          },
+          "attendees": {
+            "type": "array",
+            "title": "Attendees",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "required": [
+          "connectionId",
+          "eventId"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/google.calendar.update_event.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "calendar.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "google.drive.search_files",
+      "nodeVersion": 1,
+      "displayName": "Search Drive Files",
+      "description": "Searches files visible to the connection.",
+      "category": "Data",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "query": {
+            "type": "string",
+            "title": "Drive query"
+          },
+          "driveId": {
+            "type": "string",
+            "title": "Shared drive ID"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Maximum results",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 100
+          }
+        },
+        "required": [
+          "connectionId",
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.drive.search_files.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "drive.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.drive.upload_file",
+      "nodeVersion": 1,
+      "displayName": "Upload Drive File",
+      "description": "Streams a granted local file to Drive.",
+      "category": "Data",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "fileGrant": {
+            "type": "string",
+            "title": "File",
+            "format": "file-grant"
+          },
+          "name": {
+            "type": "string",
+            "title": "Drive filename"
+          },
+          "parentFolderId": {
+            "type": "string",
+            "title": "Parent folder ID"
+          },
+          "mimeType": {
+            "type": "string",
+            "title": "MIME type"
+          }
+        },
+        "required": [
+          "connectionId",
+          "fileGrant"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging",
+        "external_communication",
+        "file_picker_read"
+      ],
+      "timeoutMs": 120000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/google.drive.upload_file.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "drive.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [
+        {
+          "key": "fileGrant",
+          "required": true,
+          "maximumBytes": 1073741824,
+          "acceptedMimeTypes": [
+            "*/*"
+          ]
+        }
+      ],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "google.sheets.read_range",
+      "nodeVersion": 1,
+      "displayName": "Read Sheet Range",
+      "description": "Reads values from a spreadsheet range.",
+      "category": "Data",
+      "riskLevel": "low",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "spreadsheetId": {
+            "type": "string",
+            "title": "Spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "title": "Range"
+          },
+          "majorDimension": {
+            "type": "string",
+            "title": "Major dimension",
+            "enum": [
+              "ROWS",
+              "COLUMNS"
+            ],
+            "default": "ROWS"
+          }
+        },
+        "required": [
+          "connectionId",
+          "spreadsheetId",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "safe",
+      "idempotencySupport": "read_only",
+      "documentation": "docs/google.sheets.read_range.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "sheets.read"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "read"
+    },
+    {
+      "nodeType": "google.sheets.append_rows",
+      "nodeVersion": 1,
+      "displayName": "Append Sheet Rows",
+      "description": "Appends rows to a spreadsheet.",
+      "category": "Data",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "spreadsheetId": {
+            "type": "string",
+            "title": "Spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "title": "Range"
+          },
+          "rows": {
+            "type": "array",
+            "title": "Rows",
+            "items": {
+              "type": "array",
+              "items": {}
+            },
+            "default": []
+          },
+          "valueInputOption": {
+            "type": "string",
+            "title": "Value input",
+            "enum": [
+              "RAW",
+              "USER_ENTERED"
+            ],
+            "default": "USER_ENTERED"
+          }
+        },
+        "required": [
+          "connectionId",
+          "spreadsheetId",
+          "range",
+          "rows"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/google.sheets.append_rows.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "sheets.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    },
+    {
+      "nodeType": "google.sheets.update_range",
+      "nodeVersion": 1,
+      "displayName": "Update Sheet Range",
+      "description": "Replaces values in a spreadsheet range.",
+      "category": "Data",
+      "riskLevel": "medium",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "configurationSchema": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "title": "Connection",
+            "format": "connection",
+            "x-sndbox-provider": "google_workspace"
+          },
+          "spreadsheetId": {
+            "type": "string",
+            "title": "Spreadsheet ID"
+          },
+          "range": {
+            "type": "string",
+            "title": "Range"
+          },
+          "values": {
+            "type": "array",
+            "title": "Values",
+            "items": {
+              "type": "array",
+              "items": {}
+            },
+            "default": []
+          },
+          "valueInputOption": {
+            "type": "string",
+            "title": "Value input",
+            "enum": [
+              "RAW",
+              "USER_ENTERED"
+            ],
+            "default": "USER_ENTERED"
+          }
+        },
+        "required": [
+          "connectionId",
+          "spreadsheetId",
+          "range",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "credentialRequirements": [
+        "google_workspace"
+      ],
+      "capabilities": [
+        "credential_operations:google_workspace",
+        "structured_logging",
+        "external_communication"
+      ],
+      "timeoutMs": 30000,
+      "retryBehavior": "idempotency_required",
+      "idempotencySupport": "keyed",
+      "documentation": "docs/google.sheets.update_range.md",
+      "migrationHandlers": [],
+      "executionEntrypoint": "main",
+      "kind": "action",
+      "inputPorts": [
+        {
+          "key": "input",
+          "label": "Input",
+          "type": "object"
+        }
+      ],
+      "outputPorts": [
+        {
+          "key": "result",
+          "label": "Result",
+          "type": "object"
+        }
+      ],
+      "connectionRequirements": [
+        {
+          "reference": "connection",
+          "provider": "google_workspace",
+          "permissions": [
+            "sheets.write"
+          ],
+          "required": true
+        }
+      ],
+      "fileInputs": [],
+      "placements": [
+        "desktop",
+        "self_hosted"
+      ],
+      "externalEffect": "external_write"
+    }
+  ],
+  "credentials": [
+    {
+      "credentialType": "google_workspace",
+      "displayName": "Google Workspace connection",
+      "operations": [
+        "google.calendar.event_changed",
+        "google.drive.file_changed",
+        "google.sheets.row_added",
+        "google.calendar.list_events",
+        "google.calendar.create_event",
+        "google.calendar.update_event",
+        "google.drive.search_files",
+        "google.drive.upload_file",
+        "google.sheets.read_range",
+        "google.sheets.append_rows",
+        "google.sheets.update_range"
+      ],
+      "scopes": [
+        "openid",
+        "email",
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/spreadsheets"
+      ],
+      "configurationSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  ],
+  "capabilities": [
+    {
+      "type": "structured_logging"
+    },
+    {
+      "type": "credential_operations",
+      "credentialType": "google_workspace",
+      "operations": [
+        "google.calendar.event_changed",
+        "google.drive.file_changed",
+        "google.sheets.row_added",
+        "google.calendar.list_events",
+        "google.calendar.create_event",
+        "google.calendar.update_event",
+        "google.drive.search_files",
+        "google.drive.upload_file",
+        "google.sheets.read_range",
+        "google.sheets.append_rows",
+        "google.sheets.update_range"
+      ]
+    },
+    {
+      "type": "external_communication"
+    },
+    {
+      "type": "file_picker_read",
+      "maxBytes": 1073741824
+    }
+  ],
+  "networkDomains": [],
+  "storageRequirements": {
+    "temporaryBytes": 0,
+    "persistentBytes": 0,
+    "isolateByMajorVersion": false
+  },
+  "migrations": [],
+  "entrypoints": [
+    {
+      "id": "main",
+      "path": "components/main.wasm",
+      "export": "execute"
+    }
+  ],
+  "packageIntegrity": "sha256:c2dc87591fed3ddb9b1c568ad47b9045fe38c2dcf0556b5fa5f5d60304e1811c",
+  "signature": {
+    "algorithm": "ed25519",
+    "keyId": "first-party-2026",
+    "value": "0+9WUlmrXak936nDeLxqb4lupez8N7jDgwoR29B4czraInMN3I7E2afy5dhhdscVGq7pmal0UB6GIMNvJhHfCg=="
+  },
+  "pricing": {
+    "model": "free"
+  },
+  "privacyPolicy": "https://sndbox.dev/privacy"
+}

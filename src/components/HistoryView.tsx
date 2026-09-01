@@ -209,6 +209,16 @@ export function HistoryView() {
           onRetryNode={retryNode}
           onRetryHeaded={retryHeaded}
           onEditNode={(nodeId) => void openEditor(nodeId)}
+          onReviewPermissions={(request) => {
+            localStorage.setItem(
+              "sandbox.editor.permission-request.v1",
+              JSON.stringify({
+                workflowId: selectedExecution.workflowId,
+                ...request,
+              }),
+            );
+            void openEditor(request.nodeId);
+          }}
         />
         <ConfirmDialog
           open={deleteOpen}

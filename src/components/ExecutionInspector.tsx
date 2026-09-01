@@ -1,6 +1,7 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   AlertTriangle,
+  ChevronRight,
   Clipboard,
   Copy,
   ExternalLink,
@@ -24,8 +25,14 @@ interface ExecutionInspectorProps {
   onRetryNode?: (nodeId: string) => void;
   onRetryHeaded?: () => void;
   onEditNode?: (nodeId: string) => void;
+  onReviewPermissions?: (request: PermissionReviewRequest) => void;
   onClear?: () => void;
   compact?: boolean;
+}
+
+export interface PermissionReviewRequest {
+  nodeId?: string;
+  message: string;
 }
 
 export function ExecutionInspector({
@@ -35,6 +42,7 @@ export function ExecutionInspector({
   onRetryNode,
   onRetryHeaded,
   onEditNode,
+  onReviewPermissions,
   onClear,
   compact = false,
 }: ExecutionInspectorProps) {
@@ -45,6 +53,9 @@ export function ExecutionInspector({
   useEffect(() => setSelected(firstNode()), [run.id]);
   const nodeRun = run.nodeExecutions.find((node) => node.nodeId === selected);
   const node = workflow?.nodes.find((item) => item.id === selected);
+  const permissionFailure = run.nodeExecutions.find(
+    (entry) => entry.error?.code === "permission_required",
+  );
   const copy = async (value: unknown) =>
     navigator.clipboard.writeText(
       typeof value === "string" ? value : JSON.stringify(value, null, 2),
@@ -110,12 +121,34 @@ export function ExecutionInspector({
           )}
         </div>
       </div>
-      {run.error && (
+      {run.error?.code === "permission_required" && onReviewPermissions ? (
+        <button
+          className="permission-warning"
+          onClick={() =>
+            onReviewPermissions({
+              nodeId: permissionFailure?.nodeId,
+              message: run.error!.message,
+            })
+          }
+        >
+          <span className="permission-warning-icon">
+            <AlertTriangle size={15} />
+          </span>
+          <span>
+            <b>Permission required</b>
+            <small>{run.error.message}</small>
+          </span>
+          <span className="permission-warning-action">
+            Review and decide
+            <ChevronRight size={14} />
+          </span>
+        </button>
+      ) : run.error ? (
         <div className="error-banner">
           <b>{run.error.message}</b>
           {run.error.suggestion && <span>{run.error.suggestion}</span>}
         </div>
-      )}
+      ) : null}
       {run.skipReason && <div className="info-note">{run.skipReason}</div>}
       <div className="execution-body">
         <div className="timeline">
@@ -154,6 +187,7 @@ export function ExecutionInspector({
             name={node?.name ?? nodeRun.nodeId}
             onCopy={copy}
             onEditNode={onEditNode}
+            onReviewPermissions={onReviewPermissions}
           />
         )}
       </div>
@@ -166,11 +200,13 @@ function NodeExecutionDetail({
   name,
   onCopy,
   onEditNode,
+  onReviewPermissions,
 }: {
   execution: NodeExecution;
   name: string;
   onCopy: (value: unknown) => void;
   onEditNode?: (nodeId: string) => void;
+  onReviewPermissions?: (request: PermissionReviewRequest) => void;
 }) {
   return (
     <div className="node-execution-detail">
@@ -194,12 +230,29 @@ function NodeExecutionDetail({
         </div>
       </header>
       {execution.error && (
-        <div className="error-detail">
+        <div
+          className={`error-detail ${execution.error.code === "permission_required" ? "permission-error-detail" : ""}`}
+        >
           <b>{execution.error.message}</b>
           {execution.error.detail && <p>{execution.error.detail}</p>}
           {execution.error.suggestion && (
             <span>{execution.error.suggestion}</span>
           )}
+          {execution.error.code === "permission_required" &&
+            onReviewPermissions && (
+              <button
+                className="button"
+                onClick={() =>
+                  onReviewPermissions({
+                    nodeId: execution.nodeId,
+                    message: execution.error!.message,
+                  })
+                }
+              >
+                Review permission
+                <ChevronRight size={13} />
+              </button>
+            )}
         </div>
       )}
       {execution.skipReason && (

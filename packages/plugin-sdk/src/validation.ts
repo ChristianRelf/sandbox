@@ -6,7 +6,7 @@ const nodeIdentifier = /^[a-z][a-z0-9_.-]{2,127}$/;
 const semver = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 const manifestShape = z.object({
-  manifestVersion: z.literal(1), pluginId: z.string(), name: z.string().min(1), description: z.string().min(1), version: z.string(), publisherId: z.string(),
+  manifestVersion: z.union([z.literal(1), z.literal(2)]), pluginId: z.string(), name: z.string().min(1), description: z.string().min(1), version: z.string(), publisherId: z.string(),
   minimumHostVersion: z.string().min(1), maximumHostVersion: z.string().optional(), homepage: z.string().url(), documentation: z.string().url(), supportUrl: z.string().url(),
   licence: z.string().min(1), categories: z.array(z.string()), keywords: z.array(z.string()), icon: z.string(), nodes: z.array(z.any()).min(1), credentials: z.array(z.any()),
   capabilities: z.array(z.any()), networkDomains: z.array(z.any()), storageRequirements: z.object({ temporaryBytes: z.number().int().nonnegative(), persistentBytes: z.number().int().nonnegative(), retentionDays: z.number().int().positive().optional(), isolateByMajorVersion: z.boolean() }),
@@ -38,6 +38,16 @@ export function validateManifest(value: unknown, requireSignature = false): Vali
     if (!entrypoints.has(node.executionEntrypoint)) errors.push(`Node '${node.nodeType}' references an undeclared entrypoint.`);
     for (const capability of node.capabilities) if (!capabilityKeys.has(capability)) errors.push(`Node '${node.nodeType}' references undeclared capability '${capability}'.`);
     if (node.timeoutMs < 100 || node.timeoutMs > 300_000) errors.push(`Node '${node.nodeType}' timeout must be between 100 and 300000 ms.`);
+    if (manifest.manifestVersion === 2) {
+      if (!node.kind || !["action", "polling_trigger"].includes(node.kind)) errors.push(`Node '${node.nodeType}' must declare a v2 kind.`);
+      if (!Array.isArray(node.inputPorts) || !Array.isArray(node.outputPorts)) errors.push(`Node '${node.nodeType}' must declare v2 inputPorts and outputPorts.`);
+      if (!Array.isArray(node.connectionRequirements)) errors.push(`Node '${node.nodeType}' must declare v2 connectionRequirements.`);
+      if (!Array.isArray(node.fileInputs) || !Array.isArray(node.placements) || node.placements.length === 0) errors.push(`Node '${node.nodeType}' must declare v2 fileInputs and placements.`);
+      if (!node.externalEffect || !["read", "external_write", "destructive_or_high_impact"].includes(node.externalEffect)) errors.push(`Node '${node.nodeType}' must declare a v2 externalEffect.`);
+      if (node.kind === "polling_trigger" && node.externalEffect !== "read") errors.push(`Polling trigger '${node.nodeType}' must be read-only.`);
+      const connectionRefs = new Set((node.connectionRequirements ?? []).map(requirement => requirement.reference));
+      if (connectionRefs.size !== (node.connectionRequirements ?? []).length) errors.push(`Node '${node.nodeType}' has duplicate connection requirement references.`);
+    }
   }
   if (capabilityKeys.has("network") !== (manifest.networkDomains.length > 0)) errors.push("network capability and networkDomains must be declared together.");
   for (const rule of manifest.networkDomains) {

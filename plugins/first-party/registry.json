@@ -1,0 +1,3949 @@
+{
+  "publisherId": "com.sndbox",
+  "keyId": "first-party-2026",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGEFWvpDToZDs0hwi1ZBFczAUE5x9/LAZr+xBByJF73s=\n-----END PUBLIC KEY-----\n",
+  "plugins": [
+    {
+      "manifest": {
+        "manifestVersion": 2,
+        "pluginId": "com.sndbox.google-workspace",
+        "name": "Google Workspace",
+        "description": "First-party Google Workspace workflow integration.",
+        "version": "1.0.0",
+        "publisherId": "com.sndbox",
+        "minimumHostVersion": ">=0.8.0-beta.1",
+        "homepage": "https://sndbox.dev/integrations",
+        "documentation": "https://docs.sndbox.dev/integrations",
+        "supportUrl": "https://sndbox.dev/support",
+        "licence": "Proprietary",
+        "categories": [
+          "productivity",
+          "first-party"
+        ],
+        "keywords": [
+          "google-workspace",
+          "automation"
+        ],
+        "icon": "assets/icon.svg",
+        "nodes": [
+          {
+            "nodeType": "google.calendar.event_changed",
+            "nodeVersion": 1,
+            "displayName": "Calendar Event Changed",
+            "description": "Starts when a calendar event is created or updated.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "calendarId": {
+                  "type": "string",
+                  "title": "Calendar",
+                  "default": "primary"
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.calendar.event_changed.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "event",
+                "label": "Event",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "calendar.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.drive.file_changed",
+            "nodeVersion": 1,
+            "displayName": "Drive File Changed",
+            "description": "Starts when a Drive file changes.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "driveId": {
+                  "type": "string",
+                  "title": "Shared drive ID"
+                },
+                "query": {
+                  "type": "string",
+                  "title": "Filter query"
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.drive.file_changed.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "file",
+                "label": "File",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "drive.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.sheets.row_added",
+            "nodeVersion": 1,
+            "displayName": "Sheets Row Added",
+            "description": "Starts when rows are appended to a sheet.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "spreadsheetId": {
+                  "type": "string",
+                  "title": "Spreadsheet ID"
+                },
+                "range": {
+                  "type": "string",
+                  "title": "Range",
+                  "default": "Sheet1!A:Z"
+                },
+                "headerRow": {
+                  "type": "integer",
+                  "title": "Header row",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId",
+                "spreadsheetId",
+                "range"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.sheets.row_added.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "row",
+                "label": "Row",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "sheets.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.calendar.list_events",
+            "nodeVersion": 1,
+            "displayName": "List Calendar Events",
+            "description": "Lists events in a time window.",
+            "category": "Productivity",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "calendarId": {
+                  "type": "string",
+                  "title": "Calendar",
+                  "default": "primary"
+                },
+                "timeMin": {
+                  "type": "string",
+                  "title": "Starts after",
+                  "format": "date-time"
+                },
+                "timeMax": {
+                  "type": "string",
+                  "title": "Ends before",
+                  "format": "date-time"
+                },
+                "query": {
+                  "type": "string",
+                  "title": "Search"
+                }
+              },
+              "required": [
+                "connectionId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.calendar.list_events.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "calendar.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.calendar.create_event",
+            "nodeVersion": 1,
+            "displayName": "Create Calendar Event",
+            "description": "Creates a calendar event.",
+            "category": "Productivity",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "calendarId": {
+                  "type": "string",
+                  "title": "Calendar",
+                  "default": "primary"
+                },
+                "summary": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "description": {
+                  "type": "string",
+                  "title": "Description"
+                },
+                "start": {
+                  "type": "string",
+                  "title": "Start",
+                  "format": "date-time"
+                },
+                "end": {
+                  "type": "string",
+                  "title": "End",
+                  "format": "date-time"
+                },
+                "timeZone": {
+                  "type": "string",
+                  "title": "Time zone"
+                },
+                "attendees": {
+                  "type": "array",
+                  "title": "Attendees",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "connectionId",
+                "summary",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/google.calendar.create_event.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "calendar.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "google.calendar.update_event",
+            "nodeVersion": 1,
+            "displayName": "Update Calendar Event",
+            "description": "Updates selected event fields.",
+            "category": "Productivity",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "calendarId": {
+                  "type": "string",
+                  "title": "Calendar",
+                  "default": "primary"
+                },
+                "eventId": {
+                  "type": "string",
+                  "title": "Event ID"
+                },
+                "summary": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "description": {
+                  "type": "string",
+                  "title": "Description"
+                },
+                "start": {
+                  "type": "string",
+                  "title": "Start",
+                  "format": "date-time"
+                },
+                "end": {
+                  "type": "string",
+                  "title": "End",
+                  "format": "date-time"
+                },
+                "timeZone": {
+                  "type": "string",
+                  "title": "Time zone"
+                },
+                "attendees": {
+                  "type": "array",
+                  "title": "Attendees",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "connectionId",
+                "eventId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/google.calendar.update_event.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "calendar.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "google.drive.search_files",
+            "nodeVersion": 1,
+            "displayName": "Search Drive Files",
+            "description": "Searches files visible to the connection.",
+            "category": "Data",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "query": {
+                  "type": "string",
+                  "title": "Drive query"
+                },
+                "driveId": {
+                  "type": "string",
+                  "title": "Shared drive ID"
+                },
+                "pageSize": {
+                  "type": "integer",
+                  "title": "Maximum results",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "default": 100
+                }
+              },
+              "required": [
+                "connectionId",
+                "query"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.drive.search_files.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "drive.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.drive.upload_file",
+            "nodeVersion": 1,
+            "displayName": "Upload Drive File",
+            "description": "Streams a granted local file to Drive.",
+            "category": "Data",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "fileGrant": {
+                  "type": "string",
+                  "title": "File",
+                  "format": "file-grant"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Drive filename"
+                },
+                "parentFolderId": {
+                  "type": "string",
+                  "title": "Parent folder ID"
+                },
+                "mimeType": {
+                  "type": "string",
+                  "title": "MIME type"
+                }
+              },
+              "required": [
+                "connectionId",
+                "fileGrant"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging",
+              "external_communication",
+              "file_picker_read"
+            ],
+            "timeoutMs": 120000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/google.drive.upload_file.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "drive.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [
+              {
+                "key": "fileGrant",
+                "required": true,
+                "maximumBytes": 1073741824,
+                "acceptedMimeTypes": [
+                  "*/*"
+                ]
+              }
+            ],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "google.sheets.read_range",
+            "nodeVersion": 1,
+            "displayName": "Read Sheet Range",
+            "description": "Reads values from a spreadsheet range.",
+            "category": "Data",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "spreadsheetId": {
+                  "type": "string",
+                  "title": "Spreadsheet ID"
+                },
+                "range": {
+                  "type": "string",
+                  "title": "Range"
+                },
+                "majorDimension": {
+                  "type": "string",
+                  "title": "Major dimension",
+                  "enum": [
+                    "ROWS",
+                    "COLUMNS"
+                  ],
+                  "default": "ROWS"
+                }
+              },
+              "required": [
+                "connectionId",
+                "spreadsheetId",
+                "range"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/google.sheets.read_range.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "sheets.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "google.sheets.append_rows",
+            "nodeVersion": 1,
+            "displayName": "Append Sheet Rows",
+            "description": "Appends rows to a spreadsheet.",
+            "category": "Data",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "spreadsheetId": {
+                  "type": "string",
+                  "title": "Spreadsheet ID"
+                },
+                "range": {
+                  "type": "string",
+                  "title": "Range"
+                },
+                "rows": {
+                  "type": "array",
+                  "title": "Rows",
+                  "items": {
+                    "type": "array",
+                    "items": {}
+                  },
+                  "default": []
+                },
+                "valueInputOption": {
+                  "type": "string",
+                  "title": "Value input",
+                  "enum": [
+                    "RAW",
+                    "USER_ENTERED"
+                  ],
+                  "default": "USER_ENTERED"
+                }
+              },
+              "required": [
+                "connectionId",
+                "spreadsheetId",
+                "range",
+                "rows"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/google.sheets.append_rows.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "sheets.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "google.sheets.update_range",
+            "nodeVersion": 1,
+            "displayName": "Update Sheet Range",
+            "description": "Replaces values in a spreadsheet range.",
+            "category": "Data",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "google_workspace"
+                },
+                "spreadsheetId": {
+                  "type": "string",
+                  "title": "Spreadsheet ID"
+                },
+                "range": {
+                  "type": "string",
+                  "title": "Range"
+                },
+                "values": {
+                  "type": "array",
+                  "title": "Values",
+                  "items": {
+                    "type": "array",
+                    "items": {}
+                  },
+                  "default": []
+                },
+                "valueInputOption": {
+                  "type": "string",
+                  "title": "Value input",
+                  "enum": [
+                    "RAW",
+                    "USER_ENTERED"
+                  ],
+                  "default": "USER_ENTERED"
+                }
+              },
+              "required": [
+                "connectionId",
+                "spreadsheetId",
+                "range",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "google_workspace"
+            ],
+            "capabilities": [
+              "credential_operations:google_workspace",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/google.sheets.update_range.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "google_workspace",
+                "permissions": [
+                  "sheets.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          }
+        ],
+        "credentials": [
+          {
+            "credentialType": "google_workspace",
+            "displayName": "Google Workspace connection",
+            "operations": [
+              "google.calendar.event_changed",
+              "google.drive.file_changed",
+              "google.sheets.row_added",
+              "google.calendar.list_events",
+              "google.calendar.create_event",
+              "google.calendar.update_event",
+              "google.drive.search_files",
+              "google.drive.upload_file",
+              "google.sheets.read_range",
+              "google.sheets.append_rows",
+              "google.sheets.update_range"
+            ],
+            "scopes": [
+              "openid",
+              "email",
+              "https://www.googleapis.com/auth/calendar",
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/spreadsheets"
+            ],
+            "configurationSchema": {
+              "type": "object",
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": [
+          {
+            "type": "structured_logging"
+          },
+          {
+            "type": "credential_operations",
+            "credentialType": "google_workspace",
+            "operations": [
+              "google.calendar.event_changed",
+              "google.drive.file_changed",
+              "google.sheets.row_added",
+              "google.calendar.list_events",
+              "google.calendar.create_event",
+              "google.calendar.update_event",
+              "google.drive.search_files",
+              "google.drive.upload_file",
+              "google.sheets.read_range",
+              "google.sheets.append_rows",
+              "google.sheets.update_range"
+            ]
+          },
+          {
+            "type": "external_communication"
+          },
+          {
+            "type": "file_picker_read",
+            "maxBytes": 1073741824
+          }
+        ],
+        "networkDomains": [],
+        "storageRequirements": {
+          "temporaryBytes": 0,
+          "persistentBytes": 0,
+          "isolateByMajorVersion": false
+        },
+        "migrations": [],
+        "entrypoints": [
+          {
+            "id": "main",
+            "path": "components/main.wasm",
+            "export": "execute"
+          }
+        ],
+        "packageIntegrity": "sha256:c2dc87591fed3ddb9b1c568ad47b9045fe38c2dcf0556b5fa5f5d60304e1811c",
+        "signature": {
+          "algorithm": "ed25519",
+          "keyId": "first-party-2026",
+          "value": "0+9WUlmrXak936nDeLxqb4lupez8N7jDgwoR29B4czraInMN3I7E2afy5dhhdscVGq7pmal0UB6GIMNvJhHfCg=="
+        },
+        "pricing": {
+          "model": "free"
+        },
+        "privacyPolicy": "https://sndbox.dev/privacy"
+      },
+      "packageFile": "plugins/first-party/dist/com.sndbox.google-workspace-1.0.0.sandbox-plugin"
+    },
+    {
+      "manifest": {
+        "manifestVersion": 2,
+        "pluginId": "com.sndbox.slack",
+        "name": "Slack",
+        "description": "First-party Slack workflow integration.",
+        "version": "1.0.0",
+        "publisherId": "com.sndbox",
+        "minimumHostVersion": ">=0.8.0-beta.1",
+        "homepage": "https://sndbox.dev/integrations",
+        "documentation": "https://docs.sndbox.dev/integrations",
+        "supportUrl": "https://sndbox.dev/support",
+        "licence": "Proprietary",
+        "categories": [
+          "productivity",
+          "first-party"
+        ],
+        "keywords": [
+          "slack",
+          "automation"
+        ],
+        "icon": "assets/icon.svg",
+        "nodes": [
+          {
+            "nodeType": "slack.channel_message_posted",
+            "nodeVersion": 1,
+            "displayName": "Slack Message Posted",
+            "description": "Starts when a channel receives a new message.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "includeBotMessages": {
+                  "type": "boolean",
+                  "title": "Include bot messages",
+                  "default": false
+                },
+                "includeThreadReplies": {
+                  "type": "boolean",
+                  "title": "Include thread replies",
+                  "default": false
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/slack.channel_message_posted.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "message",
+                "label": "Message",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "messages.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "slack.list_channel_messages",
+            "nodeVersion": 1,
+            "displayName": "List Slack Messages",
+            "description": "Lists recent messages in a channel.",
+            "category": "Communication",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "oldest": {
+                  "type": "string",
+                  "title": "Oldest timestamp"
+                },
+                "latest": {
+                  "type": "string",
+                  "title": "Latest timestamp"
+                },
+                "limit": {
+                  "type": "integer",
+                  "title": "Maximum results",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 15
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/slack.list_channel_messages.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "messages.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "slack.send_message",
+            "nodeVersion": 1,
+            "displayName": "Send Slack Message",
+            "description": "Posts a message to a channel.",
+            "category": "Communication",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "text": {
+                  "type": "string",
+                  "title": "Message"
+                },
+                "blocks": {
+                  "type": "object",
+                  "title": "Blocks",
+                  "default": {},
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/slack.send_message.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "messages.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "slack.reply_to_thread",
+            "nodeVersion": 1,
+            "displayName": "Reply to Slack Thread",
+            "description": "Replies inside an existing message thread.",
+            "category": "Communication",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "threadTs": {
+                  "type": "string",
+                  "title": "Thread timestamp"
+                },
+                "text": {
+                  "type": "string",
+                  "title": "Message"
+                },
+                "blocks": {
+                  "type": "object",
+                  "title": "Blocks",
+                  "default": {},
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId",
+                "threadTs",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/slack.reply_to_thread.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "messages.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "slack.add_reaction",
+            "nodeVersion": 1,
+            "displayName": "Add Slack Reaction",
+            "description": "Adds an emoji reaction to a message.",
+            "category": "Communication",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "timestamp": {
+                  "type": "string",
+                  "title": "Message timestamp"
+                },
+                "emoji": {
+                  "type": "string",
+                  "title": "Emoji name"
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId",
+                "timestamp",
+                "emoji"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/slack.add_reaction.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "reactions.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "slack.upload_file",
+            "nodeVersion": 1,
+            "displayName": "Upload Slack File",
+            "description": "Streams a granted local file using Slack external upload.",
+            "category": "Communication",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "slack_oauth"
+                },
+                "channelId": {
+                  "type": "string",
+                  "title": "Channel"
+                },
+                "fileGrant": {
+                  "type": "string",
+                  "title": "File",
+                  "format": "file-grant"
+                },
+                "filename": {
+                  "type": "string",
+                  "title": "Filename"
+                },
+                "title": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "initialComment": {
+                  "type": "string",
+                  "title": "Initial comment"
+                },
+                "threadTs": {
+                  "type": "string",
+                  "title": "Thread timestamp"
+                }
+              },
+              "required": [
+                "connectionId",
+                "channelId",
+                "fileGrant"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "slack_oauth"
+            ],
+            "capabilities": [
+              "credential_operations:slack_oauth",
+              "structured_logging",
+              "external_communication",
+              "file_picker_read"
+            ],
+            "timeoutMs": 120000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/slack.upload_file.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "slack_oauth",
+                "permissions": [
+                  "files.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [
+              {
+                "key": "fileGrant",
+                "required": true,
+                "maximumBytes": 1073741824,
+                "acceptedMimeTypes": [
+                  "*/*"
+                ]
+              }
+            ],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          }
+        ],
+        "credentials": [
+          {
+            "credentialType": "slack_oauth",
+            "displayName": "Slack connection",
+            "operations": [
+              "slack.channel_message_posted",
+              "slack.list_channel_messages",
+              "slack.send_message",
+              "slack.reply_to_thread",
+              "slack.add_reaction",
+              "slack.upload_file"
+            ],
+            "scopes": [
+              "channels:history",
+              "channels:read",
+              "chat:write",
+              "reactions:write",
+              "files:write",
+              "users:read"
+            ],
+            "configurationSchema": {
+              "type": "object",
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": [
+          {
+            "type": "structured_logging"
+          },
+          {
+            "type": "credential_operations",
+            "credentialType": "slack_oauth",
+            "operations": [
+              "slack.channel_message_posted",
+              "slack.list_channel_messages",
+              "slack.send_message",
+              "slack.reply_to_thread",
+              "slack.add_reaction",
+              "slack.upload_file"
+            ]
+          },
+          {
+            "type": "external_communication"
+          },
+          {
+            "type": "file_picker_read",
+            "maxBytes": 1073741824
+          }
+        ],
+        "networkDomains": [],
+        "storageRequirements": {
+          "temporaryBytes": 0,
+          "persistentBytes": 0,
+          "isolateByMajorVersion": false
+        },
+        "migrations": [],
+        "entrypoints": [
+          {
+            "id": "main",
+            "path": "components/main.wasm",
+            "export": "execute"
+          }
+        ],
+        "packageIntegrity": "sha256:448ddfece170b914e198679cb8b290c191486f752ea0792894db2555b6cb801d",
+        "signature": {
+          "algorithm": "ed25519",
+          "keyId": "first-party-2026",
+          "value": "xXE5p9LN5vjZQF1t4wZQQ4YIvRxuJELZ5UvLqLUVLjKgBWdSJx/vwEAEYTBg4wUBRzDAfBpMqi2dzwprDH3PDA=="
+        },
+        "pricing": {
+          "model": "free"
+        },
+        "privacyPolicy": "https://sndbox.dev/privacy"
+      },
+      "packageFile": "plugins/first-party/dist/com.sndbox.slack-1.0.0.sandbox-plugin"
+    },
+    {
+      "manifest": {
+        "manifestVersion": 2,
+        "pluginId": "com.sndbox.notion",
+        "name": "Notion",
+        "description": "First-party Notion workflow integration.",
+        "version": "1.0.0",
+        "publisherId": "com.sndbox",
+        "minimumHostVersion": ">=0.8.0-beta.1",
+        "homepage": "https://sndbox.dev/integrations",
+        "documentation": "https://docs.sndbox.dev/integrations",
+        "supportUrl": "https://sndbox.dev/support",
+        "licence": "Proprietary",
+        "categories": [
+          "productivity",
+          "first-party"
+        ],
+        "keywords": [
+          "notion",
+          "automation"
+        ],
+        "icon": "assets/icon.svg",
+        "nodes": [
+          {
+            "nodeType": "notion.data_source_page_changed",
+            "nodeVersion": 1,
+            "displayName": "Notion Page Changed",
+            "description": "Starts when a page in a data source changes.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "notion"
+                },
+                "dataSourceId": {
+                  "type": "string",
+                  "title": "Data source ID"
+                },
+                "filter": {
+                  "type": "object",
+                  "title": "Filter",
+                  "default": {},
+                  "additionalProperties": true
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId",
+                "dataSourceId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "notion"
+            ],
+            "capabilities": [
+              "credential_operations:notion",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/notion.data_source_page_changed.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "page",
+                "label": "Page",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "notion",
+                "permissions": [
+                  "content.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "notion.query_data_source",
+            "nodeVersion": 1,
+            "displayName": "Query Notion Data Source",
+            "description": "Queries pages in a Notion data source.",
+            "category": "Data",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "notion"
+                },
+                "dataSourceId": {
+                  "type": "string",
+                  "title": "Data source ID"
+                },
+                "filter": {
+                  "type": "object",
+                  "title": "Filter",
+                  "default": {},
+                  "additionalProperties": true
+                },
+                "sorts": {
+                  "type": "array",
+                  "title": "Sorts",
+                  "items": {
+                    "type": "object"
+                  },
+                  "default": []
+                },
+                "pageSize": {
+                  "type": "integer",
+                  "title": "Maximum results",
+                  "minimum": 1,
+                  "maximum": 100,
+                  "default": 100
+                }
+              },
+              "required": [
+                "connectionId",
+                "dataSourceId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "notion"
+            ],
+            "capabilities": [
+              "credential_operations:notion",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/notion.query_data_source.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "notion",
+                "permissions": [
+                  "content.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "notion.get_page",
+            "nodeVersion": 1,
+            "displayName": "Get Notion Page",
+            "description": "Gets a page and its properties.",
+            "category": "Data",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "notion"
+                },
+                "pageId": {
+                  "type": "string",
+                  "title": "Page ID"
+                }
+              },
+              "required": [
+                "connectionId",
+                "pageId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "notion"
+            ],
+            "capabilities": [
+              "credential_operations:notion",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/notion.get_page.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "notion",
+                "permissions": [
+                  "content.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "notion.create_page",
+            "nodeVersion": 1,
+            "displayName": "Create Notion Page",
+            "description": "Creates a page in a data source or under a page.",
+            "category": "Data",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "notion"
+                },
+                "parentId": {
+                  "type": "string",
+                  "title": "Parent page or data source ID"
+                },
+                "parentType": {
+                  "type": "string",
+                  "title": "Parent type",
+                  "enum": [
+                    "page_id",
+                    "data_source_id"
+                  ],
+                  "default": "data_source_id"
+                },
+                "properties": {
+                  "type": "object",
+                  "title": "Properties",
+                  "default": {},
+                  "additionalProperties": true
+                },
+                "children": {
+                  "type": "array",
+                  "title": "Content blocks",
+                  "items": {
+                    "type": "object"
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "connectionId",
+                "parentId",
+                "properties"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "notion"
+            ],
+            "capabilities": [
+              "credential_operations:notion",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/notion.create_page.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "notion",
+                "permissions": [
+                  "content.insert"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "notion.update_page",
+            "nodeVersion": 1,
+            "displayName": "Update Notion Page",
+            "description": "Updates page properties or archive state.",
+            "category": "Data",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "notion"
+                },
+                "pageId": {
+                  "type": "string",
+                  "title": "Page ID"
+                },
+                "properties": {
+                  "type": "object",
+                  "title": "Properties",
+                  "default": {},
+                  "additionalProperties": true
+                },
+                "archived": {
+                  "type": "boolean",
+                  "title": "Archived",
+                  "default": false
+                }
+              },
+              "required": [
+                "connectionId",
+                "pageId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "notion"
+            ],
+            "capabilities": [
+              "credential_operations:notion",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/notion.update_page.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "notion",
+                "permissions": [
+                  "content.update"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          }
+        ],
+        "credentials": [
+          {
+            "credentialType": "notion",
+            "displayName": "Notion connection",
+            "operations": [
+              "notion.data_source_page_changed",
+              "notion.query_data_source",
+              "notion.get_page",
+              "notion.create_page",
+              "notion.update_page"
+            ],
+            "scopes": [
+              "read_content",
+              "update_content",
+              "insert_content"
+            ],
+            "configurationSchema": {
+              "type": "object",
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": [
+          {
+            "type": "structured_logging"
+          },
+          {
+            "type": "credential_operations",
+            "credentialType": "notion",
+            "operations": [
+              "notion.data_source_page_changed",
+              "notion.query_data_source",
+              "notion.get_page",
+              "notion.create_page",
+              "notion.update_page"
+            ]
+          },
+          {
+            "type": "external_communication"
+          }
+        ],
+        "networkDomains": [],
+        "storageRequirements": {
+          "temporaryBytes": 0,
+          "persistentBytes": 0,
+          "isolateByMajorVersion": false
+        },
+        "migrations": [],
+        "entrypoints": [
+          {
+            "id": "main",
+            "path": "components/main.wasm",
+            "export": "execute"
+          }
+        ],
+        "packageIntegrity": "sha256:1e9cfe9eb72618785cb21a5741de926722dadf3b66f83763711419b608767a39",
+        "signature": {
+          "algorithm": "ed25519",
+          "keyId": "first-party-2026",
+          "value": "kbWKNCfhkOP+O0xJ4Q+lglbCE4UZPp/H+kk0jIfTRJmgwo79UaBNMs+yO3nBqqrwrCDAmppwYGPkw//d9AmaAQ=="
+        },
+        "pricing": {
+          "model": "free"
+        },
+        "privacyPolicy": "https://sndbox.dev/privacy"
+      },
+      "packageFile": "plugins/first-party/dist/com.sndbox.notion-1.0.0.sandbox-plugin"
+    },
+    {
+      "manifest": {
+        "manifestVersion": 2,
+        "pluginId": "com.sndbox.github",
+        "name": "GitHub",
+        "description": "First-party GitHub workflow integration.",
+        "version": "1.0.0",
+        "publisherId": "com.sndbox",
+        "minimumHostVersion": ">=0.8.0-beta.1",
+        "homepage": "https://sndbox.dev/integrations",
+        "documentation": "https://docs.sndbox.dev/integrations",
+        "supportUrl": "https://sndbox.dev/support",
+        "licence": "Proprietary",
+        "categories": [
+          "productivity",
+          "first-party"
+        ],
+        "keywords": [
+          "github",
+          "automation"
+        ],
+        "icon": "assets/icon.svg",
+        "nodes": [
+          {
+            "nodeType": "github.issue_or_pull_request_changed",
+            "nodeVersion": 1,
+            "displayName": "Issue or Pull Request Changed",
+            "description": "Starts when an issue or pull request snapshot changes.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "recordType": {
+                  "type": "string",
+                  "title": "Record type",
+                  "enum": [
+                    "issue",
+                    "pull_request",
+                    "both"
+                  ],
+                  "default": "both"
+                },
+                "state": {
+                  "type": "string",
+                  "title": "State",
+                  "enum": [
+                    "open",
+                    "closed",
+                    "all"
+                  ],
+                  "default": "all"
+                },
+                "labels": {
+                  "type": "array",
+                  "title": "Labels",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "actors": {
+                  "type": "array",
+                  "title": "Actors",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 120
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/github.issue_or_pull_request_changed.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "record",
+                "label": "Issue or pull request",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "issues.read",
+                  "pull_requests.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "github.workflow_run_completed",
+            "nodeVersion": 1,
+            "displayName": "Workflow Run Completed",
+            "description": "Starts when a GitHub Actions run completes.",
+            "category": "Triggers",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "workflow": {
+                  "type": "string",
+                  "title": "Workflow ID or filename"
+                },
+                "branch": {
+                  "type": "string",
+                  "title": "Branch"
+                },
+                "event": {
+                  "type": "string",
+                  "title": "Event"
+                },
+                "conclusions": {
+                  "type": "array",
+                  "title": "Conclusions",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "pollIntervalSeconds": {
+                  "type": "integer",
+                  "title": "Poll interval (seconds)",
+                  "minimum": 60,
+                  "maximum": 300,
+                  "default": 90
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/github.workflow_run_completed.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "polling_trigger",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "run",
+                "label": "Workflow run",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "actions.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "github.get_issue_or_pull_request",
+            "nodeVersion": 1,
+            "displayName": "Get Issue or Pull Request",
+            "description": "Gets a normalized issue or pull request.",
+            "category": "Developer Tools",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/github.get_issue_or_pull_request.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "issues.read",
+                  "pull_requests.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "github.create_issue",
+            "nodeVersion": 1,
+            "displayName": "Create GitHub Issue",
+            "description": "Creates an issue.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "title": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "body": {
+                  "type": "string",
+                  "title": "Body"
+                },
+                "assignees": {
+                  "type": "array",
+                  "title": "Assignees",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "labels": {
+                  "type": "array",
+                  "title": "Labels",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "milestone": {
+                  "type": "integer",
+                  "title": "Milestone number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "title"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.create_issue.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "issues.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.update_issue",
+            "nodeVersion": 1,
+            "displayName": "Update GitHub Issue",
+            "description": "Updates selected issue fields.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Issue number",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "body": {
+                  "type": "string",
+                  "title": "Body"
+                },
+                "state": {
+                  "type": "string",
+                  "title": "State",
+                  "enum": [
+                    "open",
+                    "closed"
+                  ]
+                },
+                "stateReason": {
+                  "type": "string",
+                  "title": "State reason",
+                  "enum": [
+                    "completed",
+                    "not_planned",
+                    "reopened"
+                  ]
+                },
+                "assignees": {
+                  "type": "array",
+                  "title": "Assignees",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "labels": {
+                  "type": "array",
+                  "title": "Labels",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "milestone": {
+                  "type": "integer",
+                  "title": "Milestone number",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.update_issue.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "issues.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.add_comment",
+            "nodeVersion": 1,
+            "displayName": "Add GitHub Comment",
+            "description": "Adds a Markdown comment to an issue or pull request.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Issue or PR number",
+                  "minimum": 1
+                },
+                "body": {
+                  "type": "string",
+                  "title": "Comment"
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number",
+                "body"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.add_comment.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "issues.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.create_pull_request",
+            "nodeVersion": 1,
+            "displayName": "Create Pull Request",
+            "description": "Creates a pull request.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "head": {
+                  "type": "string",
+                  "title": "Head branch"
+                },
+                "base": {
+                  "type": "string",
+                  "title": "Base branch"
+                },
+                "title": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "body": {
+                  "type": "string",
+                  "title": "Body"
+                },
+                "draft": {
+                  "type": "boolean",
+                  "title": "Draft",
+                  "default": false
+                },
+                "maintainerCanModify": {
+                  "type": "boolean",
+                  "title": "Maintainers can modify",
+                  "default": true
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "head",
+                "base",
+                "title"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.create_pull_request.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "pull_requests.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.update_pull_request",
+            "nodeVersion": 1,
+            "displayName": "Update Pull Request",
+            "description": "Updates selected pull-request fields.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Pull request number",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "title": "Title"
+                },
+                "body": {
+                  "type": "string",
+                  "title": "Body"
+                },
+                "state": {
+                  "type": "string",
+                  "title": "State",
+                  "enum": [
+                    "open",
+                    "closed"
+                  ]
+                },
+                "base": {
+                  "type": "string",
+                  "title": "Base branch"
+                },
+                "maintainerCanModify": {
+                  "type": "boolean",
+                  "title": "Maintainers can modify",
+                  "default": true
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.update_pull_request.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "pull_requests.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.request_reviewers",
+            "nodeVersion": 1,
+            "displayName": "Request Pull Request Reviewers",
+            "description": "Requests reviews from users or teams and sends GitHub notifications.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Pull request number",
+                  "minimum": 1
+                },
+                "reviewers": {
+                  "type": "array",
+                  "title": "User reviewers",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                },
+                "teamReviewers": {
+                  "type": "array",
+                  "title": "Team reviewers",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.request_reviewers.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "pull_requests.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.merge_pull_request",
+            "nodeVersion": 1,
+            "displayName": "Merge Pull Request",
+            "description": "Merges a pull request only when its expected head SHA still matches.",
+            "category": "Developer Tools",
+            "riskLevel": "critical",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "number": {
+                  "type": "integer",
+                  "title": "Pull request number",
+                  "minimum": 1
+                },
+                "expectedHeadSha": {
+                  "type": "string",
+                  "title": "Expected head SHA",
+                  "minLength": 7
+                },
+                "mergeMethod": {
+                  "type": "string",
+                  "title": "Merge method",
+                  "enum": [
+                    "merge",
+                    "squash",
+                    "rebase"
+                  ],
+                  "default": "squash"
+                },
+                "commitTitle": {
+                  "type": "string",
+                  "title": "Commit title"
+                },
+                "commitMessage": {
+                  "type": "string",
+                  "title": "Commit message"
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "number",
+                "expectedHeadSha"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.merge_pull_request.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "contents.write",
+                  "pull_requests.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "destructive_or_high_impact"
+          },
+          {
+            "nodeType": "github.get_workflow_run",
+            "nodeVersion": 1,
+            "displayName": "Get Workflow Run",
+            "description": "Gets a GitHub Actions workflow run.",
+            "category": "Developer Tools",
+            "riskLevel": "low",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "runId": {
+                  "type": "integer",
+                  "title": "Run ID",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "runId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "safe",
+            "idempotencySupport": "read_only",
+            "documentation": "docs/github.get_workflow_run.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "actions.read"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "read"
+          },
+          {
+            "nodeType": "github.dispatch_workflow",
+            "nodeVersion": 1,
+            "displayName": "Dispatch GitHub Workflow",
+            "description": "Dispatches a workflow and reports acceptance without inventing a run ID.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "workflow": {
+                  "type": "string",
+                  "title": "Workflow ID or filename"
+                },
+                "ref": {
+                  "type": "string",
+                  "title": "Git ref"
+                },
+                "inputs": {
+                  "type": "object",
+                  "title": "Workflow inputs",
+                  "default": {},
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "workflow",
+                "ref"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.dispatch_workflow.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "actions.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          },
+          {
+            "nodeType": "github.cancel_workflow_run",
+            "nodeVersion": 1,
+            "displayName": "Cancel Workflow Run",
+            "description": "Cancels a queued or in-progress GitHub Actions run.",
+            "category": "Developer Tools",
+            "riskLevel": "medium",
+            "inputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "outputSchema": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "configurationSchema": {
+              "type": "object",
+              "properties": {
+                "connectionId": {
+                  "type": "string",
+                  "title": "Connection",
+                  "format": "connection",
+                  "x-sndbox-provider": "github_app"
+                },
+                "repository": {
+                  "type": "string",
+                  "title": "Repository",
+                  "description": "owner/repository"
+                },
+                "runId": {
+                  "type": "integer",
+                  "title": "Run ID",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "connectionId",
+                "repository",
+                "runId"
+              ],
+              "additionalProperties": false
+            },
+            "credentialRequirements": [
+              "github_app"
+            ],
+            "capabilities": [
+              "credential_operations:github_app",
+              "structured_logging",
+              "external_communication"
+            ],
+            "timeoutMs": 30000,
+            "retryBehavior": "idempotency_required",
+            "idempotencySupport": "keyed",
+            "documentation": "docs/github.cancel_workflow_run.md",
+            "migrationHandlers": [],
+            "executionEntrypoint": "main",
+            "kind": "action",
+            "inputPorts": [
+              {
+                "key": "input",
+                "label": "Input",
+                "type": "object"
+              }
+            ],
+            "outputPorts": [
+              {
+                "key": "result",
+                "label": "Result",
+                "type": "object"
+              }
+            ],
+            "connectionRequirements": [
+              {
+                "reference": "connection",
+                "provider": "github_app",
+                "permissions": [
+                  "actions.write"
+                ],
+                "required": true
+              }
+            ],
+            "fileInputs": [],
+            "placements": [
+              "desktop",
+              "self_hosted"
+            ],
+            "externalEffect": "external_write"
+          }
+        ],
+        "credentials": [
+          {
+            "credentialType": "github_app",
+            "displayName": "GitHub connection",
+            "operations": [
+              "github.issue_or_pull_request_changed",
+              "github.workflow_run_completed",
+              "github.get_issue_or_pull_request",
+              "github.create_issue",
+              "github.update_issue",
+              "github.add_comment",
+              "github.create_pull_request",
+              "github.update_pull_request",
+              "github.request_reviewers",
+              "github.merge_pull_request",
+              "github.get_workflow_run",
+              "github.dispatch_workflow",
+              "github.cancel_workflow_run"
+            ],
+            "scopes": [
+              "metadata:read",
+              "issues:write",
+              "pull_requests:write",
+              "actions:write",
+              "contents:write"
+            ],
+            "configurationSchema": {
+              "type": "object",
+              "additionalProperties": false
+            }
+          }
+        ],
+        "capabilities": [
+          {
+            "type": "structured_logging"
+          },
+          {
+            "type": "credential_operations",
+            "credentialType": "github_app",
+            "operations": [
+              "github.issue_or_pull_request_changed",
+              "github.workflow_run_completed",
+              "github.get_issue_or_pull_request",
+              "github.create_issue",
+              "github.update_issue",
+              "github.add_comment",
+              "github.create_pull_request",
+              "github.update_pull_request",
+              "github.request_reviewers",
+              "github.merge_pull_request",
+              "github.get_workflow_run",
+              "github.dispatch_workflow",
+              "github.cancel_workflow_run"
+            ]
+          },
+          {
+            "type": "external_communication"
+          }
+        ],
+        "networkDomains": [],
+        "storageRequirements": {
+          "temporaryBytes": 0,
+          "persistentBytes": 0,
+          "isolateByMajorVersion": false
+        },
+        "migrations": [],
+        "entrypoints": [
+          {
+            "id": "main",
+            "path": "components/main.wasm",
+            "export": "execute"
+          }
+        ],
+        "packageIntegrity": "sha256:9ee25719f0c889f0cf252bf31856f7220b9f80910574b10558c48a2c83e82ecc",
+        "signature": {
+          "algorithm": "ed25519",
+          "keyId": "first-party-2026",
+          "value": "EbM2a1s7BJKySSs5/i85hqw3a4f+SNUBfKvtbDL+v+QIekxoYBnlAL7K+Y3DigJD9XIAbqkmvxlVSqF23DHUCw=="
+        },
+        "pricing": {
+          "model": "free"
+        },
+        "privacyPolicy": "https://sndbox.dev/privacy"
+      },
+      "packageFile": "plugins/first-party/dist/com.sndbox.github-1.0.0.sandbox-plugin"
+    }
+  ]
+}

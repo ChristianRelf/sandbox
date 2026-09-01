@@ -1,11 +1,14 @@
 mod account_auth;
+mod ai_builder;
 mod browser_sidecar;
+mod bundled_plugins;
 mod commands;
 mod credential_vault;
 mod integrations;
 mod marketplace;
 mod oauth;
 mod plugin_manager;
+mod provider_adapter;
 pub mod remote_runner;
 mod runner;
 mod sync_crypto;
@@ -238,6 +241,7 @@ pub struct AppState {
     pub credential_vault: Arc<dyn CredentialVault>,
     pub data_dir: std::path::PathBuf,
     pub plugin_manager: plugin_manager::PluginManager,
+    pub provider_adapter: Arc<provider_adapter::ProviderOperationAdapter>,
     pub sync_crypto: sync_crypto::WorkflowSyncCrypto,
     pub pending_deep_links: Arc<Mutex<Vec<String>>>,
 }
@@ -268,11 +272,24 @@ pub fn run() {
             let browser_sidecar =
                 BrowserSidecar::new(app.handle()).map_err(|error| error.to_string())?;
             let credential_vault: Arc<dyn CredentialVault> = Arc::new(OsCredentialVault::new());
-            let plugin_manager = plugin_manager::PluginManager::new(
+            let provider_adapter = Arc::new(
+                provider_adapter::ProviderOperationAdapter::new(
+                    database.clone(),
+                    credential_vault.clone(),
+                )
+                .map_err(|error| error.to_string())?,
+            );
+            let plugin_manager = plugin_manager::PluginManager::with_host_services(
                 database.clone(),
                 data_dir.join("plugins").join("packages"),
+                Arc::new(
+                    sandbox_plugin_runtime::ReqwestTransport::new()
+                        .map_err(|error| error.to_string())?,
+                ),
+                provider_adapter.clone(),
             )
             .map_err(|error| error.to_string())?;
+            bundled_plugins::install(&plugin_manager).map_err(|error| error.to_string())?;
             let sync_crypto = sync_crypto::WorkflowSyncCrypto::new(credential_vault.clone());
             let pending_deep_links = Arc::new(Mutex::new(
                 app.deep_link()
@@ -306,6 +323,7 @@ pub fn run() {
                 credential_vault,
                 data_dir,
                 plugin_manager,
+                provider_adapter,
                 sync_crypto,
                 pending_deep_links,
             };
@@ -396,14 +414,19 @@ pub fn run() {
             commands::stop_browser_recording,
             commands::test_browser_locator,
             commands::list_connections,
+            commands::create_file_grant,
             commands::create_connection,
             commands::rename_connection,
             commands::reconnect_connection,
             commands::test_connection,
+            ai_builder::build_workflow_with_ai,
             commands::revoke_connection,
             commands::delete_connection,
             commands::workflows_using_connection,
             commands::start_gmail_oauth,
+            commands::start_integration_oauth,
+            commands::list_integration_resources,
+            commands::configure_github_installation,
             commands::account_status,
             commands::start_account_auth,
             commands::sign_out_account,

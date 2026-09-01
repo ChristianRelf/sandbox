@@ -107,6 +107,46 @@ impl PluginManager {
         self.inspect_bytes(bytes, trust)
     }
 
+    /// Installs a package compiled into the signed desktop distribution. The
+    /// package still goes through the normal digest, Ed25519, manifest, and
+    /// revocation checks; only the permission approval is automatic because
+    /// these exact bytes are part of the host release.
+    pub fn install_bundled(
+        &self,
+        bytes: &'static [u8],
+        publisher_id: &str,
+        key_id: &str,
+        publisher_public_key_pem: &str,
+    ) -> Result<InstalledPlugin, EngineError> {
+        let inspection = self.inspect_bytes(
+            bytes.to_vec(),
+            PackageTrustMetadata {
+                publisher_id: publisher_id.to_string(),
+                key_id: key_id.to_string(),
+                publisher_public_key_pem: publisher_public_key_pem.to_string(),
+                owner_type: "personal".into(),
+                owner_id: "local".into(),
+                source: "private".into(),
+            },
+        )?;
+        let installed = self.install_inspected(&inspection.inspection_id)?;
+        let approved = self.database.approve_plugin_permissions(
+            &installed.plugin_id,
+            &installed.version,
+            &installed.package_integrity,
+            &installed.owner_type,
+            &installed.owner_id,
+        )?;
+        self.database.set_plugin_enabled(
+            &approved.plugin_id,
+            &approved.version,
+            &approved.package_integrity,
+            &approved.owner_type,
+            &approved.owner_id,
+            true,
+        )
+    }
+
     pub fn inspect_bytes(
         &self,
         bytes: Vec<u8>,
@@ -297,6 +337,16 @@ impl PluginManager {
                 ))
             })?
             .clone();
+        if !matches!(
+            definition.external_effect,
+            None | Some(sandbox_plugin_runtime::ExternalEffect::Read)
+        ) && !workflow.settings.permissions.external_data_write_permitted
+        {
+            return Err(EngineError::Permission(format!(
+                "{} requires external data write approval before it can run.",
+                node.name
+            )));
+        }
         if definition
             .capabilities
             .iter()
@@ -331,9 +381,35 @@ impl PluginManager {
             .map_err(plugin_execution)?;
         let idempotency_key = format!("{execution_id}-{}", node.id);
         let mut guest_input = input.as_object().cloned().unwrap_or_default();
+        guest_input.insert("kind".into(), Value::String("action".into()));
+        guest_input.insert("nodeType".into(), Value::String(node.node_type.clone()));
         guest_input.insert("configuration".into(), node.configuration.clone());
         guest_input.insert("input".into(), input);
-        guest_input.insert("idempotencyKey".into(), Value::String(idempotency_key));
+        guest_input.insert("idempotencyKey".into(), Value::String(idempotency_key.clone()));
+        guest_input.insert(
+            "connectionReferences".into(),
+            serde_json::json!(&pin.credential_references),
+        );
+        guest_input.insert(
+            "execution".into(),
+            serde_json::json!({
+                "executionId": execution_id,
+                "workflowId": workflow.id,
+                "nodeId": node.id,
+                "idempotencyKey": idempotency_key,
+            }),
+        );
+        let file_grants = definition
+            .file_inputs
+            .iter()
+            .filter_map(|definition| {
+                node.configuration
+                    .get(&definition.key)
+                    .and_then(Value::as_str)
+                    .map(|value| Value::String(value.to_string()))
+            })
+            .collect();
+        guest_input.insert("fileGrants".into(), Value::Array(file_grants));
         let guest_input = Value::Object(guest_input);
         let storage_execution_id = format!("{execution_id}:{}", node.id);
         let mut context = ExecutionContext::from_manifest(

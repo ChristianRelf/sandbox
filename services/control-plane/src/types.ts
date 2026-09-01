@@ -90,6 +90,18 @@ export type GovernancePolicies = Record<string, unknown>;
 export interface WorkspaceMemberRecord { accountId: string; email: string; displayName: string; role: BuiltInRole; joinedAt: string }
 export interface RunnerDeviceRequestInput { runnerId: string; keyId: string; requestTime: string; nonce: string; signatureBase64: string; method: string; path: string; body: unknown }
 export interface RunnerDeviceSession { runnerId: string; accountId: string; workspaceId: string; keyId: string }
+export interface RunnerTriggerEventInput {
+  eventId: string;
+  deploymentId: string;
+  workflowRevisionId: string;
+  nodeId: string;
+  pluginId: string;
+  pluginVersion: string;
+  dedupeKey: string;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+  providerCheckpoint: Record<string, unknown> | null;
+}
 export interface WorkspaceEnvironmentRecord { environmentId: string; environment: "development" | "staging" | "production" }
 export interface SharedConnectionRecord { id: string; workspaceId: string; environmentId: string; provider: string; displayName: string; accountIdentity: string | null; grantedScopes: string[]; permittedWorkflowIds: string[]; permittedRoleIds: string[]; health: string; expiresAt: string | null; lastUsedAt: string | null; createdBy: string; approvalRequirements: Record<string, unknown> }
 export interface PluginBillingPlan { pluginId: string; planId: string; stripePriceId: string; mode: "payment" | "subscription"; offlineGraceDays: number; seatAllowance: number | null; customerId: string | null }
@@ -148,6 +160,7 @@ export interface ControlPlaneRepository {
   recordRunnerHeartbeat(device: RunnerDeviceSession, currentWorkload: number, status: "online" | "paused" | "draining" | "maintenance"): Promise<RunnerRecord>;
   dequeueRunnerCommands(device: RunnerDeviceSession, limit: number): Promise<RunnerCommand[]>;
   updateRunnerCommandStatus(device: RunnerDeviceSession, commandId: string, status: "accepted" | "rejected" | "completed", resultSummary: Record<string, unknown> | null): Promise<boolean>;
+  recordRunnerTriggerEvents(device: RunnerDeviceSession, events: RunnerTriggerEventInput[]): Promise<{ acceptedEventIds: string[]; duplicateEventIds: string[] }>;
   recordRunSummary(device: RunnerDeviceSession, summary: RunSummary): Promise<void>;
   listWorkspaceActivity(actor: AuthenticatedSession, workspaceId: string, limit: number): Promise<{ runners: RunnerRecord[]; runs: RunSummary[]; pendingApprovalCount: number; webhookFailureCount: number }>;
   listDeployments(actor: AuthenticatedSession, workspaceId: string): Promise<DeploymentRecord[]>;
