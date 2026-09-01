@@ -18,3 +18,4 @@ screenshots/
 vite.config.js
 vite.config.d.ts
 **/.env
+deploy/digitalocean/discord-changelog-bot.env

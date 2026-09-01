@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseVersion = "0.7.3-beta.1";
+const releaseVersion = "0.7.4-beta.1";
 const escapedReleaseVersion = releaseVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe("v0.7.3 beta release compatibility", () => {
+describe("v0.7.4 beta release compatibility", () => {
   it("keeps first-party surfaces and runtime components on one beta version", () => {
     const packages = [
       "package.json",
@@ -88,6 +88,7 @@ describe("v0.7.3 beta release compatibility", () => {
     expect(workflow).toContain("services/hosted-runner/Dockerfile");
     expect(workflow).toContain("services/browser-worker/Dockerfile");
     expect(workflow).toContain("services/control-plane/Dockerfile");
+    expect(workflow).toContain("examples/discord-changelog-bot/Dockerfile");
     expect(workflow).not.toContain("apps/docs/Dockerfile");
     expect(workflow).toContain("apps/web/Dockerfile");
     expect(workflow).toContain("needs: [verify-release, desktop-windows, agent-linux, containers]");
@@ -145,6 +146,8 @@ describe("v0.7.3 beta release compatibility", () => {
     expect(read("services/browser-worker/Dockerfile")).toContain("npm prune --omit=dev");
     expect(read("services/control-plane/Dockerfile")).toContain("npm ci --omit=dev");
     expect(read("services/control-plane/Dockerfile")).toContain("/source/services/control-plane/node_modules ./services/control-plane/node_modules");
+    expect(read("examples/discord-changelog-bot/Dockerfile")).toContain("npm ci --omit=dev");
+    expect(read("examples/discord-changelog-bot/.dockerignore")).toContain("node_modules/");
     expect(read("services/control-plane/Dockerfile")).toContain("services/control-plane/db ./services/control-plane/db");
   });
 
@@ -174,7 +177,7 @@ describe("v0.7.3 beta release compatibility", () => {
 
     const deployScript = read("deploy/digitalocean/deploy.sh");
     expect(deployScript).toContain("Deployment failed; restoring the previous public-site version.");
-    expect(deployScript).toContain("services=(website account caddy)");
+    expect(deployScript).toContain("services=(website account caddy discord-changelog-bot)");
     expect(deployScript).toContain("pull account >/dev/null 2>&1");
     expect(deployScript).toContain("OIDC_REDIRECT_URI OIDC_AUDIENCE");
     expect(deployScript).toContain("up -d --no-deps caddy");

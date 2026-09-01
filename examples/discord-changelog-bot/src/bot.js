@@ -1,4 +1,5 @@
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events, GatewayIntentBits, PermissionFlagsBits } from "discord.js";
+import { writeFile } from "node:fs/promises";
 import { buildReleaseMessage } from "./format.js";
 import { chooseReleasesToPost, fetchReleases } from "./github.js";
 import { loadState, rememberReleases, saveState } from "./state.js";
@@ -50,18 +51,44 @@ export function createBot(config, dependencies = {}) {
   }
 
   async function postRelease(release) {
-    const channel = await client.channels.fetch(config.channelId);
-    if (!channel || typeof channel.send !== "function") {
-      throw new Error(`Discord channel ${config.channelId} is not a sendable text channel.`);
-    }
+    const channel = await fetchTargetChannel();
     await channel.send(buildReleaseMessage(release, config.repository.fullName));
     console.log(`[${new Date().toISOString()}] Posted ${release.tag} to channel ${config.channelId}.`);
   }
 
+  async function fetchTargetChannel() {
+    const channel = await client.channels.fetch(config.channelId);
+    if (!channel || typeof channel.send !== "function") {
+      throw new Error(`Discord channel ${config.channelId} is not a sendable text channel.`);
+    }
+    if (typeof channel.permissionsFor === "function") {
+      const permissions = channel.permissionsFor(client.user);
+      const requiredPermissions = [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.AttachFiles,
+      ];
+      if (permissions && !permissions.has(requiredPermissions)) {
+        throw new Error(`The bot is missing required permissions in Discord channel ${config.channelId}.`);
+      }
+    }
+    return channel;
+  }
+
   client.once(Events.ClientReady, async (readyClient) => {
-    console.log(`Logged in as ${readyClient.user.tag}; watching ${config.repository.fullName}.`);
-    await poll();
-    if (!stopped) timer = setInterval(() => void poll(), config.pollIntervalMs);
+    try {
+      await fetchTargetChannel();
+      console.log(`Logged in as ${readyClient.user.tag}; watching ${config.repository.fullName}.`);
+      await poll();
+      if (config.healthFile) await writeFile(config.healthFile, `${new Date().toISOString()}\n`, "utf8");
+      if (!stopped) timer = setInterval(() => void poll(), config.pollIntervalMs);
+    } catch (error) {
+      console.error("Bot startup failed:", error);
+      stopped = true;
+      client.destroy();
+      process.exitCode = 1;
+    }
   });
   client.on(Events.Error, (error) => console.error("Discord client error:", error));
 

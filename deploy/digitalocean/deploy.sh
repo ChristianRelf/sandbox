@@ -35,7 +35,16 @@ release_manifest_url() {
   printf 'https://github.com/ChristianRelf/sandbox/releases/download/v%s/release-manifest.json' "$1"
 }
 compose=(docker compose --env-file .env -f compose.yml)
-services=(website account caddy)
+services=(website account caddy discord-changelog-bot)
+
+if [[ ! -f discord-changelog-bot.env ]]; then
+  echo "discord-changelog-bot.env must be installed by the deployment workflow before deploying." >&2
+  exit 1
+fi
+if ! grep -Eq '^DISCORD_TOKEN=.+' discord-changelog-bot.env || ! grep -Eq '^DISCORD_CHANNEL_ID=[0-9]{17,20}$' discord-changelog-bot.env; then
+  echo "discord-changelog-bot.env is missing a valid DISCORD_TOKEN or DISCORD_CHANNEL_ID." >&2
+  exit 1
+fi
 
 for variable in OIDC_AUTHORIZE_URL OIDC_TOKEN_URL OIDC_CLIENT_ID OIDC_REDIRECT_URI OIDC_AUDIENCE; do
   if ! grep -Eq "^${variable}=.+" .env || grep -Eq "^${variable}=.*YOUR_" .env; then

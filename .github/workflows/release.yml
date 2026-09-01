@@ -223,21 +223,31 @@ jobs:
         include:
           - name: server-runner
             dockerfile: agents/server/Dockerfile
+            context: .
             platforms: linux/amd64,linux/arm64
           - name: hosted-runner
             dockerfile: services/hosted-runner/Dockerfile
+            context: .
             platforms: linux/amd64,linux/arm64
           - name: browser-worker
             dockerfile: services/browser-worker/Dockerfile
+            context: .
             platforms: linux/amd64
           - name: control-plane
             dockerfile: services/control-plane/Dockerfile
+            context: .
             platforms: linux/amd64,linux/arm64
           - name: marketing
             dockerfile: apps/marketing/Dockerfile
+            context: .
             platforms: linux/amd64,linux/arm64
           - name: account
             dockerfile: apps/web/Dockerfile
+            context: .
+            platforms: linux/amd64,linux/arm64
+          - name: discord-changelog-bot
+            dockerfile: examples/discord-changelog-bot/Dockerfile
+            context: examples/discord-changelog-bot
             platforms: linux/amd64,linux/arm64
     permissions:
       contents: read
@@ -264,7 +274,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: ${{ needs.verify-release.outputs.prerelease == 'true' && 'linux/amd64' || matrix.platforms }}
           push: true

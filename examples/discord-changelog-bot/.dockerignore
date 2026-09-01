@@ -1,0 +1,7 @@
+node_modules/
+.env
+.data/
+assets/
+test/
+README.md
+npm-debug.log*

@@ -27,6 +27,9 @@ export function loadConfig(env = process.env, workingDirectory = process.cwd()) 
     includePrereleases: boolean(env.INCLUDE_PRERELEASES, true, "INCLUDE_PRERELEASES"),
     postLatestOnStart: boolean(env.POST_LATEST_ON_START, true, "POST_LATEST_ON_START"),
     stateFile: resolve(workingDirectory, optional(env.STATE_FILE) ?? ".data/state.json"),
+    healthFile: optional(env.HEALTH_FILE)
+      ? resolve(workingDirectory, optional(env.HEALTH_FILE))
+      : undefined,
   });
 }
 

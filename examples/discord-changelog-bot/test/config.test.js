@@ -17,6 +17,7 @@ test("loadConfig supplies safe polling defaults", () => {
   assert.equal(config.pollIntervalMs, 300_000);
   assert.equal(config.includePrereleases, true);
   assert.equal(config.postLatestOnStart, true);
+  assert.equal(config.healthFile, undefined);
 });
 
 test("loadConfig rejects polling that would exhaust the GitHub API limit", () => {

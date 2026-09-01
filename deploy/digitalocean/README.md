@@ -37,8 +37,10 @@ Create a GitHub environment named `digitalocean-beta` and add these secrets:
 | `DROPLET_HOST` | The Droplet's public IPv4 address or hostname. |
 | `DROPLET_SSH_PRIVATE_KEY` | A dedicated unencrypted SSH private key whose public key was installed during setup. |
 | `DROPLET_SSH_KNOWN_HOSTS` | The Droplet's complete `known_hosts` line. Obtain the key with `ssh-keyscan`, but compare its fingerprint against the DigitalOcean console before trusting it. |
+| `DISCORD_BOT_TOKEN` | The Discord changelog bot token. The workflow installs it in a mode-`0600` runtime file on the Droplet. |
+| `DISCORD_CHANNEL_ID` | The 17-20 digit channel ID that receives release announcements. This may instead be an environment variable. |
 
-The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` default to `root` and `/opt/sandbox`. The workflow validates the host key, uploads only this deployment bundle, authenticates to GHCR with its short-lived GitHub token, pulls the selected immutable version, and waits for the website and account health checks. Existing `.env`, `runner.toml`, data, automation files, and Docker volumes are not overwritten.
+The optional environment variables `DROPLET_USER` and `DROPLET_DEPLOY_PATH` default to `root` and `/opt/sandbox`. The workflow validates the host key, uploads only this deployment bundle, installs the Discord bot's dedicated runtime environment file, authenticates to GHCR with its short-lived GitHub token, pulls the selected immutable version, and waits for the services and website/account health checks. Existing `.env`, `runner.toml`, data, automation files, and Docker volumes are not overwritten.
 
 Before the first deployment, configure `CONTROL_PLANE_URL`, `OIDC_AUTHORIZE_URL`, `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, and `OIDC_AUDIENCE` in `/opt/sandbox/.env`. Use a dedicated Auth0 Regular Web Application whose callback URL is `https://app.sndbox.app/auth/callback`; keep the client secret out of Git.
 
@@ -51,6 +53,7 @@ Caddy runs in Compose, obtains and renews TLS certificates automatically, redire
 ```bash
 cd /opt/sandbox
 docker compose ps
+docker compose logs --tail=100 discord-changelog-bot
 curl --fail http://127.0.0.1:3100/
 curl --fail http://127.0.0.1:3300/sign-in
 curl --fail https://sndbox.app/
@@ -59,7 +62,7 @@ curl --fail https://app.sndbox.app/sign-in
 
 The documentation is deployed independently from `apps/docs` through Mintlify. After connecting the repository and custom domain in Mintlify, verify it separately with `curl --fail https://docs.sndbox.app/`.
 
-For a manual deployment without Actions, copy this directory to `/opt/sandbox`, copy `.env.example` to `.env`, authenticate Docker to GHCR if the package is private, and run:
+For a manual deployment without Actions, copy this directory to `/opt/sandbox`, copy `.env.example` to `.env`, create a mode-`0600` `discord-changelog-bot.env` containing the values shown in `discord-changelog-bot.env.example`, authenticate Docker to GHCR if the package is private, and run:
 
 ```bash
 ./deploy.sh 0.7.2-beta.4 website

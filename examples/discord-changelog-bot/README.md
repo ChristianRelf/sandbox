@@ -64,6 +64,9 @@ docker run --env-file .env -v changelog-bot-data:/app/.data discord-changelog-bo
 
 The process must stay running to detect releases. A small VPS, home server,
 container host, or process manager such as systemd/PM2 can keep it online.
+The production Compose deployment sets `HEALTH_FILE=/tmp/ready`; the bot creates
+that marker only after Discord accepts the login and the configured channel can
+be fetched.
 
 ## Verify
 
