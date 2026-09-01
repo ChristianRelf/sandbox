@@ -4,6 +4,7 @@ const config: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
+  allowedDevOrigins: ["127.0.0.1"],
   transpilePackages: ["@sandbox/api-client", "@sandbox/brand", "@sandbox/content", "@sandbox/product-ui"],
   async headers() {
     return [{ source: "/(.*)", headers: [

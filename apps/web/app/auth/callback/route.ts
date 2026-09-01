@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeReturnTo, sessionCookie } from "../../../lib/auth";
+import { publicAppOrigin } from "../../../lib/public-origin";
 
 export async function GET(request:NextRequest) {
   const state=request.nextUrl.searchParams.get("state"),code=request.nextUrl.searchParams.get("code");
@@ -16,7 +17,7 @@ export async function GET(request:NextRequest) {
     console.warn("Account session rejected by the control plane",{status:profile.status,reason,message:typeof failure?.error?.message==="string"?failure.error.message:undefined,correlationId:typeof failure?.correlationId==="string"?failure.correlationId:profile.headers.get("x-correlation-id")??undefined});
     return NextResponse.json({error:"account_session_rejected",reason},{status:401});
   }
-  const destination=new URL(safeReturnTo(request.cookies.get("sandbox_oidc_return")?.value),request.nextUrl.origin);
+  const destination=new URL(safeReturnTo(request.cookies.get("sandbox_oidc_return")?.value),publicAppOrigin(required("OIDC_REDIRECT_URI")));
   const response=NextResponse.redirect(destination);
   response.cookies.set(sessionCookie,token.access_token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:typeof token.expires_in==="number"?Math.min(Math.max(token.expires_in,60),28_800):3_600,priority:"high"});
   for(const name of ["sandbox_oidc_state","sandbox_oidc_verifier","sandbox_oidc_return"])response.cookies.set(name,"",{path:"/auth",maxAge:0});
