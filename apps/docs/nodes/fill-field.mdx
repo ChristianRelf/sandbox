@@ -6,7 +6,43 @@ icon: "mouse-pointer-click"
 
 **Node type:** `fill_field` · **Version:** `1` · **Category:** Browser
 
-Enter static or protected data. This node does not declare an external side effect.
+Enter static or protected data. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Enter mapped text into a recorded form control.
+- Resolve a protected value at runtime and keep it redacted from evidence.
+
+## Example: Fill a protected password
+
+Record the password field, map a protected variable to value, clear old content, and mark the input sensitive.
+
+
+```json title="Example settings"
+{
+  "locator": {
+    "primary": {
+      "kind": "label",
+      "value": "Password",
+      "name": "Password"
+    },
+    "alternatives": []
+  },
+  "value": "",
+  "clearExisting": true,
+  "inputDelayMs": 0,
+  "sensitive": true,
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node. The locator is shortened for readability; use the recorder to create the complete structured locator bundle.
+
+
+1. Record the field by label or accessible role.
+2. Map the protected variable instead of storing literal secret text.
+3. Test that logs show redaction and that the page accepted the value.
+
 
 ## Configuration
 
@@ -52,6 +88,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- clearExisting replaces current content; otherwise input is appended using the browser's field behavior.
+- sensitive marks the resolved value for redaction but does not change the destination website's handling of it.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A sensitive field with no protected mapping is intentionally incomplete.
+- Framework-controlled inputs can reformat values; verify the resulting page state instead of assuming keystrokes were accepted.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -61,3 +109,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Forms and uploads](/browser-automation/forms-and-uploads)
+- [Secrets and connections](/files-and-data/secrets-and-connections)

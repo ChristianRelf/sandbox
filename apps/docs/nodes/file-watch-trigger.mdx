@@ -6,7 +6,35 @@ icon: "zap"
 
 **Node type:** `file_watch_trigger` · **Version:** `1` · **Category:** Triggers
 
-Watch an approved folder. This node does not declare an external side effect.
+Watch an approved folder. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Start an import or filing workflow when a file is created or changed.
+- Watch a narrow approved folder and filter noise with a glob such as *.csv.
+
+## Example: Process new CSV exports
+
+Watch an approved Inbox folder for newly created CSV files, then map the event path into Parse CSV.
+
+
+```json title="Example settings"
+{
+  "folder": "C:\\Reports\\Inbox",
+  "events": [
+    "created"
+  ],
+  "pattern": "*.csv"
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Select the folder with the picker so it enters the permission boundary.
+2. Map the trigger event path to the parser's path input.
+3. Move successfully processed files to a separate archive folder.
+
 
 ## Configuration
 
@@ -48,6 +76,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `event` | `object` | No | File event |
 
+## Execution behavior
+
+- The event object identifies the changed path and event kind.
+- The folder is both configuration and a filesystem permission boundary; typing an unapproved path is not equivalent to selecting it.
+- The editor catalogue declares `event` (object) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Applications can emit several filesystem events for one save; make downstream work idempotent.
+- A broad pattern on a busy folder can create more queued executions than the runner can process.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +97,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Schedules and triggers](/workflows/schedules-and-triggers)
+- [Files and folders](/files-and-data/files-and-folders)

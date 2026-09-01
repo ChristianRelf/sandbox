@@ -9,6 +9,7 @@ import type {
   WorkflowApproval,
   WorkspaceMember,
 } from "@sandbox/api-client";
+import { brand } from "@sandbox/brand";
 import { launchRelease } from "@sandbox/content";
 import {
   Activity,
@@ -901,7 +902,9 @@ async function SupportPage({
         <a href="https://docs.sndbox.app/troubleshooting">
           sndbox troubleshooting
         </a>
-        . Never send credentials or an unreviewed diagnostic bundle.
+        {" "}or join the{" "}
+        <a href={brand.community.discord}>Discord community</a>.{" "}
+        Never send credentials or an unreviewed diagnostic bundle.
       </p>
     </main>
   );

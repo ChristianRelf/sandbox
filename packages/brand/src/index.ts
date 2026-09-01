@@ -10,6 +10,9 @@ export const brand = {
     api: "https://api.sndbox.app",
     identity: "https://identity.sndbox.app",
   },
+  community: {
+    discord: "https://discord.gg/sndbox",
+  },
   desktopScheme: "sandbox",
 } as const;
 

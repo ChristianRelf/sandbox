@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="portal-destinations" aria-label="sndbox destinations">
             <a href={brand.domains.marketing}>Product</a>
             <a href={brand.domains.docs}>Docs <ArrowUpRight aria-hidden="true" size={12} /></a>
+            <a href={brand.community.discord}>Discord <ArrowUpRight aria-hidden="true" size={12} /></a>
           </nav>
           <Suspense fallback={<div className="account-chip" aria-label="Loading account"><User aria-hidden="true" size={13} /></div>}>
             <AccountChip />

@@ -6,7 +6,41 @@ icon: "mouse-pointer-click"
 
 **Node type:** `open_browser` · **Version:** `1` · **Category:** Browser
 
-Start a managed Chromium session. This node does not declare an external side effect.
+Start a managed Chromium session. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Start the managed session required by downstream browser actions.
+- Reuse an isolated profile for sites that need persisted sign-in state.
+
+## Example: Open a headless reporting session
+
+Use a prepared profile, a 1280 by 800 viewport, and a ten-minute session cap.
+
+
+```json title="Example settings"
+{
+  "profileId": "reporting-profile",
+  "headed": false,
+  "initialUrl": "https://portal.example.com",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "defaultTimeoutMs": 30000,
+  "closeAutomatically": true,
+  "keepOpenAfterManualTest": false,
+  "maximumDurationMs": 600000
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Create and test an isolated profile in Settings.
+2. Place Open Browser upstream of every browser action.
+3. Leave automatic cleanup enabled for scheduled and failure paths.
+
 
 ## Configuration
 
@@ -61,6 +95,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The node establishes session context used by downstream browser nodes in the same control path.
+- Manual runs can be headed, while scheduled runs default to headless behavior.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A profile already locked by another browser process may not open.
+- Keeping sessions open after tests is useful for debugging but can leave state that makes later tests unrepresentative.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -70,3 +116,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Profiles and sessions](/browser-automation/profiles-and-sessions)
+- [Browser troubleshooting](/browser-automation/troubleshooting)

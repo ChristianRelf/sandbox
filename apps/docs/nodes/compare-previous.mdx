@@ -6,7 +6,33 @@ icon: "git-branch"
 
 **Node type:** `compare_previous` · **Version:** `1` · **Category:** Logic
 
-Detect a meaningful change and update state after success. This node can change external state or produce an external side effect.
+Detect a meaningful change and update state after success. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Notify only when a polled value changes.
+- Compare normalized text while remembering the latest successful observation.
+
+## Example: Detect a changed page heading
+
+Compare mapped page text after collapsing whitespace.
+
+
+```json title="Example settings"
+{
+  "key": "homepage-heading",
+  "value": "{{nodes.extract.output.value}}",
+  "normalization": "collapse_whitespace"
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Map the current value and choose a durable key.
+2. Connect changed to a Condition node.
+3. Send notifications only from the true branch.
+
 
 ## Configuration
 
@@ -51,6 +77,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `previous` | `any` | No | Previous |
 | `current` | `any` | No | Current |
 
+## Execution behavior
+
+- The first observation is reported separately and is not considered a change.
+- The current value is staged for commit only after the complete workflow succeeds.
+- The editor catalogue declares `changed` (boolean), `previous` (any), `current` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Choose none when whitespace or capitalization is semantically important.
+- Reusing one key for unrelated values makes comparisons misleading.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -60,3 +98,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Workflow state](/files-and-data/workflow-state)
+- [Branches and conditions](/workflows/branches-and-conditions)

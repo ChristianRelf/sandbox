@@ -2,9 +2,16 @@ import { AlertTriangle, Bot, Check, ChevronDown, Plus, Send, Sparkles, X } from 
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { AiWorkflowProposal, ConnectionMetadata, Workflow } from "../types";
+import { AiActivityStatus } from "./AiActivityStatus";
 import { AiConnectionDialog } from "./AiConnectionDialog";
 
 const AI_PROVIDERS = new Set(["openai", "anthropic", "openai_compatible"]);
+const WORKFLOW_ACTIVITY = [
+  "Planning Draft",
+  "Investigating current workflow",
+  "Selecting and connecting nodes",
+  "Writing Code",
+];
 
 interface ChatMessage {
   id: string;
@@ -168,7 +175,7 @@ export function AiWorkflowChat({
             {busy && (
               <div className="ai-message ai-message-assistant">
                 <span className="ai-avatar"><Sparkles size={12} /></span>
-                <div className="ai-thinking"><i /><i /><i /><span>Drafting your workflow…</span></div>
+                <AiActivityStatus active stages={WORKFLOW_ACTIVITY} />
               </div>
             )}
             <div ref={endRef} />

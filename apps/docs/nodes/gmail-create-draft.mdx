@@ -6,7 +6,38 @@ icon: "send"
 
 **Node type:** `gmail_create_draft` · **Version:** `1` · **Category:** Communication
 
-Create an editable draft without sending. This node can change external state or produce an external side effect.
+Create an editable draft without sending. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Prepare an email for human review without sending it.
+- Make an AI- or data-generated response visible in Gmail before delivery.
+
+## Example: Create a reviewed support reply
+
+Map the sender, subject, and generated response into a draft on the original thread.
+
+
+```json title="Example settings"
+{
+  "credentialId": "gmail-support",
+  "to": "{{trigger.email.from}}",
+  "cc": "",
+  "bcc": "",
+  "subject": "Re: {{trigger.email.subject}}",
+  "body": "{{nodes.ai.output.response}}",
+  "htmlBody": "",
+  "replyToMessage": "{{trigger.email.messageId}}"
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Map and validate at least one recipient.
+2. Use replyToMessage when the draft belongs on an existing thread.
+3. Open Gmail and review recipients and content before sending.
+
 
 ## Configuration
 
@@ -56,6 +87,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- Creating a draft changes mailbox state but does not transmit the message to recipients.
+- The connection is resolved by the secure integration host and requires external communication permission.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- When both body and htmlBody are used, verify they communicate the same content.
+- Generated recipients and content still need validation even though the action only creates a draft.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -65,3 +108,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Gmail connection](/connections/gmail)
+- [Permissions](/workflows/permissions)

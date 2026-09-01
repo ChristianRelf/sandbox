@@ -6,7 +6,22 @@ icon: "zap"
 
 **Node type:** `manual_trigger` · **Version:** `1` · **Category:** Triggers
 
-Run from the toolbar. This node does not declare an external side effect.
+Run from the toolbar. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Build and debug a workflow before choosing an automatic trigger.
+- Run an operator-led task where a person should decide exactly when work starts.
+
+## Example: Test a website health check
+
+Use a Manual Trigger while building a flow that requests a health endpoint and branches on the returned status.
+
+
+1. Add Manual Trigger as the first node.
+2. Connect it to HTTP Request, then map the response status into Condition.
+3. Run from the toolbar and inspect every node before replacing the trigger with a schedule.
+
 
 ## Configuration
 
@@ -39,6 +54,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `event` | `object` | No | Event |
 
+## Execution behavior
+
+- The trigger emits the run event and execution context; it does not accept input data.
+- Starting another run still follows the workflow's concurrency and queue settings.
+- The editor catalogue declares `event` (object) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- If Run is unavailable, complete validation errors elsewhere in the workflow.
+- A manual start does not bypass permissions for downstream network, file, command, browser, or communication nodes.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -48,3 +75,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Build your first workflow](/getting-started/first-workflow)
+- [Run locally](/getting-started/run-locally)

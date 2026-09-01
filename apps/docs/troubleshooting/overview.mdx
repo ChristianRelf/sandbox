@@ -6,6 +6,14 @@ icon: "life-buoy"
 
 Start with the failing boundary, not a reinstall.
 
+## First five checks
+
+1. Record the exact workflow revision, execution ID, node, and time.
+2. Decide whether the failure happened during validation, queueing, input resolution, node execution, or evidence retention.
+3. Read the stable error code and redacted resolved input before changing configuration.
+4. Check only the boundary involved: connection, path, domain, browser profile, runner compatibility, or service status.
+5. Reproduce with the smallest safe test and preserve the original failed execution.
+
 <CardGroup cols={2}>
   <Card title="Desktop" icon="monitor" href="/troubleshooting/desktop">Startup, local data, runner, update, and workflow validation.</Card>
   <Card title="Browser" icon="globe" href="/troubleshooting/browser">Engine health, profiles, locators, navigation, and artifacts.</Card>
@@ -16,3 +24,20 @@ Start with the failing boundary, not a reinstall.
 </CardGroup>
 
 For API errors, record the HTTP status, stable `error.code`, and `correlationId`. For a run, record workflow revision, execution ID, failing node, attempt, and the redacted evidence already shown in the inspector.
+
+## Symptom to evidence
+
+| Symptom | Inspect first | Avoid first |
+| --- | --- | --- |
+| Run button unavailable | Workflow validation and incomplete field highlight | Reinstalling the app |
+| Execution stays queued | Runner availability, compatibility, capacity, and queue reason | Editing unrelated nodes |
+| Browser target not found | Current URL, locator attempts, screenshot, and preceding wait | Replacing the locator with broad CSS |
+| Permission denied | Approved revision and exact path/domain/profile/connection boundary | Expanding every permission |
+| API request rejected | Status, stable error code, correlation ID, and request freshness | Retrying a mutating request without idempotency |
+| Result looks stale | Saved execution revision and mapped source snapshot | Assuming the current canvas produced old evidence |
+
+## Preserve a useful report
+
+Include steps to reproduce, expected and observed results, app and runner versions, target environment, and the smallest redacted evidence that demonstrates the failure. Never paste access tokens, cookies, connection secrets, protected variables, raw customer data, or an entire unreviewed trace into an issue.
+
+If the outcome of a send, command, upload, delete, or other mutation is uncertain, stop automatic retries and inspect the destination first. Troubleshooting should not create a second incident.

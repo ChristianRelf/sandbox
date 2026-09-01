@@ -6,7 +6,32 @@ icon: "braces"
 
 **Node type:** `parse_json` · **Version:** `1` · **Category:** Data
 
-Parse JSON text or an approved file. This node does not declare an external side effect.
+Parse JSON text or an approved file. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Convert API, file, or text output into a typed object or array.
+- Validate that a text payload is well-formed JSON before downstream mapping.
+
+## Example: Parse an API payload saved as text
+
+Map the text into content and leave path empty.
+
+
+```json title="Example settings"
+{
+  "path": "",
+  "content": "{\"service\":\"checkout\",\"healthy\":true}"
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Choose content for in-memory text or path for an approved file.
+2. Test with the actual payload.
+3. Select nested values from the value output in later mapping controls.
+
 
 ## Configuration
 
@@ -15,7 +40,7 @@ Parse JSON text or an approved file. This node does not declare an external side
 | `path` | path | `""` | Approved local file or folder path. |
 | `content` | string | `""` | Literal or mapped content. For parser nodes, mapped content takes precedence over the optional file. |
 
-
+<Note>Approved file input must be UTF-8 and defaults to a 10 MB limit. Mapped content is used directly.</Note>
 
 ## Workflow JSON
 
@@ -47,6 +72,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | --- | --- | --- | --- |
 | `value` | `any` | No | Value |
 
+## Execution behavior
+
+- Objects, arrays, strings, numbers, booleans, and null are all valid JSON roots.
+- When both inputs are supplied, content takes precedence over path.
+- The editor catalogue declares `value` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- JavaScript object syntax is not JSON: property names and strings require double quotes.
+- A successful HTTP Request may already return structured body data and need no Parse JSON step.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -56,3 +93,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [JSON data](/files-and-data/json)
+- [Data types](/reference/data-types)

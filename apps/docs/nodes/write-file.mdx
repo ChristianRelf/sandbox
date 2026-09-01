@@ -6,7 +6,34 @@ icon: "terminal"
 
 **Node type:** `write_file` · **Version:** `1` · **Category:** System
 
-Write text to an approved file. This node can change external state or produce an external side effect.
+Write text to an approved file. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Save generated text, JSON, CSV, or code to an approved location.
+- Materialize mapped output for another local tool.
+
+## Example: Write a generated summary
+
+Write mapped text to a new file and create missing parent folders.
+
+
+```json title="Example settings"
+{
+  "path": "C:\\Automation\\output\\summary.txt",
+  "content": "{{nodes.ai.output.response}}",
+  "overwrite": false,
+  "createParents": true
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Choose an approved destination path.
+2. Map text content from the producing node.
+3. Test with overwrite disabled and inspect the returned path and byte count.
+
 
 ## Configuration
 
@@ -52,6 +79,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `path` | `path` | No | Path |
 | `bytes` | `number` | No | Bytes |
 
+## Execution behavior
+
+- The output contains the written trusted path and byte count.
+- createParents affects only missing parent directories; overwrite separately controls replacement of the target file.
+- The editor catalogue declares `path` (path), `bytes` (number) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- The node fails if the file exists and overwrite is false.
+- Validate generated content before writing it to a path consumed by another process.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -61,3 +100,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Files and folders](/files-and-data/files-and-folders)
+- [Permissions](/workflows/permissions)

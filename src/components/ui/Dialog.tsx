@@ -33,7 +33,7 @@ interface DialogProps {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  width?: "small" | "medium" | "large";
+  width?: "small" | "medium" | "large" | "xlarge";
 }
 
 export function Dialog({

@@ -39,6 +39,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { api } from "../api";
+import { isCanvasDoubleClickTarget } from "../canvasInteractions";
 import {
   createNode,
   createPluginNode,
@@ -1100,13 +1101,8 @@ export function WorkflowEditor() {
       >
         <div
           className="canvas-wrap"
-          onDoubleClick={(event) => {
-            if (
-              !(event.target as HTMLElement).classList.contains(
-                "react-flow__pane",
-              )
-            )
-              return;
+          onDoubleClickCapture={(event) => {
+            if (!isCanvasDoubleClickTarget(event.target)) return;
             const position = instance?.screenToFlowPosition({
               x: event.clientX,
               y: event.clientY,

@@ -6,7 +6,39 @@ icon: "globe"
 
 **Node type:** `http_request` · **Version:** `1` · **Category:** Network
 
-Call an HTTP endpoint. This node does not declare an external side effect.
+Call an HTTP endpoint. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Read JSON from an API without opening a browser.
+- Send a bounded JSON request to an approved domain and route on its response.
+
+## Example: Check a JSON health endpoint
+
+Request an endpoint once, retry one transient failure, then use status and body in later nodes.
+
+
+```json title="Example settings"
+{
+  "method": "GET",
+  "url": "https://api.example.com/health",
+  "query": {},
+  "headers": {
+    "Accept": "application/json"
+  },
+  "body": null,
+  "timeoutMs": 10000,
+  "retryCount": 1
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Approve api.example.com during permission review.
+2. Test the node and inspect the actual body shape.
+3. Map status into Condition and selected body fields into later nodes.
+
 
 ## Configuration
 
@@ -21,6 +53,8 @@ Call an HTTP endpoint. This node does not declare an external side effect.
 | `retryCount` | number | `0` | Number of bounded retries after a retryable failure. |
 
 <Note>Authorization and cookie values are redacted from execution data.</Note>
+
+<Note>Retries are capped at 5, timeout is clamped to 100–120000 milliseconds, redirects are limited to 10, and response output is limited to 1 MB.</Note>
 
 ## Workflow JSON
 
@@ -59,6 +93,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `body` | `any` | No | Body |
 | `finalUrl` | `string` | No | Final URL |
 
+## Execution behavior
+
+- Query object values are encoded into the URL; body is intended for POST, PUT, and PATCH.
+- The output includes the numeric status, decoded body, and final URL after redirects.
+- The editor catalogue declares `status` (number), `body` (any), `finalUrl` (string) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A non-success HTTP status can still be a valid HTTP response; branch on status when the workflow requires 2xx.
+- Keep retries low for mutating methods unless the endpoint supports idempotency.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -68,3 +114,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [HTTP requests guide](/files-and-data/http-requests)
+- [Permissions](/workflows/permissions)

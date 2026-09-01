@@ -6,7 +6,41 @@ icon: "send"
 
 **Node type:** `gmail_send_email` · **Version:** `1` · **Category:** Communication
 
-Send only after explicit workflow approval. This node can change external state or produce an external side effect.
+Send only after explicit workflow approval. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Send an approved transactional or notification email from a connected Gmail account.
+- Continue an existing thread after recipient logic has been reviewed.
+
+## Example: Send an approved report
+
+Send a mapped summary and approved attachment to a fixed recipient.
+
+
+```json title="Example settings"
+{
+  "credentialId": "gmail-reports",
+  "to": "ops@example.com",
+  "cc": "",
+  "bcc": "",
+  "subject": "Daily report",
+  "body": "{{nodes.ai.output.response}}",
+  "htmlBody": "",
+  "replyToMessage": "",
+  "attachments": [
+    "{{nodes.write.output.path}}"
+  ]
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Keep recipient logic narrow and visible.
+2. Put a Manual Approval node before Send Email for run-time review when appropriate.
+3. Publish and approve the exact workflow revision before automatic use.
+
 
 ## Configuration
 
@@ -58,6 +92,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The node performs an external communication side effect and requires both general communication permission and revision-bound send approval.
+- Attachments must resolve to approved paths.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Changing recipient logic or other material workflow behavior revokes approval.
+- Retries can duplicate mail unless the surrounding workflow has a deduplication strategy.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -67,3 +113,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Gmail connection](/connections/gmail)
+- [Approvals and publishing](/cloud/approvals-and-publishing)

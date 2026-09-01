@@ -6,7 +6,34 @@ icon: "zap"
 
 **Node type:** `schedule_trigger` · **Version:** `1` · **Category:** Triggers
 
-Run on a local schedule. This node does not declare an external side effect.
+Run on a local schedule. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Run polling, reporting, cleanup, or monitoring flows at a predictable local time.
+- Use a cron expression when the minutes, hourly, and daily presets are not precise enough.
+
+## Example: Create a weekday morning report
+
+The advanced schedule below starts at 09:00 Monday through Friday according to the runner's local clock.
+
+
+```json title="Example settings"
+{
+  "scheduleType": "cron",
+  "every": 15,
+  "time": "09:00",
+  "cron": "0 9 * * 1-5"
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Choose Advanced and enter the cron expression.
+2. Connect the trigger to the report-producing nodes.
+3. Keep the runner online and verify the next due time on the workflow dashboard.
+
 
 ## Configuration
 
@@ -48,6 +75,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `event` | `object` | No | Schedule event |
 
+## Execution behavior
+
+- Schedules are evaluated by the local runner and use its local clock and time zone.
+- A due event enters the queue; concurrency policy determines whether it starts immediately, waits, or is skipped.
+- The editor catalogue declares `event` (object) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Closing sndbox stops local schedules because no background runner remains.
+- After daylight-saving or time-zone changes, verify the displayed next run rather than assuming UTC behavior.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +96,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Schedules and triggers](/workflows/schedules-and-triggers)
+- [Schedules and queue](/execution/schedules-and-queue)

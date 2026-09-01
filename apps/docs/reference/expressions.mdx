@@ -16,6 +16,25 @@ The editor stores typed `InputBinding` records. Template strings are available w
 
 The identifier after `nodes` is the source node ID, not its display label. Later segments select the output value.
 
+Given this output from a node whose ID is `request`:
+
+```json
+{
+  "status": 200,
+  "body": { "service": "checkout", "owners": ["ops", "payments"] }
+}
+```
+
+the paths are:
+
+```text
+{{nodes.request.output.status}}
+{{nodes.request.output.body.service}}
+{{nodes.request.output.body.owners}}
+```
+
+Use the mapping picker for array items and deeply nested objects rather than guessing path syntax. Test the producer first so the picker sees representative output.
+
 ## Trigger data
 
 ```text
@@ -23,6 +42,8 @@ The identifier after `nodes` is the source node ID, not its display label. Later
 ```
 
 Trigger paths depend on the trigger output. New Email returns an `email` object; inspect a real trigger or test result before selecting nested fields.
+
+Manual, schedule, file, and integration triggers expose different event shapes. A template copied between trigger types is not automatically portable.
 
 ## Structured binding
 
@@ -36,6 +57,34 @@ Trigger paths depend on the trigger output. New Email returns an `email` object;
 
 Use `protected_variable` for secrets and `connection` for provider credentials. Do not embed a secret inside a template: the rendered string can become ordinary output.
 
+## Template versus structured binding
+
+Use a template when the destination is text:
+
+```text
+Service {{nodes.request.output.body.service}} returned {{nodes.request.output.status}}.
+```
+
+Use a structured `node_output` binding when the destination should receive the original number, boolean, object, array, or trusted path. Turning a number into a sentence and parsing it back loses type information and makes validation weaker.
+
+| Goal | Preferred binding |
+| --- | --- |
+| Condition compares an HTTP status | `node_output` path `status` |
+| Notification combines prose and values | `template` |
+| Upload uses a Download File result | `node_output` trusted `path` |
+| AI node uses a stored provider credential | `connection` |
+| Fill Field resolves a password | `protected_variable` with Sensitive enabled |
+
 ## Resolution order
 
 For CSV, JSON, and text parsers, mapped/pasted `content` takes precedence over the optional file `path`. For general node fields, the explicit input binding supplies the resolved value used by execution.
+
+## Debug a path
+
+If a value resolves as missing or has the wrong type:
+
+1. Open the producer's successful execution output.
+2. Confirm the source node ID and exact case-sensitive field names.
+3. Check that the producer is upstream on the selected branch.
+4. Reselect the path in the mapping control.
+5. Test missing, null, empty, and normal values before publishing.

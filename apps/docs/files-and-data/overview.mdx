@@ -6,6 +6,17 @@ icon: "database"
 
 sndbox distinguishes ordinary JSON-compatible values from local path and connection references. File nodes establish or preserve a trusted path boundary; data nodes shape, parse, compare, or store values.
 
+## Follow the value, not just the edge
+
+A control edge says when a node may run. A binding says what value it receives. For example, this file-processing sequence needs both:
+
+```text
+Download File → Parse CSV → Condition → Write File
+       path ───────▲           rows ───────▲
+```
+
+Map Download File's trusted `path` output into Parse CSV's `path` input. Then map the parser's `rowCount` into Condition and the desired transformed content into Write File. Canvas proximity and control edges do not perform those mappings automatically.
+
 ## Choose the right node
 
 <CardGroup cols={2}>
@@ -20,6 +31,28 @@ sndbox distinguishes ordinary JSON-compatible values from local path and connect
 
 CSV, JSON, and text parsers accept either an optional approved file or mapped/pasted content. When both exist, mapped content takes precedence. This makes a parser reusable after HTTP, browser extraction, download, or file-read nodes without guessing which source was used.
 
+Use `content` when data is already in memory and `path` when provenance and the file artifact matter. Keep the unused field empty so a reviewer can see the intended source without relying on precedence.
+
 ## Inspect actual types
 
 Test the producer and inspect its output before selecting a nested path. Node reference pages list each typed input and output port generated from the source catalogue.
+
+## Choose storage deliberately
+
+| Need | Use | Avoid |
+| --- | --- | --- |
+| A value only for this run | A mapped node output | Workflow state |
+| A small checkpoint for the next successful run | Get/Set Workflow State or Compare With Previous | A growing history array |
+| Durable local content | Write File inside an approved boundary | Embedding large content in the workflow definition |
+| A credential or webhook URL | A connection or protected variable | A literal, template, Set Data object, or Code source |
+| A browser-generated artifact | Download File or Screenshot trusted path | Reconstructing a path from untrusted page text |
+
+## Safe processing pattern
+
+1. Bound the producer with a timeout or maximum byte size.
+2. Parse into a known structure.
+3. Test empty, malformed, and oversized inputs.
+4. Validate or branch before a write, command, upload, or communication.
+5. Keep only the evidence required by retention policy.
+
+External data remains untrusted after parsing. A valid JSON string can still contain a dangerous command argument, destination path, URL, or message recipient.

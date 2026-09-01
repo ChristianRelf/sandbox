@@ -6,7 +6,34 @@ icon: "terminal"
 
 **Node type:** `move_file` · **Version:** `1` · **Category:** System
 
-Move within approved folders. This node can change external state or produce an external side effect.
+Move within approved folders. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Archive a successfully processed file.
+- Route incoming files into folders based on a condition.
+
+## Example: Archive an imported CSV
+
+Map the watched file path as the source and move it into an approved Processed folder without overwriting.
+
+
+```json title="Example settings"
+{
+  "source": "{{trigger.path}}",
+  "destinationFolder": "C:\\Reports\\Processed",
+  "renameTo": "",
+  "overwrite": false
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Approve both the source boundary and destination folder.
+2. Map the trigger or download path to source.
+3. Place Move File only after parsing and validation succeed.
+
 
 ## Configuration
 
@@ -48,6 +75,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- renameTo changes the final filename while destinationFolder selects its parent.
+- The operation fails on an existing destination unless overwrite is enabled.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- The source may still be locked by the program that created it; wait for the producer to finish.
+- Keep overwrite off unless replacing an existing file is an explicit part of the workflow.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +96,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Files and folders](/files-and-data/files-and-folders)
+- [Permissions](/workflows/permissions)

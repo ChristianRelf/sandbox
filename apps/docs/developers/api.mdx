@@ -6,6 +6,15 @@ icon: "code-xml"
 
 The supported control-plane surface is `/v1`. The checked-in OpenAPI 3.1 document is copied into this Mintlify project during reference generation, and a running control plane serves the same contract at `GET /v1/openapi.json`.
 
+## Request lifecycle
+
+1. Choose the authentication scheme appropriate to a user, service account, or runner.
+2. Generate or reuse a safe correlation ID for one logical operation.
+3. Add an idempotency key to supported mutations before the first attempt.
+4. Send the request within the required freshness window.
+5. Validate the success body or branch on the stable error code.
+6. Retain response metadata needed for retry, audit, and support.
+
 <CardGroup cols={2}>
   <Card title="Authentication" icon="key-round" href="/developers/authentication">Use interactive sessions, scoped bearer credentials, or signed runner requests.</Card>
   <Card title="TypeScript client" icon="braces" href="/developers/typescript-client">Use the repository client for correlation, freshness, idempotency, retries, and typed resources.</Card>
@@ -26,3 +35,39 @@ https://api.sndbox.app
 ```
 
 All normal responses include `x-correlation-id`. Supply your own safe 8–128 character correlation value when you need to join application logs with sndbox audit and support evidence.
+
+```bash title="Read the current account"
+curl --fail-with-body \
+  --request GET \
+  --header "Authorization: Bearer $SNDBOX_ACCESS_TOKEN" \
+  --header "x-correlation-id: docs-account-read-01" \
+  https://api.sndbox.app/v1/account/profile
+```
+
+Use environment or secret-manager injection for the token; do not commit it in a script or paste it into a workflow literal.
+
+## Mutation example
+
+For an endpoint that supports idempotency, create one key for the logical action and reuse that same key when retrying the same request body:
+
+```http
+POST /v1/workflows/{workflowId}/runs
+Authorization: Bearer …
+Idempotency-Key: 01JEXAMPLELOGICALACTION
+x-correlation-id: deploy-2026-09-01-01
+Content-Type: application/json
+
+{"workspaceId":"…","deploymentId":"…","encryptedPayloadReference":"object://…"}
+```
+
+A new idempotency key means a new logical mutation. Do not generate a fresh key on every network retry.
+
+## Handle responses
+
+- Treat unknown successful response fields as additive.
+- Treat unknown enum values as a recoverable compatibility case, not an impossible state.
+- Branch on `error.code`; human-readable messages can change.
+- Log `x-correlation-id`, request method, route template, status, and attempt without logging credentials or sensitive bodies.
+- Retry only when the method, error class, freshness, and idempotency contract allow it.
+
+The generated [API reference](/api-reference) is authoritative for individual paths and schemas. The developer guides explain the cross-operation authentication, error, rate-limit, and retry rules.

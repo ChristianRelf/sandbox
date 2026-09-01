@@ -6,6 +6,20 @@ icon: "server-cog"
 
 The desktop app works without a control-plane deployment. Cloud workspaces require independently deployed services; the account portal does not own API authorization, billing, runner commands, or webhook logic.
 
+## Trust-boundary view
+
+```text
+Public clients ──► Account portal / Control-plane API ──► PostgreSQL + object storage
+                              │
+                              ├──► Scheduler and durable event queue
+                              └──► Outbound-connected runner pools
+                                      ├── Hosted workers
+                                      ├── Managed browser workers
+                                      └── Customer self-hosted runners
+```
+
+The diagram is a responsibility flow, not a recommendation to place every component on one network. Keep public HTTP surfaces, data stores, signing services, workers, and customer runners in separate security boundaries with the minimum required routes.
+
 ## Components
 
 | Component | Responsibility |
@@ -21,6 +35,18 @@ The desktop app works without a control-plane deployment. Cloud workspaces requi
 
 Production control-plane startup requires PostgreSQL, OIDC, transactional email, object-storage signing, package scanning, Stripe configuration, Ed25519 signing keys, a dedicated metrics token, and separate 32-byte encryption keys for each protected class.
 
+## Deployment order
+
+1. Provision PostgreSQL, object storage, identity, mail, payment, scanning, and secret management.
+2. Generate independent signing and encryption keys; record rotation and recovery ownership.
+3. Apply database migrations from the release being deployed.
+4. Start the control plane and verify health from inside its trusted network.
+5. Start scheduler and worker classes at compatible versions.
+6. Pair self-hosted runners outbound and confirm their environment/capability reports.
+7. Expose public routes through TLS, then exercise authentication, a read-only API call, queue delivery, and one bounded execution.
+
+Do not treat a healthy account portal as proof that scheduler delivery, object signing, runner claims, webhooks, or package scanning are healthy.
+
 ## Build and migrate
 
 ```powershell
@@ -31,3 +57,13 @@ npm.cmd run start --workspace @sandbox/control-plane
 ```
 
 Apply migrations before routing traffic. Deploy control plane, scheduler, browser worker, and hosted runner at compatible release versions; drain runners before replacement.
+
+## Operational checks
+
+- Back up PostgreSQL and test restore, including migration compatibility.
+- Alert on queue age, runner capacity, expired leases, failed schedule delivery, signing failures, and repeated authorization denials.
+- Keep metrics authentication separate from user and runner credentials.
+- Test key rotation and incident revocation before an emergency.
+- Preserve correlation IDs across the proxy, control plane, scheduler, and runner logs.
+
+See [Networking](/self-hosting/networking) for ingress and egress, [Updates](/self-hosting/updates) for rollout order, and [Self-hosted runner](/execution/self-hosted-runner) for pairing and hardening.

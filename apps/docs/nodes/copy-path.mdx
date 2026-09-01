@@ -6,7 +6,33 @@ icon: "terminal"
 
 **Node type:** `copy_path` · **Version:** `1` · **Category:** System
 
-Copy within approved folders. This node can change external state or produce an external side effect.
+Copy within approved folders. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Create a backup before a destructive or mutating step.
+- Copy a file or folder between approved local boundaries.
+
+## Example: Back up a configuration folder
+
+Copy a reviewed source folder into a dated backup destination.
+
+
+```json title="Example settings"
+{
+  "source": "C:\\Automation\\config",
+  "destination": "C:\\Automation\\backups\\config-latest",
+  "overwrite": false
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Approve the source and destination boundaries.
+2. Leave overwrite disabled for the first run.
+3. Inspect the destination and copied entry count before relying on the backup.
+
 
 ## Configuration
 
@@ -46,6 +72,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- Files and folders are supported, and the output identifies source, destination, and copied entry count.
+- Replacement is rejected unless overwrite is explicitly enabled.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Copying a folder into itself or a descendant is invalid.
+- Large directory trees can take time and produce many filesystem operations.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -55,3 +93,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Files and folders](/files-and-data/files-and-folders)
+- [Delete File or Folder](/nodes/delete-path)

@@ -6,6 +6,8 @@ icon: "plug-zap"
 
 Connections are stored by the host and referenced by ID from a workflow. Open **Settings → Connections** to add, test, rename, revoke, and inspect the workflows affected by a connection.
 
+The workflow stores a reference such as `credentialId` or `connectionId`, never the API key, OAuth refresh token, or webhook URL itself. At runtime the host resolves that reference only for the operation that declared it.
+
 | Provider | Setup | Implemented nodes |
 | --- | --- | --- |
 | OpenAI | API key and model | AI; also powers AI builder and Code editor |
@@ -20,6 +22,31 @@ Connections are stored by the host and referenced by ID from a workflow. Open **
 </Card>
 
 Connection metadata includes provider, display name, optional account identifier, scopes, creation/last-used/expiry time, and status (`connected`, `expired`, `revoked`, `error`, or `setup_required`). Secret values are not displayed.
+
+## Connection lifecycle
+
+1. **Create:** complete OAuth or enter the credential in Settings, then give the connection a recognizable name.
+2. **Test:** verify the host can authenticate before adding it to an automatic workflow.
+3. **Reference:** select the connection in a node; do not copy credential material into another field.
+4. **Review:** confirm scopes, destination account/workspace, and affected workflows before publishing.
+5. **Rotate or reconnect:** update the host-owned credential while keeping the workflow reference stable where supported.
+6. **Revoke:** stop future resolution immediately, then repair or disable dependent workflows.
+
+## Choose the right connection
+
+Names such as “Gmail” or “Slack” are rarely enough once a user has several accounts. Include the environment and destination in the display name—for example, `Support Gmail · production` or `Ops Slack · staging`. Before a send, test, or scheduled run, verify the account identifier and scopes shown in Settings.
+
+| Status | What to do |
+| --- | --- |
+| `connected` | Test the exact node operation and review its permissions. |
+| `expired` | Reauthorize; do not replace the field with a pasted token. |
+| `revoked` | Select a new approved connection or disable dependent workflows. |
+| `error` | Test the connection and inspect the provider-specific error. |
+| `setup_required` | Finish the provider's authorization flow before running nodes. |
+
+## Data and approval boundary
+
+Using a connection protects credential storage; it does not make the mapped content non-sensitive or the action pre-approved. Prompts and message bodies still go to the selected provider. Drafting, sending, label changes, and webhook posts can require external communication permission, and Send Email additionally uses revision-bound approval.
 
 <Warning>
   Revocation is immediate for future use. Review affected workflows before revoking, then replace their references rather than pasting the credential into node configuration.

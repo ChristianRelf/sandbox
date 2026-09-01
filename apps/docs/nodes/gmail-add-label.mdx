@@ -6,7 +6,38 @@ icon: "send"
 
 **Node type:** `gmail_add_label` · **Version:** `1` · **Category:** Communication
 
-Add or remove message labels. This node can change external state or produce an external side effect.
+Add or remove message labels. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Mark a processed message or move it through a label-based triage system.
+- Add and remove several Gmail labels in one reviewed action.
+
+## Example: Mark a message as processed
+
+Map the triggered message ID, add the Processed label ID, and remove the Inbox label ID.
+
+
+```json title="Example settings"
+{
+  "credentialId": "gmail-support",
+  "messageId": "{{trigger.email.messageId}}",
+  "addLabelIds": [
+    "Label_Processed"
+  ],
+  "removeLabelIds": [
+    "INBOX"
+  ]
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Use label IDs from Gmail rather than display names when required.
+2. Map the exact message ID.
+3. Run label changes after every earlier step whose failure should leave the message unprocessed.
+
 
 ## Configuration
 
@@ -48,6 +79,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- Adds and removals are submitted through the secure Gmail integration and mutate mailbox state.
+- An empty add or remove list is allowed, but at least one intended change makes the node useful.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Display names can differ from provider label IDs.
+- If a run fails after labeling, decide whether the workflow needs a compensating label change.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +100,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Gmail connection](/connections/gmail)
+- [Retries and recovery](/execution/retries-and-recovery)

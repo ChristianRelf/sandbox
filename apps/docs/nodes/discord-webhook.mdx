@@ -6,7 +6,34 @@ icon: "send"
 
 **Node type:** `discord_webhook` · **Version:** `1` · **Category:** Communication
 
-Send a webhook message. This node can change external state or produce an external side effect.
+Send a webhook message. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Send a concise alert to a Discord channel through a stored webhook.
+- Post mapped workflow results without placing the webhook URL in workflow data.
+
+## Example: Post a service alert
+
+Send a mapped HTTP status with a recognizable bot name.
+
+
+```json title="Example settings"
+{
+  "credentialId": "discord-ops",
+  "content": "Checkout health returned {{nodes.request.output.status}}.",
+  "username": "sndbox monitor",
+  "avatarUrl": ""
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Create the Discord webhook connection.
+2. Map concise, non-sensitive content.
+3. Branch so alerts are posted only for the intended condition.
+
 
 ## Configuration
 
@@ -48,6 +75,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The webhook URL remains in the host vault; the node sends content through the secure integration host.
+- username and avatarUrl override presentation only for this message when Discord permits it.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Discord rate limits and content limits still apply.
+- Avoid posting secrets or raw customer data to a broad channel.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +96,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Discord connection](/connections/discord)
+- [Permissions](/workflows/permissions)

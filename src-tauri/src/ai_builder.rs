@@ -619,6 +619,7 @@ fn parse_graph(content: &str) -> Result<AiGraph> {
 }
 
 fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProposal> {
+    let mut graph = graph;
     if graph.nodes.is_empty() || graph.nodes.len() > 100 {
         return Err("AI proposals must contain between 1 and 100 nodes.".into());
     }
@@ -644,14 +645,18 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
             ));
         }
     }
-    let triggers: Vec<&AiNode> = graph
+    let trigger_keys: Vec<String> = graph
         .nodes
         .iter()
         .filter(|node| TRIGGER_NODES.contains(&node.node_type.as_str()))
+        .map(|node| node.key.clone())
         .collect();
-    if triggers.len() != 1 {
+    if trigger_keys.len() != 1 {
         return Err("The AI proposal must contain exactly one trigger node.".into());
     }
+    let trigger_key = trigger_keys[0].clone();
+
+    normalize_web_builder_connections(&mut graph);
 
     let ids: HashMap<String, String> = graph
         .nodes
@@ -679,7 +684,6 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
                 .map(|language| (node.key.clone(), language.to_string()))
         })
         .collect();
-    let trigger_key = triggers[0].key.clone();
     let mut level = HashMap::<String, usize>::from([(trigger_key.clone(), 0)]);
     for _ in 0..graph.nodes.len() {
         for edge in &graph.edges {
@@ -828,9 +832,107 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
     })
 }
 
+/// Models occasionally describe a control-flow dependency as a generic edge into
+/// Web Builder. The canvas has no generic Web Builder input: its three incoming
+/// edges are typed source-code bindings. Repair those drafts from the Code node
+/// language and discard unrelated incoming edges instead of rejecting the whole
+/// workflow proposal.
+fn normalize_web_builder_connections(graph: &mut AiGraph) {
+    let node_types: HashMap<String, String> = graph
+        .nodes
+        .iter()
+        .map(|node| (node.key.clone(), node.node_type.clone()))
+        .collect();
+    let code_languages: HashMap<String, String> = graph
+        .nodes
+        .iter()
+        .filter(|node| node.node_type == "code")
+        .filter_map(|node| {
+            node.configuration
+                .get("language")
+                .and_then(Value::as_str)
+                .filter(|language| matches!(*language, "html" | "javascript" | "css"))
+                .map(|language| (node.key.clone(), language.to_string()))
+        })
+        .collect();
+    let builder_keys: HashSet<String> = node_types
+        .iter()
+        .filter(|(_, node_type)| node_type.as_str() == "web_builder")
+        .map(|(key, _)| key.clone())
+        .collect();
+
+    let mut claimed_inputs = HashSet::<(String, String)>::new();
+    let mut normalized_edges = Vec::with_capacity(graph.edges.len());
+    for mut edge in std::mem::take(&mut graph.edges) {
+        if builder_keys.contains(&edge.target) {
+            let Some(language) = code_languages.get(&edge.source) else {
+                // HTTP, state, condition, and other workflow nodes should remain
+                // in their own control-flow branch rather than feed source code.
+                continue;
+            };
+            edge.source_handle = "output".into();
+            edge.target_handle = language.clone();
+            if !claimed_inputs.insert((edge.target.clone(), language.clone())) {
+                continue;
+            }
+        }
+        normalized_edges.push(edge);
+    }
+    graph.edges = normalized_edges;
+
+    for builder in graph
+        .nodes
+        .iter_mut()
+        .filter(|node| node.node_type == "web_builder")
+    {
+        let existing_bindings = std::mem::take(&mut builder.input_bindings);
+        let mut bindings = BTreeMap::new();
+
+        for port in ["html", "javascript", "css"] {
+            let edge_source = graph
+                .edges
+                .iter()
+                .find(|edge| edge.target == builder.key && edge.target_handle == port)
+                .map(|edge| edge.source.clone());
+            let bound_source = existing_bindings.get(port).and_then(|binding| {
+                (code_languages.get(&binding.source).map(String::as_str) == Some(port))
+                    .then(|| binding.source.clone())
+            });
+            let available_source = code_languages
+                .iter()
+                .find(|(_, language)| language.as_str() == port)
+                .map(|(key, _)| key.clone());
+            let Some(source) = edge_source.or(bound_source).or(available_source) else {
+                continue;
+            };
+
+            bindings.insert(
+                port.into(),
+                AiBinding {
+                    source: source.clone(),
+                    output: "code".into(),
+                },
+            );
+            if !graph
+                .edges
+                .iter()
+                .any(|edge| edge.target == builder.key && edge.target_handle == port)
+            {
+                graph.edges.push(AiEdge {
+                    source,
+                    target: builder.key.clone(),
+                    source_handle: "output".into(),
+                    target_handle: port.into(),
+                });
+            }
+        }
+        builder.input_bindings = bindings;
+    }
+}
+
 fn system_prompt() -> String {
     format!(
-        "You are the workflow builder inside sndbox. Convert the user's request into a complete visual workflow graph. Return JSON only, with this exact shape: {{\"reply\":\"brief explanation\",\"name\":\"optional workflow name\",\"description\":\"optional description\",\"nodes\":[{{\"key\":\"stable_local_key\",\"type\":\"node_type\",\"name\":\"label\",\"configuration\":{{}},\"inputBindings\":{{\"targetField\":{{\"source\":\"upstream_key\",\"output\":\"output_key\"}}}},\"disabled\":false}}],\"edges\":[{{\"source\":\"key\",\"target\":\"key\",\"sourceHandle\":\"output\",\"targetHandle\":\"input\"}}]}}. Output the complete replacement graph, including unchanged nodes when editing. Use exactly one trigger. Condition branches use sourceHandle true or false. Code nodes use configuration {{\"language\":\"python|html|javascript|css\",\"sourceCode\":\"complete working source\",\"executionMode\":\"source|run\"}}. When the user asks for a site, write complete HTML, JavaScript, and CSS source in three Code nodes and map each node's code output to the Web Builder html, javascript, or css input through inputBindings. Create a separate edge from each matching Code node to the Web Builder and set targetHandle to html, javascript, or css; all other edges use targetHandle input. Never leave requested code blocks empty. Never invent node types, credentials, API keys, file paths, selectors, addresses, or personal data; leave unknown external configuration values empty so the user can review them. Keep side-effecting actions disabled when intent is ambiguous. Supported node types: {}.",
+        "You are the workflow builder inside sndbox. Convert the user's request into a complete visual workflow graph using the application's nodes, not by pretending that one code block performs the whole workflow. Return JSON only, with this exact shape: {{\"reply\":\"brief explanation\",\"name\":\"optional workflow name\",\"description\":\"optional description\",\"nodes\":[{{\"key\":\"stable_local_key\",\"type\":\"node_type\",\"name\":\"label\",\"configuration\":{{}},\"inputBindings\":{{\"targetField\":{{\"source\":\"upstream_key\",\"output\":\"output_key\"}}}},\"disabled\":false}}],\"edges\":[{{\"source\":\"key\",\"target\":\"key\",\"sourceHandle\":\"output\",\"targetHandle\":\"input\"}}]}}. Output the complete replacement graph, including unchanged nodes when editing. Use exactly one trigger. Condition branches use sourceHandle true or false. Bind data between nodes with inputBindings and the upstream output key. Important capabilities: schedule_trigger runs recurring checks; http_request performs HTTP calls and outputs status, body, and finalUrl; condition branches on values; get_workflow_state, set_workflow_state, and compare_previous persist and compare results; desktop_notification and communication nodes alert users; Code nodes author or transform data; Web Builder renders a localhost interface. HTTP checks, state, conditions, and alerts must be real workflow nodes rather than browser-side fetch code when the user asks for monitoring. Code nodes use configuration {{\"language\":\"python|html|javascript|css\",\"sourceCode\":\"complete working source\",\"executionMode\":\"source|run\"}}. When the user asks for an interface, write complete HTML, JavaScript, and CSS source in three Code nodes. Web Builder accepts only those three matching Code outputs: map code to html, javascript, and css with inputBindings and create one matching edge per input. Never connect HTTP, condition, state, trigger, or notification nodes directly to Web Builder. Keep the monitoring flow as its own node branch and the interface as a Code/Web Builder branch. All non-Web-Builder edges use targetHandle input. Never leave requested code blocks empty. Never invent node types, credentials, API keys, file paths, selectors, addresses, or personal data; leave unknown external configuration values empty so the user can review them. Keep side-effecting actions disabled when intent is ambiguous. Supported node types: {}.",
         SUPPORTED_NODES.join(", ")
     )
 }
@@ -1122,5 +1224,110 @@ mod tests {
         assert!(builder_edges
             .iter()
             .any(|edge| edge.target_handle == "css" && edge.target_port.as_deref() == Some("css")));
+    }
+
+    #[test]
+    fn repairs_mixed_monitor_edges_before_building_the_proposal() {
+        let current = crate::templates::blank(Some("Original".into()));
+        let code = |key: &str, language: &str| AiNode {
+            key: key.into(),
+            node_type: "code".into(),
+            name: None,
+            configuration: json!({
+                "language": language,
+                "sourceCode": "working source",
+                "executionMode": "source"
+            }),
+            disabled: false,
+            input_bindings: BTreeMap::new(),
+        };
+        let graph = AiGraph {
+            reply: "Built a monitor and its interface.".into(),
+            name: Some("Uptime monitor".into()),
+            description: None,
+            nodes: vec![
+                AiNode {
+                    key: "start".into(),
+                    node_type: "schedule_trigger".into(),
+                    name: None,
+                    configuration: json!({"scheduleType":"minutes","every":5}),
+                    disabled: false,
+                    input_bindings: BTreeMap::new(),
+                },
+                AiNode {
+                    key: "check".into(),
+                    node_type: "http_request".into(),
+                    name: None,
+                    configuration: json!({"method":"GET","url":"","timeoutMs":30000}),
+                    disabled: false,
+                    input_bindings: BTreeMap::new(),
+                },
+                code("html", "html"),
+                code("js", "javascript"),
+                code("css", "css"),
+                AiNode {
+                    key: "site".into(),
+                    node_type: "web_builder".into(),
+                    name: None,
+                    configuration: json!({"html":"","javascript":"","css":"","port":0,"openBrowser":true}),
+                    disabled: false,
+                    input_bindings: BTreeMap::new(),
+                },
+            ],
+            edges: vec![
+                AiEdge {
+                    source: "start".into(),
+                    target: "check".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                // A model may express this as a generic execution dependency.
+                // It must not invalidate the otherwise useful draft.
+                AiEdge {
+                    source: "check".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "html".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "js".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+                AiEdge {
+                    source: "css".into(),
+                    target: "site".into(),
+                    source_handle: "output".into(),
+                    target_handle: "input".into(),
+                },
+            ],
+        };
+
+        let proposal = graph_to_proposal(graph, current).unwrap();
+        let builder = proposal
+            .workflow
+            .nodes
+            .iter()
+            .find(|node| node.node_type == "web_builder")
+            .unwrap();
+        let incoming = proposal
+            .workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.target_node_id == builder.id)
+            .collect::<Vec<_>>();
+        assert_eq!(incoming.len(), 3);
+        assert_eq!(builder.input_bindings.len(), 3);
+        assert!(incoming.iter().all(|edge| {
+            matches!(edge.target_handle.as_str(), "html" | "javascript" | "css")
+                && edge.source_port.as_deref() == Some("code")
+        }));
     }
 }

@@ -8,10 +8,10 @@
     "light": "#d6ff4b",
     "dark": "#647600"
   },
-  "favicon": "/assets/sndbox-icon.svg",
+  "favicon": "/assets/sndbox-icon-v2.svg",
   "logo": {
-    "light": "/assets/sndbox-wordmark-dark.svg",
-    "dark": "/assets/sndbox-wordmark-light.svg",
+    "light": "/assets/sndbox-wordmark-dark-v2.svg",
+    "dark": "/assets/sndbox-wordmark-light-v2.svg",
     "href": "https://sndbox.app"
   },
   "appearance": {
@@ -323,6 +323,10 @@
       {
         "label": "GitHub",
         "href": "https://github.com/sndboxhq/sandbox"
+      },
+      {
+        "label": "Discord",
+        "href": "https://discord.gg/sndbox"
       }
     ],
     "primary": {
@@ -333,6 +337,7 @@
   },
   "footer": {
     "socials": {
+      "discord": "https://discord.gg/sndbox",
       "github": "https://github.com/sndboxhq/sandbox",
       "website": "https://sndbox.app"
     },
@@ -358,6 +363,7 @@
         "items": [
           { "label": "Troubleshooting", "href": "/troubleshooting/overview" },
           { "label": "Support", "href": "https://sndbox.app/support" },
+          { "label": "Discord", "href": "https://discord.gg/sndbox" },
           { "label": "GitHub", "href": "https://github.com/sndboxhq/sandbox" }
         ]
       }

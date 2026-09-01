@@ -6,6 +6,17 @@ icon: "cpu"
 
 Execution begins only after validation and permission review. The runner receives a concrete revision, resolves its trigger and input bindings, and records one node-execution result for every completed, failed, skipped, or cancelled step.
 
+## From click to evidence
+
+1. sndbox saves or selects the exact workflow revision.
+2. Validation checks the graph, configuration, bindings, connections, and permissions.
+3. The scheduler or operator creates an execution with a trigger payload.
+4. A compatible runner claims the work and resolves each node's inputs immediately before it runs.
+5. Node status, redacted input, output, logs, duration, branch, retry count, and artifacts are checkpointed.
+6. Terminal status records whether the run succeeded, failed, was cancelled, was skipped, or needs recovery review.
+
+A queued execution has not started its first node. A running execution can already have produced external effects, so cancellation and retry decisions must use the timeline rather than only the final status.
+
 ## Choose a target
 
 <CardGroup cols={2}>
@@ -19,6 +30,21 @@ Execution begins only after validation and permission review. The runner receive
 
 The executable definition is not just a workflow ID. Local history records the workflow version; remote commands carry the approved revision identity and content hash. Runners apply the signed authorization context and their own path, network, environment, and capability restrictions before claiming work.
 
+Editing the canvas after a run does not rewrite its history. Compare the execution's saved revision with the current draft when configuration appears inconsistent. Material changes can also invalidate revision-bound approval, even if the workflow keeps the same name and ID.
+
 ## Inspect, then recover
 
 Use the execution timeline to understand what completed and whether a side effect may have occurred. Recovery distinguishes safe retry, reusable idempotency, uncertain outcome, and manual review instead of claiming every run is exactly once.
+
+## Read the timeline
+
+| State | Meaning | Operator question |
+| --- | --- | --- |
+| `pending` or queued | Waiting for validation, schedule delivery, or a compatible runner | Is the queue healthy and is capacity available? |
+| `running` | A runner owns a live lease and at least one step may be active | Which node is active, and can cancellation leave an uncertain effect? |
+| `successful` | Every selected node completed and staged state was committed | Are outputs and evidence what downstream consumers expected? |
+| `failed` | A node failed or a required boundary rejected the operation | Did the failing node start an external mutation? |
+| `skipped` | A branch, policy, or schedule rule intentionally omitted work | Is the recorded skip reason expected? |
+| `cancelled` | Cancellation was observed and remaining work stopped | What had already completed before cancellation? |
+
+Use [Logs and evidence](/execution/logs-and-evidence) for the recorded surface and [Retries and recovery](/execution/retries-and-recovery) before repeating uncertain work.

@@ -6,7 +6,41 @@ icon: "mouse-pointer-click"
 
 **Node type:** `select_option` · **Version:** `1` · **Category:** Browser
 
-Choose an option by value, label or index. This node does not declare an external side effect.
+Choose an option by value, label or index. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Choose one option from a native select control.
+- Select by stable submitted value, visible label, or zero-based index.
+
+## Example: Choose a report format
+
+Record the Format select and choose its visible CSV label.
+
+
+```json title="Example settings"
+{
+  "locator": {
+    "primary": {
+      "kind": "label",
+      "value": "Format",
+      "name": "Format"
+    },
+    "alternatives": []
+  },
+  "selectBy": "label",
+  "option": "CSV",
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node. The locator is shortened for readability; use the recorder to create the complete structured locator bundle.
+
+
+1. Record the select element itself.
+2. Prefer value when the submitted value is stable; use label when it is the clearest contract.
+3. Verify the page reflects the selected option before continuing.
+
 
 ## Configuration
 
@@ -48,6 +82,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- index is zero-based and can be brittle when options are reordered.
+- The locator must resolve to a compatible select control.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A custom dropdown built from div elements may require Click Element steps instead of Select Option.
+- Labels can be localized while values remain stable; choose the matching strategy deliberately.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -57,3 +103,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Forms and uploads](/browser-automation/forms-and-uploads)
+- [Locators](/browser-automation/locators)

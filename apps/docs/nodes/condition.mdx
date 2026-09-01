@@ -6,7 +6,33 @@ icon: "git-branch"
 
 **Node type:** `condition` · **Version:** `1` · **Category:** Logic
 
-Follow a true or false branch. This node does not declare an external side effect.
+Follow a true or false branch. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Route success and failure paths from a status, count, boolean, or text match.
+- Guard a side-effecting node so it runs only when reviewed criteria are true.
+
+## Example: Branch on an HTTP status
+
+Map HTTP Request's status output to the left input and compare it with the number 200.
+
+
+```json title="Example settings"
+{
+  "left": "{{nodes.request.output.status}}",
+  "operator": "equals",
+  "right": 200
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Connect the request to Condition.
+2. Map status to left and set right to 200.
+3. Connect the true and false handles to different downstream nodes.
+
 
 ## Configuration
 
@@ -49,6 +75,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | --- | --- | --- | --- |
 | `result` | `boolean` | No | Result |
 
+## Execution behavior
+
+- The node emits a boolean result and records which branch was followed.
+- exists and not_exists ignore the right value; ordering comparisons should receive compatible numbers or strings.
+- The editor catalogue declares `result` (boolean) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- The string "200" and number 200 may not compare as intended; inspect the upstream output type.
+- A control edge chooses what runs, while an input binding supplies the value being compared.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -58,3 +96,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Branches and conditions](/workflows/branches-and-conditions)
+- [Data types](/reference/data-types)

@@ -10,6 +10,14 @@ The Condition node compares a left value and, when required, a right value. Its 
 
 `equals`, `not_equals`, `contains`, `not_contains`, `greater_than`, `less_than`, `exists`, `not_exists`, `starts_with`, and `ends_with` are implemented. `exists` and `not_exists` hide the right-side field because no comparison value is needed.
 
+| Operator family | Appropriate values | Example |
+| --- | --- | --- |
+| `equals`, `not_equals` | Numbers, booleans, strings, or matching JSON-compatible values | Status equals `200` |
+| `contains`, `not_contains` | Text or a collection supported by the resolved value | Subject contains `Invoice` |
+| `greater_than`, `less_than` | Comparable numbers or deliberately ordered values | Row count greater than `0` |
+| `exists`, `not_exists` | A possibly missing or null-like mapped value | API field exists |
+| `starts_with`, `ends_with` | Text | Filename ends with `.csv` |
+
 ```json title="Check an HTTP response"
 {
   "left": "{{nodes.http_request.output.status}}",
@@ -20,10 +28,24 @@ The Condition node compares a left value and, when required, a right value. Its 
 
 Connect the Condition node's **true** handle to the success path and **false** handle to the fallback or notification path. Nodes on the unselected branch receive the `skipped` state and a reason in the execution inspector.
 
+## Build a complete branch
+
+1. Test the producer and inspect the exact value and type you plan to compare.
+2. Draw the control edge into Condition.
+3. Map the producer output into `left`; set or map `right` when the operator needs it.
+4. Connect both handles, even if the false branch only records or reports why no action was taken.
+5. Run once with data that selects true and once with data that selects false.
+
+For a health check, the true branch might show a local success notification while the false branch posts an alert. Keeping both paths visible makes it clear that a skipped alert is an intentional branch result, not a missing execution.
+
 ## Compare types deliberately
 
 Use numeric values for greater-than and less-than checks, booleans for boolean output, and strings for text operators. If input arrives as CSV, JSON text, or page text, parse or normalize it before comparing.
 
+Common surprises include comparing the string `"200"` with the number `200`, treating an empty string as a missing field, or applying text containment to an object. The execution inspector shows the resolved left and right values; use that evidence before changing the operator.
+
 ## Detect change across runs
 
 For a value that must be compared with the last successful run, use [Compare With Previous](/nodes/compare-previous). It returns `changed`, `previous`, and `current`, and commits its state only after the entire workflow succeeds.
+
+The first observation is not a change because no earlier successful value exists. Branch on both `changed` and the first-observation context when initial discovery should trigger a separate action.

@@ -26,9 +26,54 @@ type LocatorKind =
 
 The recorder prefers accessible role/name information, then retains label, placeholder, test ID, text, attribute, CSS, or XPath candidates as available. A locator test runs against the active managed session before you save the interaction.
 
+## Candidate strength
+
+| Candidate | Usually resilient when | Typical risk |
+| --- | --- | --- |
+| Role + accessible name | The control has stable semantics and a unique visible name | Copy changes or duplicate controls make the name ambiguous |
+| Label or placeholder | A form field has a stable user-facing label | Localization or redesigned form copy changes it |
+| Test ID | The application treats the ID as a testing contract | A production rebuild removes or renames the attribute |
+| Stable attribute | The attribute identifies domain meaning rather than styling | Generated IDs and analytics attributes churn |
+| Text | The visible phrase is unique and stable | Repeated or translated content matches several elements |
+| CSS or XPath | No semantic hook exists and the DOM contract is controlled | Layout and wrapper changes break structural paths |
+
+The primary candidate is the best evidence available at recording time. Alternatives are fallbacks, not permission to click the first vaguely similar element.
+
+## Example bundle
+
+```json title="Recorded accessible button"
+{
+  "primary": {
+    "kind": "role",
+    "value": "button",
+    "name": "Download report",
+    "exact": true
+  },
+  "alternatives": [
+    { "kind": "test_id", "value": "download-report" }
+  ],
+  "elementRole": "button",
+  "accessibleName": "Download report",
+  "tag": "button",
+  "stableAttributes": { "data-testid": "download-report" },
+  "framePath": [],
+  "recordingUrl": "https://portal.example.com/reports"
+}
+```
+
+Do not hand-author this object in ordinary workflows. Record the element so sndbox can capture alternatives and page context, then use **Test locator** against the expected page state.
+
 ## Read a failure
 
 Browser diagnostics list every attempted `kind` and `value`, its match count, whether it succeeded, whether it was a weak fallback, and any error. Use that sequence to decide whether the page changed, the target became ambiguous, or navigation had not finished.
+
+| Diagnostic | Likely meaning | Next check |
+| --- | --- | --- |
+| Every candidate matched `0` | Wrong page, target not ready, or page markup changed | Current URL, title, preceding wait, then re-record |
+| A candidate matched more than `1` | The locator is ambiguous | Add a stable accessible name or test ID |
+| A fallback succeeded | The primary contract drifted | Confirm the target, then re-record before the fallback also decays |
+| `unexpectedNavigation` | The page moved while resolving or acting | Put an explicit navigation or load-state wait at the transition |
+| Console or request errors | The application may not have rendered the target | Reproduce visibly and inspect the failed application request |
 
 ## Keep locators resilient
 
@@ -37,6 +82,8 @@ Browser diagnostics list every attempted `kind` and `value`, its match count, wh
 - Add an explicit Wait For node when content loads asynchronously.
 - Re-record against the real current page when a semantic label changes.
 - Avoid weakening the locator until it matches multiple controls.
+
+Re-record after a deliberate product redesign. Do not keep stacking weak alternatives onto evidence recorded for a page that no longer exists.
 
 <Note>
   The model contains `framePath`, but the current recorder targets the active main page. Do not document or rely on cross-frame recording as an implemented interaction.

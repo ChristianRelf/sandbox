@@ -6,6 +6,18 @@ icon: "blocks"
 
 Plugins add publisher-defined node types without mounting publisher React code inside the editor. Configuration is rendered from JSON Schema using host controls, and execution uses the exact plugin/node version and package integrity pinned into the workflow.
 
+## Plugin, package, and node
+
+| Term | Meaning |
+| --- | --- |
+| Plugin | The publisher identity and product users discover or install |
+| Package version | One immutable signed archive with a content digest |
+| Node type | A manifest-declared trigger or action exposed by that package |
+| Pin | The exact plugin, node, version, and integrity identity stored in a workflow |
+| Capability | A narrow host operation the guest may request, such as a declared network call or storage access |
+
+A workflow pin prevents an installed package update from silently changing the code used by an already reviewed revision.
+
 <Frame caption="The implemented plugin marketplace and its included integrations">
   ![The sndbox plugin marketplace showing the real Gmail, Slack, and Discord integrations](/images/product/plugins-marketplace.jpg)
 </Frame>
@@ -16,9 +28,22 @@ The Plugins area separates discovery from installed packages. Before installatio
 
 An installed package can be disabled, enabled after approval, updated, or revoked. Development packages carry a persistent Development label, remain disabled in production workspaces, and are excluded from exports unless explicitly included.
 
+## Review before enabling
+
+Check four layers:
+
+1. **Identity:** publisher, signing key, repository, package version, and archive digest.
+2. **Surface:** node schemas, inputs, outputs, connection requirements, and external-effect classification.
+3. **Capabilities:** network domains, file inputs, storage, credentials, and broker calls.
+4. **Change:** new permissions, schema migrations, removed nodes, and workflows pinned to the old version.
+
+Install does not imply enablement, and an update that expands permissions requires a fresh decision. Keep the package disabled until the review matches the environment where it will run.
+
 ## Execution boundary
 
 The Wasmtime host does not link general WASI, so guest code has no ambient filesystem, process, environment, or socket access. Its only import is the typed `sandbox_v1::host_call` broker. Every call must be declared by the plugin, referenced by the node, approved for the owner/workspace, and allowed by current policy.
+
+The broker is enforcement, not a guarantee that a declared destination is trustworthy. Review the plugin's data flow, response-size limits, redaction expectations, and behavior when a host call fails or is denied.
 
 ## Start developing
 
@@ -28,3 +53,5 @@ Use the public `@sandbox/plugin-sdk` package and `sandbox plugin` CLI. The npm s
   <Card title="Create a plugin" icon="hammer" href="/plugins/sdk-setup">Scaffold a Rust guest, manifest, icon, docs, and tests.</Card>
   <Card title="Review the manifest" icon="file-json" href="/plugins/manifest">Define nodes, credentials, capabilities, domains, storage, migrations, and trust.</Card>
 </CardGroup>
+
+Continue with [Capabilities and permissions](/plugins/capabilities-and-permissions) for the enforcement model, [Testing plugins](/plugins/testing) for fixtures and denial cases, and [Publishing](/plugins/publishing) for marketplace review.

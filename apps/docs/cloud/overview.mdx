@@ -6,6 +6,17 @@ icon: "cloud"
 
 Signing in adds organisations, workspaces, encrypted workflow sync, approval/publication, shared resources, and remote runners. Personal local execution remains available without an account.
 
+## Local, synced, and published are different
+
+| State | Meaning | Who can execute it |
+| --- | --- | --- |
+| Local draft | Stored on this device and editable without an account | The desktop local runner, subject to local permissions |
+| Synced revision | An encrypted exact revision is associated with a cloud owner | Authorized workspace users and services according to role and policy |
+| Approved revision | Reviewers approved one content identity | It is eligible for publication; later edits are not implicitly approved |
+| Published revision | The approved identity is active for its environment and runner policy | Compatible authorized runners |
+
+Sync is not publication, and publication is not a mutable pointer to whatever is currently on the canvas. This separation keeps review evidence attached to the bytes that actually run.
+
 <Frame caption="Cloud is opt-in; local workflows continue without an account">
   ![The sndbox Cloud workspace view explaining optional sync and operating-system vault storage](/images/product/cloud-workspace.jpg)
 </Frame>
@@ -13,6 +24,8 @@ Signing in adds organisations, workspaces, encrypted workflow sync, approval/pub
 ## Ownership stays explicit
 
 Every shared resource carries an `ownerType` and `ownerId`. A personal workflow is not inferred to belong to a workspace after sign-in. Import or sync it deliberately when you want workspace governance.
+
+Connections, browser profiles, paths, and local protected values do not automatically become shared merely because a workflow revision is synced. Review missing environment resources before assigning a remote runner.
 
 ## What the Cloud view handles
 
@@ -27,6 +40,17 @@ Every shared resource carries an `ownerType` and `ownerId`. A personal workflow 
 ## Local continuity
 
 During a control-plane outage, local edits and local executions continue. Sync, marketplace, remote command, and cloud status report unavailable or waiting instead of blocking a personal local workflow.
+
+## First workspace workflow
+
+1. Choose the intended organisation, workspace, and environment.
+2. Sync a reviewed local revision and resolve any conflict explicitly.
+3. Replace local-only resources with environment-owned connections, variables, profiles, and runner capabilities.
+4. Request approval for the exact revision.
+5. Publish only after the approval threshold is met.
+6. Run a bounded test and inspect workspace audit history and execution evidence.
+
+Use [Teams and roles](/cloud/teams-and-roles) for authorization, [Sync and conflicts](/cloud/sync-and-conflicts) for revision movement, and [Approvals and publishing](/cloud/approvals-and-publishing) for the release path.
 
 <Note>
   Workflow sync uses service-readable envelope encryption. It is not described as end-to-end encryption because the service can process the key envelope as implemented.

@@ -20,6 +20,17 @@ type ValueType =
 
 `any` means the node can accept a JSON-compatible runtime value; it does not grant a capability. `path` preserves trusted file provenance and approval. `connection` is a host-owned vault reference, not credential text.
 
+| Type | Example | Mapping note |
+| --- | --- | --- |
+| `string` | `"ready"` | Distinct from a numeric or boolean-looking string |
+| `number` | `200`, `3.14` | Use directly for ordering comparisons |
+| `boolean` | `true` | Do not substitute the string `"true"` |
+| `object` | `{ "status": "ready" }` | Select nested fields by path after testing |
+| `array` | `["a", "b"]` | Preserve as an array unless the destination explicitly wants text |
+| `any` | Any JSON-compatible value | Inspect the actual runtime shape before mapping deeper |
+| `path` | A trusted Download File result | Carries provenance and permission meaning beyond a plain string |
+| `connection` | A host-owned Gmail reference | Resolves credential use without exposing credential text |
+
 ## Port definition
 
 ```ts
@@ -35,6 +46,26 @@ interface NodePortDefinition {
 
 Input bindings are validated against the selected source node and path. The node pages are generated from the live catalogue, including each implemented port key and required flag.
 
+Required means the destination needs a resolved value before it can run. It does not mean an output is always non-null or that every nested field exists. Object and `any` outputs still require testing with representative responses.
+
+## Compatibility examples
+
+- A `number` output can map to a numeric Condition input without string conversion.
+- An `object` can map to an `any` input, but a downstream text field may need a selected property or template.
+- A trusted `path` should map directly into a file or upload input; rebuilding the same characters in a template produces ordinary text without provenance.
+- A `connection` selects a host-owned credential. It cannot be mapped into content, headers, or logs as though it were the secret value.
+- Arrays and objects remain structured through Set Data, Parse JSON, Code input, and compatible plugin ports.
+
 ## Null and missing
 
 JSON `null`, an absent object field, and a missing workflow-state key are different. Get Workflow State returns a separate `found` boolean so a stored `null` can be distinguished from no value.
+
+| Case | Meaning |
+| --- | --- |
+| `null` | A value is present and explicitly empty |
+| Missing object field | The producer did not include that path |
+| Empty string | A present string with zero characters |
+| Empty array or object | A present collection with no members |
+| `found: false` from state | No committed value exists for the key |
+
+Model these cases explicitly in Conditions or Code. Relying on generic “truthiness” can merge states that need different operational behavior.

@@ -6,7 +6,32 @@ icon: "send"
 
 **Node type:** `gmail_get_email` · **Version:** `1` · **Category:** Communication
 
-Retrieve a Gmail message. This node does not declare an external side effect.
+Retrieve a Gmail message. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Retrieve full message details after receiving an ID from a trigger or prior result.
+- Fetch content only on the branch that actually needs it.
+
+## Example: Load a triggered message
+
+Use the same Gmail connection as New Email and map the trigger's message ID.
+
+
+```json title="Example settings"
+{
+  "credentialId": "gmail-support",
+  "messageId": "{{trigger.email.messageId}}"
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Select the Gmail connection.
+2. Map a message or thread ID from the trigger.
+3. Inspect the returned shape before mapping body, headers, or attachments.
+
 
 ## Configuration
 
@@ -44,6 +69,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The secure integration host resolves the credential and returns message data without exposing token material.
+- Reading is distinct from drafting, sending, or changing labels.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A thread ID and message ID are not interchangeable in every provider operation.
+- Fetched email content can contain sensitive or hostile text; treat it as untrusted input.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -53,3 +90,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Gmail connection](/connections/gmail)
+- [Secrets and connections](/files-and-data/secrets-and-connections)

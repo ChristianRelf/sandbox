@@ -6,7 +6,32 @@ icon: "mouse-pointer-click"
 
 **Node type:** `press_key` · **Version:** `1` · **Category:** Browser
 
-Send a validated key combination. This node does not declare an external side effect.
+Send a validated key combination. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Submit a form with Enter, dismiss a dialog with Escape, or use a supported shortcut.
+- Trigger keyboard behavior when clicking is not equivalent.
+
+## Example: Submit search with Enter
+
+Run Press Key immediately after filling the focused search field.
+
+
+```json title="Example settings"
+{
+  "key": "Enter",
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Ensure the preceding action leaves focus on the intended control.
+2. Enter a validated key or key combination.
+3. Wait for the resulting navigation or element state.
+
 
 ## Configuration
 
@@ -44,6 +69,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The key is sent to the active page using the current focus context.
+- The timeout bounds dispatch and browser response, not all work started by the shortcut.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- If focus moved, the page or wrong control may receive the key.
+- Operating-system shortcuts and application-level browser shortcuts are not the same as page keyboard input.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -53,3 +90,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Forms and uploads](/browser-automation/forms-and-uploads)
+- [Navigation and waits](/browser-automation/navigation-and-waits)

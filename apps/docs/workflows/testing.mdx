@@ -6,9 +6,18 @@ icon: "flask-conical"
 
 Testing is layered so you can isolate configuration before running the full graph.
 
+| Layer | What it proves | What it does not prove |
+| --- | --- | --- |
+| Validation | Required fields, graph structure, binding availability, types, and permission state are coherent | An external service is available or test data is representative |
+| Node test | One node can resolve supplied or snapshot inputs and complete | Upstream nodes and downstream branches work together |
+| Manual run | The saved revision runs end to end on the selected target | A future schedule, credential, or external response will be identical |
+| Execution evidence | What this attempt resolved, returned, skipped, changed, or failed | That an uncertain external side effect is safe to repeat |
+
 ## Test a node
 
 Select a node, provide any required mapped sample input, and choose **Test node**. The result appears beside the graph. Browser locator tests use the active managed session; workflow-state nodes preview changes without committing them.
+
+If the node depends on earlier output, choose a compatible previous execution snapshot or supply an explicit sample override. The snapshot must belong to the same workflow. The test log states that only this node ran, so a successful test should not be read as evidence that its producer was re-executed.
 
 Side-effecting and destructive nodes do not become harmless in test mode. sndbox can require explicit confirmation for commands, deletion, upload, communication, or other bounded actions.
 
@@ -20,6 +29,20 @@ Validation checks required configuration, trigger and connection rules, typed bi
 
 A manual run uses the saved workflow revision. Keep the execution drawer open to follow node state. After completion, inspect resolved values rather than assuming the canvas configuration is what reached an external service.
 
+Before publishing or scheduling, exercise at least:
+
+- the normal path and each Condition branch;
+- empty, missing, and maximum-size inputs where relevant;
+- a denied permission or unavailable connection;
+- an external timeout or non-success response; and
+- cancellation while a delay, browser wait, AI request, command, or approval is pending.
+
+For write, send, delete, and command nodes, use a disposable target or a dedicated test account. A Test node action can still change the real world after confirmation.
+
 ## Browser failures
 
 Use locator attempts, current URL, page title, console errors, failed requests, screenshot, and trace references. When available, retry in headed mode or re-record the failed interaction.
+
+## Read a failed test
+
+Start with the stable error code or node error, then compare resolved input with the node's reference page. A validation error means the operation did not begin. A timeout can mean the action began but its success condition was not observed. For an external mutation with an uncertain outcome, inspect the destination before retrying and follow [Retries and recovery](/execution/retries-and-recovery).

@@ -6,7 +6,42 @@ icon: "mouse-pointer-click"
 
 **Node type:** `extract_data` · **Version:** `1` · **Category:** Browser
 
-Extract structured values from the page. This node does not declare an external side effect.
+Extract structured values from the page. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Read text, an attribute, a link, an image URL, or tabular data from a page.
+- Turn one or many matched elements into structured workflow data.
+
+## Example: Extract all visible product names
+
+Record a representative product heading and return all unique matches under the field name products.
+
+
+```json title="Example settings"
+{
+  "locator": {
+    "primary": {
+      "kind": "css",
+      "value": "[data-testid='product-name']"
+    },
+    "alternatives": []
+  },
+  "extract": "text",
+  "fieldName": "products",
+  "repeated": true,
+  "fields": {},
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node. The locator is shortened for readability; use the recorder to create the complete structured locator bundle.
+
+
+1. Record the narrowest stable repeated target.
+2. Choose the extraction kind and a descriptive field name.
+3. Test against empty, single-result, and multi-result pages.
+
 
 ## Configuration
 
@@ -53,6 +88,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `value` | `any` | No | Extracted value |
 
+## Execution behavior
+
+- repeated returns a list of unique matches; otherwise the node expects a single resolved value.
+- Attribute extraction additionally requires the attribute name, while table extraction uses the fields mapping.
+- The editor catalogue declares `value` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A locator that matches layout containers can return whitespace or duplicate text.
+- Extracted page content is untrusted external data; validate it before commands, paths, or outbound messages.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -62,3 +109,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Locators](/browser-automation/locators)
+- [Data types](/reference/data-types)

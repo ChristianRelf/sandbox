@@ -6,9 +6,24 @@ icon: "rotate-ccw"
 
 A retry is not a promise that the previous attempt did nothing. Inspect the node result and its side-effect class before repeating work.
 
+## Classify the last attempt
+
+| Evidence | Example | Default disposition |
+| --- | --- | --- |
+| Operation did not start | Validation rejected a missing URL | Fix and retry |
+| Read-only operation failed | A GET request timed out before any response | Retry within a bounded policy |
+| Mutation has a reusable idempotency key | Provider accepted the same logical request key | Retry with the identical key |
+| Mutation outcome is known to have failed | Provider returned a definitive rejection | Fix the cause, then submit deliberately |
+| Mutation outcome is uncertain | Connection dropped after send or process launch | Inspect the destination or require manual review |
+| Destructive local action partially completed | A recursive copy or command failed midway | Reconcile actual filesystem/process state first |
+
+Timeout does not by itself tell you which row applies. It only tells you sndbox stopped waiting for the expected completion signal.
+
 ## Local retries
 
 The execution inspector can retry a failed node or run, and browser failures may offer a headed retry. Existing completed-node evidence remains attached to the original attempt. Node reference pages identify whether a built-in node declares an external side effect.
+
+A node retry should reuse a compatible snapshot of upstream results. A whole-run retry re-executes earlier selected nodes and can repeat their effects. Choose based on which inputs must be refreshed and which completed actions are safe to repeat.
 
 ## Lost remote execution
 
@@ -25,5 +40,17 @@ An authorized operator can later choose resume, restart, or abandon; the decisio
 - Prefer Gmail drafts before sends when human review is appropriate.
 - Commit workflow state only after complete success.
 - Keep command and file boundaries explicit so a reviewer can assess the outcome.
+
+### Example: safe status read
+
+A GET health check with `retryCount: 1` can repeat after a transient connection failure because it only reads status. The following Condition still runs once with the final returned response.
+
+### Example: uncertain email send
+
+If Gmail accepted a message but the response was lost, repeating Send Email can deliver a duplicate. Check Sent mail or use a provider-visible logical identifier. A Manual Approval node improves intent review but does not make the send itself idempotent.
+
+### Example: staged state
+
+Set Workflow State and Compare With Previous stage their updates. A later failure prevents commit, so a retry sees the prior successful value. This avoids advancing a cursor past work that never fully completed.
 
 Never describe uncertain recovery as “exactly once.”

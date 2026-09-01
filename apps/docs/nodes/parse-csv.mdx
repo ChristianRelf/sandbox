@@ -6,7 +6,35 @@ icon: "braces"
 
 **Node type:** `parse_csv` · **Version:** `1` · **Category:** Data
 
-Parse CSV text or an approved file. This node does not declare an external side effect.
+Parse CSV text or an approved file. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Turn CSV text into rows that can be counted, filtered, or mapped.
+- Parse a downloaded or watched file while preserving its header names.
+
+## Example: Parse a downloaded report
+
+Map Download File's trusted path, use the first row as headers, and trim surrounding whitespace.
+
+
+```json title="Example settings"
+{
+  "path": "{{nodes.download.output.path}}",
+  "content": "",
+  "delimiter": ",",
+  "hasHeaders": true,
+  "trim": true
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Map either path or content; mapped content wins when both are present.
+2. Confirm the delimiter and header setting against a real sample.
+3. Inspect headers, rows, and rowCount before mapping nested values.
+
 
 ## Configuration
 
@@ -18,7 +46,7 @@ Parse CSV text or an approved file. This node does not declare an external side 
 | `hasHeaders` | boolean | `true` | Treat the first CSV row as field names. |
 | `trim` | boolean | `true` | Remove leading and trailing whitespace. |
 
-
+<Note>Approved file input must be UTF-8 and defaults to a 10 MB limit. Mapped content is used directly.</Note>
 
 ## Workflow JSON
 
@@ -55,6 +83,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `rows` | `array` | No | Rows |
 | `rowCount` | `number` | No | Row count |
 
+## Execution behavior
+
+- With headers enabled, each row is keyed by its header; otherwise rows follow positional columns.
+- The output reports headers, parsed rows, and rowCount.
+- The editor catalogue declares `headers` (array), `rows` (array), `rowCount` (number) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A semicolon- or tab-delimited export will not split correctly with the comma default.
+- Quoted fields and embedded newlines should be tested with a representative file before publishing.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -64,3 +104,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [CSV data](/files-and-data/csv)
+- [Variables and data mapping](/workflows/variables-and-data)

@@ -6,7 +6,34 @@ icon: "braces"
 
 **Node type:** `parse_text` · **Version:** `1` · **Category:** Data
 
-Split text into lines and basic statistics. This node does not declare an external side effect.
+Split text into lines and basic statistics. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Normalize a text file into a line array.
+- Count lines or remove blank records before further processing.
+
+## Example: Prepare a line-oriented queue
+
+Parse pasted or mapped text, trim it, and omit empty lines.
+
+
+```json title="Example settings"
+{
+  "path": "",
+  "content": "first\n\nsecond",
+  "trim": true,
+  "removeEmptyLines": true
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Map content from Read File or another text-producing node.
+2. Choose whether surrounding whitespace and empty lines are meaningful.
+3. Use lines and lineCount in Condition or Code.
+
 
 ## Configuration
 
@@ -17,7 +44,7 @@ Split text into lines and basic statistics. This node does not declare an extern
 | `trim` | boolean | `true` | Remove leading and trailing whitespace. |
 | `removeEmptyLines` | boolean | `false` | Exclude empty lines from parsed text output. |
 
-
+<Note>Approved file input must be UTF-8 and defaults to a 10 MB limit. Mapped content is used directly.</Note>
 
 ## Workflow JSON
 
@@ -53,6 +80,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `lines` | `array` | No | Lines |
 | `lineCount` | `number` | No | Line count |
 
+## Execution behavior
+
+- The output preserves normalized text and also provides lines, lineCount, and characterCount.
+- Mapped content takes precedence over an optional file path.
+- The editor catalogue declares `text` (string), `lines` (array), `lineCount` (number) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Removing empty lines changes positional meaning in formats where blank lines are significant.
+- Parsing creates structure; it does not interpret CSV quoting or JSON syntax.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -62,3 +101,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Files and data overview](/files-and-data/overview)
+- [Code node](/nodes/code)

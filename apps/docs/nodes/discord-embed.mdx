@@ -6,7 +6,44 @@ icon: "send"
 
 **Node type:** `discord_embed` · **Version:** `1` · **Category:** Communication
 
-Send a structured webhook embed. This node can change external state or produce an external side effect.
+Send a structured webhook embed. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Post a structured Discord alert with a title, fields, color, and optional link or image.
+- Make monitoring results easier to scan than a plain webhook message.
+
+## Example: Post a structured deployment result
+
+Send a green embed with the deployment status and revision.
+
+
+```json title="Example settings"
+{
+  "credentialId": "discord-ops",
+  "content": "",
+  "title": "Deployment complete",
+  "description": "Production deployment succeeded.",
+  "fields": [
+    {
+      "name": "Revision",
+      "value": "{{trigger.revision}}",
+      "inline": true
+    }
+  ],
+  "color": 5793266,
+  "link": "https://example.com/deployments",
+  "image": ""
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Use a decimal color value and short field names.
+2. Map only fields suitable for the destination channel.
+3. Test rendering with realistic lengths.
+
 
 ## Configuration
 
@@ -56,6 +93,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- description supplies the required embed content; content can add surrounding plain text.
+- The webhook credential remains in the vault and sending requires communication permission.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Discord enforces per-field and total embed limits.
+- Remote image URLs disclose a fetch to their host and may fail if not publicly accessible.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -65,3 +114,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Discord connection](/connections/discord)
+- [Limits](/reference/limits)

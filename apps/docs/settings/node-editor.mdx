@@ -12,6 +12,22 @@ The node editor settings control:
 - node descriptions; and
 - confirmation before deleting a configured node.
 
+## What each setting changes
+
+| Setting | Effect | Does not change |
+| --- | --- | --- |
+| Snap to grid | Aligns moved nodes to the selected spacing | Run order or edge routing semantics |
+| Grid size | Chooses 10, 20, or 40 pixel placement increments | Stored node configuration |
+| Canvas hints | Shows or hides contextual editor guidance | Validation rules |
+| Node descriptions | Shows or hides summary text on cards | Node type, accessible name, or reference behavior |
+| Confirm configured-node deletion | Adds a review step before removing a configured node | Deletion of an unconfigured new node |
+
 Grid changes are presentation aids. Execution uses stored nodes, edges, input bindings, and configuration, not canvas proximity. Hiding descriptions does not remove node type or accessible name from the graph.
 
+For a large workflow, use the grid and consistent left-to-right lanes to make triggers, read-only processing, branch decisions, and side effects visually distinct. That convention helps review, but the edges and mappings remain the executable source of truth.
+
 Keep configured-node delete confirmation enabled when workflows contain mapped values or high-impact actions; removing a node also removes its attached edges and can invalidate downstream bindings.
+
+After deleting or replacing a node, run validation and inspect every downstream field that referenced it. A similarly named replacement node receives a new ID, so existing bindings are not automatically retargeted by its display name.
+
+See [Workflow editor](/workflows/editor) for canvas behavior, [Variables and data mapping](/workflows/variables-and-data) for bindings, and [Accessible editor](/workflows/accessible-editor) for a non-canvas editing surface.

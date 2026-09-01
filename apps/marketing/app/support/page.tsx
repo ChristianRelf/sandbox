@@ -4,12 +4,14 @@ import {
   BookOpen,
   Download,
   LifeBuoy,
+  MessageCircle,
   ShieldAlert,
 } from "lucide-react";
+import { brand } from "@sandbox/brand";
 export const metadata = {
   title: "Support",
   description:
-    "Find sndbox documentation, downloads, troubleshooting and governed support access.",
+    "Find the sndbox community, documentation, downloads, troubleshooting and governed support access.",
 };
 export default function Page() {
   return (
@@ -25,11 +27,17 @@ export default function Page() {
           Then fix the cause.
         </h1>
         <p>
-          Start with execution-specific troubleshooting, then review governed
-          diagnostic access from your account when support requests it.
+          Ask the community, start with execution-specific troubleshooting,
+          then review governed diagnostic access when support requests it.
         </p>
       </header>
       <section className="support-actions">
+        <a href={brand.community.discord}>
+          <MessageCircle />
+          <h2>Join the Discord community</h2>
+          <p>Ask questions, share workflows and meet other sndbox builders.</p>
+          <ArrowRight />
+        </a>
         <a href="https://docs.sndbox.app/troubleshooting">
           <BookOpen />
           <h2>Search documentation</h2>

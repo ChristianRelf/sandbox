@@ -11,6 +11,7 @@ pub enum InputBinding {
         value: Value,
     },
     NodeOutput {
+        #[serde(rename = "nodeId", alias = "node_id")]
         node_id: String,
         #[serde(default)]
         path: Vec<String>,
@@ -22,8 +23,61 @@ pub enum InputBinding {
         name: String,
     },
     Connection {
+        #[serde(rename = "connectionId", alias = "connection_id")]
         connection_id: String,
     },
+}
+
+#[cfg(test)]
+mod input_binding_tests {
+    use super::InputBinding;
+    use serde_json::json;
+
+    #[test]
+    fn node_output_uses_the_frontend_camel_case_shape() {
+        let binding: InputBinding = serde_json::from_value(json!({
+            "kind": "node_output",
+            "nodeId": "request",
+            "path": ["status"]
+        }))
+        .expect("camel-case node output binding should deserialize");
+
+        assert_eq!(
+            binding,
+            InputBinding::NodeOutput {
+                node_id: "request".into(),
+                path: vec!["status".into()],
+            }
+        );
+        let serialized = serde_json::to_value(binding).expect("binding should serialize");
+        assert_eq!(serialized.get("nodeId"), Some(&json!("request")));
+        assert!(serialized.get("node_id").is_none());
+    }
+
+    #[test]
+    fn snake_case_binding_fields_remain_compatible() {
+        let node_output: InputBinding = serde_json::from_value(json!({
+            "kind": "node_output",
+            "node_id": "request"
+        }))
+        .expect("legacy node output binding should deserialize");
+        let connection: InputBinding = serde_json::from_value(json!({
+            "kind": "connection",
+            "connection_id": "account"
+        }))
+        .expect("legacy connection binding should deserialize");
+
+        assert!(matches!(
+            node_output,
+            InputBinding::NodeOutput { ref node_id, .. } if node_id == "request"
+        ));
+        assert_eq!(
+            connection,
+            InputBinding::Connection {
+                connection_id: "account".into(),
+            }
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

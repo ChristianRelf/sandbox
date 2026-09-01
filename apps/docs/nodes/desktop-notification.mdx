@@ -6,7 +6,32 @@ icon: "terminal"
 
 **Node type:** `desktop_notification` · **Version:** `1` · **Category:** System
 
-Show a native notification. This node can change external state or produce an external side effect.
+Show a native notification. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Surface a local success, warning, or review reminder to the operator.
+- Finish a monitoring flow with a concise result that does not need an external connection.
+
+## Example: Notify after a report is parsed
+
+Include a mapped row count in a local completion message.
+
+
+```json title="Example settings"
+{
+  "title": "Report ready",
+  "message": "Parsed {{nodes.parse.output.rowCount}} rows."
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Give the notification a short, recognizable title.
+2. Map only the result the operator needs into the message.
+3. Keep detailed evidence in execution history rather than in the toast.
+
 
 ## Configuration
 
@@ -44,6 +69,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The host asks the operating system to deliver the notification and returns delivered plus the title.
+- Delivery is a local side effect and may be subject to operating-system notification settings.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Focus Assist or disabled notifications can hide a successfully delivered notification.
+- Do not include secrets or full sensitive payloads in text visible on the desktop.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -53,3 +90,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Logs and evidence](/execution/logs-and-evidence)
+- [Run locally](/getting-started/run-locally)

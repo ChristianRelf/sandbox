@@ -10,6 +10,54 @@ sndbox currently implements **45 built-in nodes** across triggers, logic, data, 
   Start with a trigger, connect compatible ports, and map outputs into later node fields. The node inspector only shows settings implemented by that node.
 </Tip>
 
+## How nodes fit together
+
+A workflow combines two separate kinds of connection:
+
+| Connection | What it controls | Example |
+| --- | --- | --- |
+| Control edge | Which node runs next and, for Condition, which branch is followed | HTTP Request → Condition → true branch |
+| Input binding | Which runtime value a field receives | Map HTTP Request's `status` output to Condition's `left` input |
+
+Drawing an edge does not automatically map every output. Open the destination node and use its mapping control to select the exact source and path. A source must be upstream on the active control path, and its port type must be compatible with the destination.
+
+## A reliable starting pattern
+
+1. Add exactly one trigger and test it with the smallest useful event.
+2. Add read-only nodes first, such as HTTP Request, Read File, or Extract Data.
+3. Test and inspect their real output shapes before creating mappings.
+4. Add Condition or validation steps before nodes that write, send, delete, or execute.
+5. Review permissions, run the complete workflow, and inspect execution evidence.
+6. Only then replace Manual Trigger with Schedule Trigger or another automatic trigger.
+
+## Choose a category
+
+| Need | Start here | Keep in mind |
+| --- | --- | --- |
+| Start work | Triggers | Local schedules and polling need an online runner. |
+| Route or pause | Logic | Control branches are separate from data mappings. |
+| Shape or remember values | Data | Workflow state commits only after full success. |
+| Call an API | Network | Approve domains and design retries around idempotency. |
+| Interact with a site | Browser | Open a managed session first and prefer recorded accessible locators. |
+| Send or modify messages | Communication | Credentials stay in connections; mutations require permission review. |
+| Change the local system | System | Keep filesystem and command boundaries narrow. |
+
+## Read a node page
+
+Every reference page includes:
+
+- concrete use cases and an end-to-end example;
+- the exact implemented defaults and supported option values;
+- typed input and output ports;
+- runtime placement and side-effect status;
+- behavior, failure guidance, and links to deeper concept guides.
+
+The **Default node configuration** block is the exact generated storage shape. **Example settings** blocks focus on the fields relevant to the scenario and can contain illustrative IDs or shortened recorded locators.
+
+<Warning>
+  A node without the catalogue's generic side-effect flag is not automatically read-only. An HTTP mutation or browser click can still change an external system. Review the configured method, target, account, and downstream effect.
+</Warning>
+
 ## Triggers
 
 <Card title="Manual Trigger" icon="zap" href="/nodes/manual-trigger">

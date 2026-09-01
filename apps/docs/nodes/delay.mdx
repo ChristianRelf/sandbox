@@ -6,7 +6,32 @@ icon: "git-branch"
 
 **Node type:** `delay` · **Version:** `1` · **Category:** Logic
 
-Wait without blocking the runner. This node does not declare an external side effect.
+Wait without blocking the runner. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Pause briefly between actions when an external system needs processing time.
+- Rate-space a sequence without occupying a blocking thread.
+
+## Example: Wait before checking an export
+
+Pause for 30 seconds after requesting an export, then continue to the status check.
+
+
+```json title="Example settings"
+{
+  "amount": 30,
+  "unit": "seconds"
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Place Delay after the request that starts the remote work.
+2. Choose seconds or minutes and a non-negative amount.
+3. Follow it with an explicit status check rather than assuming the work completed.
+
 
 ## Configuration
 
@@ -44,6 +69,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- The wait is cancellable and returns delayedMs when it completes.
+- Delay waits once; it is not a retry loop or a page-readiness assertion.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Prefer Wait For for browser state because fixed delays are sensitive to page speed.
+- Long delays keep an execution active and count toward the relevant execution and session limits.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -53,3 +90,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Retries and recovery](/execution/retries-and-recovery)
+- [Wait For](/nodes/wait-for)

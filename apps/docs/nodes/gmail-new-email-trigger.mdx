@@ -6,7 +6,39 @@ icon: "zap"
 
 **Node type:** `gmail_new_email_trigger` · **Version:** `1` · **Category:** Triggers
 
-Poll Gmail safely for matching messages. This node does not declare an external side effect.
+Poll Gmail safely for matching messages. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Start triage, drafting, or notification flows from matching Gmail messages.
+- Filter at the trigger when only a sender, recipient, subject fragment, label, or attachment state is relevant.
+
+## Example: Draft replies to support mail
+
+Poll a connected support inbox every five minutes for messages whose subject contains Support.
+
+
+```json title="Example settings"
+{
+  "credentialId": "gmail-support",
+  "pollIntervalMinutes": 5,
+  "sender": "",
+  "recipient": "support@example.com",
+  "subjectContains": "Support",
+  "hasAttachment": false,
+  "label": "",
+  "includeHtmlBody": false,
+  "markAsProcessed": "deduplicate"
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Select the Gmail connection and add the narrowest useful filters.
+2. Map fields from the email output into analysis or draft nodes.
+3. Prefer Create Gmail Draft until the recipient logic has been reviewed.
+
 
 ## Configuration
 
@@ -58,6 +90,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `email` | `object` | No | Email |
 
+## Execution behavior
+
+- sndbox persists observed message IDs per workflow so the same message does not repeatedly trigger it.
+- Plain text is included by default; enabling HTML increases the amount and sensitivity of data stored in execution evidence.
+- The editor catalogue declares `email` (object) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A poll interval is not an exact delivery SLA; the next poll must run and the event must enter the queue.
+- If no messages match, test each filter independently and confirm the connection can still access the mailbox.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -67,3 +111,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Gmail connection](/connections/gmail)
+- [Schedules and queue](/execution/schedules-and-queue)

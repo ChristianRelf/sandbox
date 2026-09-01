@@ -10,7 +10,7 @@ sndbox exposes AI in three deliberately separate places. All three use an [AI co
 | --- | --- | --- |
 | AI builder | You want to create or revise the graph in plain language | A complete workflow proposal you can review and apply |
 | [AI node](/nodes/ai-prompt) | A running workflow needs a model answer before continuing | `response`, `usage`, and `model` outputs |
-| Code editor **Write with AI** | You want a complete Python, HTML, JavaScript, or CSS file | A replacement editor draft, checked live before you save |
+| Code editor **Code with AI** | You want to discuss and revise a Python, HTML, JavaScript, or CSS file | A right-side coding chat that updates the checked editor draft before you save |
 
 ## Draft a graph
 
@@ -21,7 +21,9 @@ sndbox exposes AI in three deliberately separate places. All three use an [AI co
 5. Choose **Apply workflow** only when the proposal matches your intent.
 6. Configure any deliberately blank credentials, paths, URLs, recipients, or selectors, then validate and run the workflow yourself.
 
-The builder returns a replacement graph, not an execution. It can create built-in nodes, control edges, typed input bindings, and complete Code node source blocks. For a localhost site, it can produce separate HTML, JavaScript, and CSS Code nodes and map each `code` output into a Web Builder node.
+The builder returns a replacement graph, not an execution. It can create built-in nodes, control edges, typed input bindings, and complete Code node source blocks. It understands the capabilities and outputs of the built-in node catalogue, so a request such as an uptime monitor uses HTTP, state, condition, and notification nodes for the monitoring work while Code and Web Builder nodes create the interface. Web Builder's three typed inputs are repaired from the matching Code-node languages when a model returns a generic connection.
+
+While a draft is in progress, the chat shows muted activity stages such as **Planning Draft**, **Investigating current workflow**, and **Writing Code**. These are concise operation indicators rather than hidden model reasoning.
 
 <Warning>
   Applying a proposal changes the editor draft. AI does not grant permissions, approve risky actions, invent secret values, or start the workflow. Review side effects and permission changes exactly as you would for a manually built graph.
@@ -42,9 +44,9 @@ Map `response` into a later text-compatible field. `usage` contains provider-rep
 
 ## Write code with AI
 
-Open a Code node, choose **Edit code**, then choose **Write with AI**. Select a connection and describe the complete file or requested change. The current language and editor draft are included as context.
+Open a Code node, choose **Edit code**, then choose **Code with AI**. A coding chat opens to the right of the editor. Select a connection and describe the complete file or requested change. The current language and unsaved editor draft are included as context on every turn.
 
-**Generate & replace** replaces only the unsaved draft. The Problems panel immediately checks the returned source. Choose **Save code** or press `Ctrl+S` / `Cmd+S` to commit it to the node; cancel the dialog to keep the previously saved source.
+Each completed response replaces only the unsaved draft and remains in the chat so you can refine it. The Problems panel immediately checks the returned source. Choose **Save code** or press `Ctrl+S` / `Cmd+S` to commit it to the node; cancel the dialog to keep the previously saved source.
 
 AI-generated code is untrusted code. Inspect it before saving, and review command-execution permission before using Python or JavaScript in run mode. See [Code and Web Builder](/files-and-data/code-and-web-builder) for execution and localhost details.
 
@@ -55,4 +57,3 @@ AI-generated code is untrusted code. Inspect it before saving, and review comman
 - Describe the expected shape of data between nodes.
 - For code, request a complete file and state the language, inputs, output format, and error behavior.
 - For a site, describe the HTML structure, interactions, styles, and the data each code block should contain.
-

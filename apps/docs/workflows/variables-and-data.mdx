@@ -25,6 +25,31 @@ type InputBinding =
 | `protected_variable` | A named secret or protected value resolved by the host. |
 | `connection` | A vault-owned AI, Gmail, Discord, Slack, or plugin credential reference. |
 
+Choose the narrowest binding that represents the intent. Use a literal when a reviewer should see a fixed value in the workflow, a node output for structured data, and a template only when static text and several dynamic values must become one string.
+
+## Worked example
+
+Suppose an HTTP Request node named `request` returns:
+
+```json title="Observed output"
+{
+  "status": 200,
+  "body": {
+    "service": "checkout",
+    "openIncidents": 2
+  },
+  "finalUrl": "https://api.example.com/health"
+}
+```
+
+You can map `status` directly into the left input of a Condition node, map `body.openIncidents` into another numeric comparison, and build a notification template such as:
+
+```text
+{{nodes.request.output.body.service}} has {{nodes.request.output.body.openIncidents}} open incidents.
+```
+
+The control edge from HTTP Request to Condition makes the comparison eligible to run. The bindings supply the two values. Removing the edge does not turn the bindings into an execution dependency; validation reports that the mapped source is not available on the path.
+
 ## Template expressions
 
 Repository templates use expressions such as:
@@ -37,6 +62,8 @@ Repository templates use expressions such as:
 
 Use the editor's mapping controls to insert paths instead of typing IDs from memory. The binding panel validates source-node availability and compatible port types.
 
+Object paths are case-sensitive. If an API sometimes omits a field, map the containing object into Code or use a Condition with `exists` before relying on the nested value. Test with both the normal response and a sparse or empty response.
+
 For a localhost site, map the `code` output from separate HTML, JavaScript, and CSS Code nodes into the Web Builder inputs with the same names. Control edges determine when those nodes run; their input bindings carry the source files. See [Code and Web Builder](/files-and-data/code-and-web-builder).
 
 ## Sensitive values
@@ -46,3 +73,17 @@ Do not place passwords, tokens, cookies, or webhook URLs in a literal or templat
 ## JSON-compatible data
 
 Node data uses strings, numbers, booleans, objects, arrays, `null`, trusted path values, and connection references. A parser may return structured objects or arrays; inspect a successful test output before selecting a nested path.
+
+## Resolution and failure behavior
+
+Bindings resolve immediately before the destination node runs. A literal in the canvas is therefore not proof of the final runtime value: a mapped value, protected variable, or connection can replace it. The execution inspector records resolved non-secret inputs so you can distinguish a mapping problem from a node-operation failure.
+
+A binding fails validation or execution when:
+
+- its source node no longer exists;
+- it references the same node, creating a self-reference;
+- the source is not upstream on the selected control path;
+- the selected path is absent from the actual output; or
+- its type is incompatible with the destination port.
+
+When a producer changes shape, test it first, reopen the destination mapping, and reselect the path. Do not repair a structured mapping by converting everything to an unchecked text template.

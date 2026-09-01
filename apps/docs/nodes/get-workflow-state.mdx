@@ -6,7 +6,32 @@ icon: "braces"
 
 **Node type:** `get_workflow_state` · **Version:** `1` · **Category:** Data
 
-Read a value stored by this workflow. This node does not declare an external side effect.
+Read a value stored by this workflow. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Read a checkpoint, cursor, last-seen value, or preference saved by this workflow.
+- Provide a default for the first run without confusing a missing key with stored null.
+
+## Example: Read the last processed cursor
+
+Return zero on the first run and the stored cursor on later runs.
+
+
+```json title="Example settings"
+{
+  "key": "last-cursor",
+  "defaultValue": 0
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Choose a stable, workflow-specific key.
+2. Branch on found if stored null and missing must differ.
+3. Map value into the request or comparison that needs the checkpoint.
+
 
 ## Configuration
 
@@ -47,6 +72,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `value` | `any` | No | Value |
 | `found` | `boolean` | No | Found |
 
+## Execution behavior
+
+- The output includes value and a separate found boolean.
+- Node tests can read committed state but do not commit state changes produced elsewhere in the test.
+- The editor catalogue declares `value` (any), `found` (boolean) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- State belongs to one workflow; copying a node to another workflow does not copy its stored value.
+- Use an explicit default whose type matches what downstream nodes expect.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -56,3 +93,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Workflow state](/files-and-data/workflow-state)
+- [Data types](/reference/data-types)

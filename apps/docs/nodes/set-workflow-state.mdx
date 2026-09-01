@@ -6,7 +6,32 @@ icon: "braces"
 
 **Node type:** `set_workflow_state` · **Version:** `1` · **Category:** Data
 
-Store a value after a successful run. This node can change external state or produce an external side effect.
+Store a value after a successful run. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Persist a cursor, last successful timestamp, or small JSON-compatible checkpoint.
+- Make the next execution aware of work completed by the current one.
+
+## Example: Commit the latest API cursor
+
+Store a mapped response cursor only after the entire workflow succeeds.
+
+
+```json title="Example settings"
+{
+  "key": "last-cursor",
+  "value": "{{nodes.request.output.body.nextCursor}}"
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Use a stable key.
+2. Map the new value from a successful upstream node.
+3. Place the node in the successful path and verify the whole run completes.
+
 
 ## Configuration
 
@@ -47,6 +72,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | --- | --- | --- | --- |
 | `value` | `any` | No | Stored value |
 
+## Execution behavior
+
+- The write is staged during execution and committed only after the workflow succeeds.
+- A failed or cancelled run leaves the previous committed value intact.
+- The editor catalogue declares `value` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- A successful node test previews the state update but deliberately does not commit it.
+- Workflow state is for small checkpoints, not secrets, files, or an unbounded event archive.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -56,3 +93,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Workflow state](/files-and-data/workflow-state)
+- [Retries and recovery](/execution/retries-and-recovery)

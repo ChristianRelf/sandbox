@@ -6,7 +6,43 @@ icon: "mouse-pointer-click"
 
 **Node type:** `click_element` · **Version:** `1` · **Category:** Browser
 
-Click a recorded element. This node does not declare an external side effect.
+Click a recorded element. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Activate a recorded button, link, menu item, or other interactive target.
+- Use double, right, or modified clicks when the application requires them.
+
+## Example: Open the reports view
+
+Record the Open reports button, use a normal left click, and allow a short transition delay.
+
+
+```json title="Example settings"
+{
+  "locator": {
+    "primary": {
+      "kind": "role",
+      "value": "button",
+      "name": "Open reports"
+    },
+    "alternatives": []
+  },
+  "clickType": "normal",
+  "mouseButton": "left",
+  "modifiers": [],
+  "waitAfterMs": 500,
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node. The locator is shortened for readability; use the recorder to create the complete structured locator bundle.
+
+
+1. Record the target in a representative page state.
+2. Test the locator and confirm it matches exactly one element.
+3. Follow with Wait For or Navigate readiness when the click starts asynchronous work.
+
 
 ## Configuration
 
@@ -52,6 +88,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `result` | `any` | No | Result |
 
+## Execution behavior
+
+- sndbox tries the recorded accessible locator and retained fallbacks, recording every attempt in browser diagnostics.
+- waitAfterMs is a fixed post-click pause, not a proof that the expected result occurred.
+- The editor catalogue declares `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- If zero or several elements match, rerecord with a stable accessible name or test ID.
+- Avoid weak text or positional CSS selectors when the page offers a role, label, or stable test ID.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -61,3 +109,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Locators](/browser-automation/locators)
+- [Navigation and waits](/browser-automation/navigation-and-waits)

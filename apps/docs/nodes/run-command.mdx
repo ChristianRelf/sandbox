@@ -6,7 +6,37 @@ icon: "terminal"
 
 **Node type:** `run_command` · **Version:** `1` · **Category:** System
 
-Execute an explicitly approved process. This node can change external state or produce an external side effect.
+Execute an explicitly approved process. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+
+## When to use this node
+
+- Invoke a reviewed local program that has no dedicated node.
+- Pass a structured argument list to a script and capture its exit result.
+
+## Example: Run a checked reporting script
+
+Invoke Python directly with separate arguments instead of constructing a shell command.
+
+
+```json title="Example settings"
+{
+  "executable": "C:\\Python313\\python.exe",
+  "arguments": [
+    "C:\\Automation\\report.py",
+    "--format",
+    "json"
+  ],
+  "workingDirectory": "C:\\Automation"
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Select the exact executable and approved working directory.
+2. Put every flag and value in its own arguments item.
+3. Check exitCode before parsing stdout.
+
 
 ## Configuration
 
@@ -15,7 +45,7 @@ Execute an explicitly approved process. This node can change external state or p
 | `executable` | string | `""` | Explicit executable path. It is passed separately from arguments. |
 | `arguments` | array | `[]` | Argument list. Each item is passed as one argument, without shell concatenation. |
 | `workingDirectory` | path | `""` | Approved working directory for the process. |
-| `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
+| `timeoutMs` | number | `30000` | Reserved timeout setting stored in the node schema. The current runner stops the process on cancellation but does not yet enforce this value. |
 
 <Note>Automatic runs require explicit permission review. The executable and arguments are passed separately.</Note>
 
@@ -52,6 +82,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `stderr` | `string` | No | Standard error |
 | `exitCode` | `number` | No | Exit code |
 
+## Execution behavior
+
+- sndbox starts the executable directly; it does not concatenate arguments into a shell command.
+- The output captures exitCode and the first 64 KiB each of stdout and stderr.
+- The editor catalogue declares `stdout` (string), `stderr` (string), `exitCode` (number) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Executables available in an interactive shell may not be on the desktop app's PATH; prefer an explicit path.
+- The current runner stops the child on cancellation but does not enforce the stored timeoutMs value. Ensure the program has its own bound and do not rely on this field until runtime enforcement is added.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -61,3 +103,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Permissions](/workflows/permissions)
+- [Logs and evidence](/execution/logs-and-evidence)

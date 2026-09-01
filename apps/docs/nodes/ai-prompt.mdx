@@ -6,7 +6,36 @@ icon: "braces"
 
 **Node type:** `ai_prompt` · **Version:** `1` · **Category:** Data
 
-Send an instruction mid-workflow and wait for the model response. This node does not declare an external side effect.
+Send an instruction mid-workflow and wait for the model response. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Classify, summarize, extract, or draft from mapped workflow data.
+- Turn unstructured text into a concise result before a human review step.
+
+## Example: Summarize a support email
+
+Map the email body into a focused prompt and ask for a short draftable summary.
+
+
+```json title="Example settings"
+{
+  "connectionId": "ai-work",
+  "prompt": "Summarize the customer request and list required follow-up:\n{{trigger.email.body}}",
+  "systemPrompt": "You are a support triage assistant. Do not invent facts.",
+  "temperature": 0.2,
+  "maxTokens": 500,
+  "timeoutMs": 90000
+}
+```
+
+This shows the important settings, not a complete exported node. Connection and profile IDs are illustrative; select the real resource in the inspector.
+
+
+1. Choose a connection whose provider and data policy are appropriate.
+2. Map only the context needed for the task.
+3. Review response before using it in communication or another side effect.
+
 
 ## Configuration
 
@@ -24,6 +53,8 @@ Send an instruction mid-workflow and wait for the model response. This node does
 <Note>The credential remains in the host vault. The prompt, system instruction, and mapped context are sent to the selected provider.</Note>
 
 <Note>AI nodes run on the desktop local runner and return the response text, provider-reported usage, and model ID.</Note>
+
+<Note>Instructions are limited to 100000 characters and timeout is clamped to 1000–300000 milliseconds.</Note>
 
 ## Workflow JSON
 
@@ -60,6 +91,18 @@ Values may be entered literally or mapped from an earlier compatible output when
 | `usage` | `object` | No | Token usage |
 | `model` | `string` | No | Model |
 
+## Execution behavior
+
+- The local runner waits for the provider and returns response text, provider-reported usage, and model ID.
+- Prompt, system instruction, and mapped context leave sndbox for the selected provider; the credential remains in the host vault.
+- The editor catalogue declares `response` (string), `usage` (object), `model` (string) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Model output is untrusted data: validate structure and preserve human review for consequential actions.
+- Reduce prompt size or raise the timeout within limits when requests consistently time out.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -67,3 +110,8 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [AI connections](/connections/ai)
+- [AI Builder](/workflows/ai-builder)

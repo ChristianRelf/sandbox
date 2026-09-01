@@ -6,7 +6,34 @@ icon: "mouse-pointer-click"
 
 **Node type:** `screenshot` · **Version:** `1` · **Category:** Browser
 
-Capture viewport, page or element. This node does not declare an external side effect.
+Capture viewport, page or element. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Capture visual evidence at an important checkpoint.
+- Record a viewport, full page, or one selected element for debugging.
+
+## Example: Capture a full report page
+
+Save a full-page image in execution history with a 10 MiB limit.
+
+
+```json title="Example settings"
+{
+  "mode": "full_page",
+  "includeInHistory": true,
+  "maximumBytes": 10485760,
+  "timeoutMs": 30000
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Place Screenshot after the page state you want to prove.
+2. Choose the smallest capture area that contains the needed evidence.
+3. Inspect privacy-sensitive content before enabling retained history artifacts.
+
 
 ## Configuration
 
@@ -49,6 +76,18 @@ This node has no typed ports in this direction.
 | --- | --- | --- | --- |
 | `path` | `path` | No | Screenshot path |
 
+## Execution behavior
+
+- The output is a trusted screenshot path; history attachment is controlled separately by includeInHistory.
+- Element mode requires a recorded locator and all modes enforce maximumBytes.
+- The editor catalogue declares `path` (path) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Full-page images can exceed the size limit on long pages.
+- Screenshots can capture personal data or secrets visible in the page even when text logs are redacted.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -58,3 +97,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Screenshots](/browser-automation/screenshots)
+- [Logs and evidence](/execution/logs-and-evidence)

@@ -21,6 +21,7 @@ const footerGroups = [
       { label: "Marketplace", href: "/marketplace" },
       { label: "Pricing", href: "/pricing" },
       { label: "Changelog", href: "/changelog" },
+      { label: "Discord community", href: brand.community.discord, external: true },
     ],
   },
   {
@@ -57,7 +58,11 @@ export function SiteFooter() {
         {footerGroups.map((group) => (
           <nav aria-label={group.label + " links"} key={group.label}>
             <h2>{group.label}</h2>
-            {group.links.map((link) => <Link href={link.href} key={link.href}>{link.label}</Link>)}
+            {group.links.map((link) => (
+              "external" in link
+                ? <a href={link.href} key={link.href}>{link.label}</a>
+                : <Link href={link.href} key={link.href}>{link.label}</Link>
+            ))}
           </nav>
         ))}
       </div>

@@ -6,7 +6,43 @@ icon: "mouse-pointer-click"
 
 **Node type:** `download_file` · **Version:** `1` · **Category:** Browser
 
-Save a browser download safely. This node does not declare an external side effect.
+Save a browser download safely. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Click a recorded download control and save the resulting file inside an approved folder.
+- Create a trusted path that later file and parser nodes can consume.
+
+## Example: Download a daily CSV report
+
+Save the report with a stable filename, renaming automatically if it already exists.
+
+
+```json title="Example settings"
+{
+  "locator": {
+    "primary": {
+      "kind": "role",
+      "value": "button",
+      "name": "Download report"
+    },
+    "alternatives": []
+  },
+  "destinationFolder": "C:\\Reports\\Daily",
+  "filename": "daily-report.csv",
+  "collisionBehaviour": "rename",
+  "maximumBytes": 104857600,
+  "timeoutMs": 60000
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary. The locator is shortened for readability; use the recorder to create the complete structured locator bundle.
+
+
+1. Record the control that starts the download.
+2. Select an approved destination and choose collision behavior.
+3. Map the returned path into Parse CSV or another file node.
+
 
 ## Configuration
 
@@ -53,6 +89,18 @@ This node has no typed ports in this direction.
 | `path` | `path` | No | Downloaded path |
 | `bytes` | `number` | No | Bytes |
 
+## Execution behavior
+
+- The node coordinates the click and browser download event, then returns path and byte count.
+- rename preserves an existing file, overwrite replaces it, and fail stops on a collision.
+- The editor catalogue declares `path` (path), `bytes` (number) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Use Wait For download_begins only when a separate action starts the download; Download File already owns its click.
+- A response larger than maximumBytes is rejected rather than partially trusted.
+
+
 ## Where it can run
 
 - Desktop local runner
@@ -62,3 +110,8 @@ This node has no typed ports in this direction.
 ## Test and inspect
 
 Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Downloads](/browser-automation/downloads)
+- [Files and folders](/files-and-data/files-and-folders)
