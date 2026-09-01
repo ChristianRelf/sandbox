@@ -189,7 +189,10 @@ impl BrowserSidecar {
             }
         }
         let mut child = Command::new(&node)
-            .arg(&script)
+            // Tauri returns verbatim resource paths (`\\?\C:\...`) in packaged
+            // Windows builds. Node's entry-point resolver does not handle that
+            // prefix, so launch the script relative to the working directory.
+            .arg(PathBuf::from("dist").join("server.js"))
             .current_dir(&self.root)
             .env("SANDBOX_IPC_TOKEN", &self.token)
             .env("PLAYWRIGHT_BROWSERS_PATH", &browsers)
