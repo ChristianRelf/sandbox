@@ -99,7 +99,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 - Workflows are DAGs only; loops and arbitrary expression execution remain intentionally unsupported.
 - The small-Droplet profile is for the marketing site and one headless runner. Run PostgreSQL, the control plane, and browser workers elsewhere.
 - PostgreSQL integration tests require `TEST_DATABASE_URL` and are skipped when it is not provided.
-- Publication requires the protected GitHub release environment and the immutable `v0.7.4-beta.2` tag. This invite-only prerelease may publish an unsigned Windows installer with checksums and attestations.
+- Publication requires the protected GitHub release environment and the immutable `v0.7.4-beta.3` tag. This invite-only prerelease may publish an unsigned Windows installer with checksums and attestations.
 
 ## GA candidate documentation
 

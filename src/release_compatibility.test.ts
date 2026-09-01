@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const releaseVersion = "0.7.4-beta.2";
+const releaseVersion = "0.7.4-beta.3";
 const escapedReleaseVersion = releaseVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("v0.7.4 beta release compatibility", () => {

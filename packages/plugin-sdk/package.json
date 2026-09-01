@@ -1,6 +1,6 @@
 {
   "name": "@sandbox/plugin-sdk",
-  "version": "0.7.4-beta.2",
+  "version": "0.7.4-beta.3",
   "description": "Public SDK and CLI for capability-controlled sndbox plugins",
   "type": "module",
   "main": "dist/index.js",
