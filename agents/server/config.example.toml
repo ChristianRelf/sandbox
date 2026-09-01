@@ -13,7 +13,7 @@ approved_network_targets = []
 log_level = "info"
 update_channel = "beta"
 update_mode = "notify_only"
-pinned_version_range = ">=0.7.2-beta.2,<0.8"
+pinned_version_range = ">=0.7.2-beta.3,<0.8"
 drain_timeout_seconds = 60
 enable_managed_chromium = false
 allow_simple_commands = false

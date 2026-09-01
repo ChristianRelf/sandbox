@@ -1,6 +1,6 @@
 {
   "name": "@sandbox/docs",
-  "version": "0.7.2-beta.2",
+  "version": "0.7.2-beta.3",
   "private": true,
   "scripts": {
     "generate:references": "tsx ../../scripts/generate-docs-reference.ts",
