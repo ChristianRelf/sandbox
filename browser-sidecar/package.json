@@ -1,7 +1,7 @@
 {
   "name": "sandbox-browser-sidecar",
   "private": true,
-  "version": "0.7.2-beta.3",
+  "version": "0.7.2-beta.4",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const betaVersion = "0.7.2-beta.3";
+const betaVersion = "0.7.2-beta.4";
 const escapedBetaVersion = betaVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("v0.7 beta release compatibility", () => {
@@ -50,7 +50,7 @@ describe("v0.7 beta release compatibility", () => {
     expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${betaVersion}";`);
     expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${betaVersion}";`);
     expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${betaVersion}";`);
-    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.2-beta.3,<0.8"');
+    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.2-beta.4,<0.8"');
   });
 
   it("attests prerelease artifacts while keeping stable Windows releases fail-closed", () => {
@@ -178,7 +178,7 @@ describe("v0.7 beta release compatibility", () => {
   it("keeps documentation on the generated Mintlify surface", () => {
     const config = JSON.parse(read("apps/docs/docs.json"));
     expect(config.$schema).toBe("https://mintlify.com/docs.json");
-    expect(config.name).toBe("sndbox");
+    expect(config.name).toBe("sndbox docs");
     expect(config.navigation.tabs).toHaveLength(4);
     expect(JSON.stringify(config)).toContain('"source":"api-reference/openapi.json"');
 

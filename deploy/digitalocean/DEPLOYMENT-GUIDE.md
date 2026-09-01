@@ -178,7 +178,7 @@ In GitHub, open:
 
 Create `production-release`. You do not need to add a code-signing certificate for an `alpha`, `beta`, or `rc` test release.
 
-The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.2-beta.3`. It still publishes a SHA-256 checksum and retains the GitHub Actions release record. GitHub artifact attestations are added when the repository visibility and account support them; they are unavailable for a private repository owned by a personal account. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
+The release workflow deliberately produces an unsigned Windows installer for prerelease tags such as `v0.7.2-beta.4`. It still publishes a SHA-256 checksum and retains the GitHub Actions release record. GitHub artifact attestations are added when the repository visibility and account support them; they are unavailable for a private repository owned by a personal account. Windows will identify the publisher as unknown and may display a SmartScreen warning; only share this installer with invited testers who understand that warning.
 
 You can optionally require manual approval on this environment before GitHub publishes a release.
 
@@ -253,9 +253,9 @@ The deployment action signs in to GitHub Container Registry using its short-live
 
 After the first container build, open each sndbox package under your GitHub account or organisation. Under **Package settings > Manage Actions access**, ensure this repository has read access. Making the packages public is another option for a public beta.
 
-## 10. Publish `v0.7.2-beta.3`
+## 10. Publish `v0.7.2-beta.4`
 
-Before tagging, ensure all deployment changes are committed and pushed, the working tree is clean, and these files all contain version `0.7.2-beta.3`:
+Before tagging, ensure all deployment changes are committed and pushed, the working tree is clean, and these files all contain version `0.7.2-beta.4`:
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
@@ -267,8 +267,8 @@ Then run:
 git switch main
 git pull --ff-only origin main
 git status --short
-git tag -a v0.7.2-beta.3 -m "sndbox v0.7.2 beta 3"
-git push origin v0.7.2-beta.3
+git tag -a v0.7.2-beta.4 -m "sndbox v0.7.2 beta 3"
+git push origin v0.7.2-beta.4
 ```
 
 Open **GitHub > Actions > Release**. Wait for every job to succeed. The workflow produces:
@@ -292,7 +292,7 @@ Enter:
 | Input | Value |
 | --- | --- |
 | Branch | `main` |
-| Version | `0.7.2-beta.3` — do not include `v` |
+| Version | `0.7.2-beta.4` — do not include `v` |
 | Deployment | `website` |
 
 Select **Run workflow** and approve the `digitalocean-beta` environment if prompted.
@@ -461,7 +461,7 @@ Run `npm run docs:build` locally, inspect the Mintlify deployment log, and verif
 
 ### The release workflow rejects the tag
 
-The Git tag, root package version, and Tauri version must match exactly. Supported prerelease tags use forms such as `v0.7.2-beta.3`, not `v0.7-beta` or `v0.7.0-beta2`.
+The Git tag, root package version, and Tauri version must match exactly. Supported prerelease tags use forms such as `v0.7.2-beta.4`, not `v0.7-beta` or `v0.7.0-beta2`.
 
 ## 19. Files and data to back up
 
