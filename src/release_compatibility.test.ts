@@ -102,6 +102,7 @@ describe("v0.7.3 beta release compatibility", () => {
     expect(agentRelease).toContain("cosign is required for a production release.");
     expect(agentRelease).toContain("test -s SHA256SUMS.sigstore.json");
     expect(read("agents/server/Dockerfile")).toContain("COPY src-tauri/engine src-tauri/engine");
+    expect(read("agents/server/Dockerfile")).toContain("FROM rust:1.95-bookworm AS build");
     expect(read("agents/server/Dockerfile")).toContain("COPY src-tauri/plugin-runtime src-tauri/plugin-runtime");
     expect(read("agents/server/Dockerfile")).toContain("src-tauri/src/provider_adapter.rs");
     expect(read("agents/server/Dockerfile.dockerignore")).toContain("!src-tauri/plugin-runtime/**");

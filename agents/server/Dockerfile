@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM rust:1.88-bookworm AS build
+FROM rust:1.95-bookworm AS build
 ARG TARGETARCH
 ENV CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/cargo-target
 WORKDIR /source
