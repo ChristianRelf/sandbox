@@ -5,7 +5,7 @@
   "description": "First-party Slack workflow integration.",
   "version": "1.0.0",
   "publisherId": "com.sndbox",
-  "minimumHostVersion": ">=0.8.0-beta.1",
+  "minimumHostVersion": ">=0.7.3-beta.1",
   "homepage": "https://sndbox.dev/integrations",
   "documentation": "https://docs.sndbox.dev/integrations",
   "supportUrl": "https://sndbox.dev/support",
@@ -670,11 +670,11 @@
       "export": "execute"
     }
   ],
-  "packageIntegrity": "sha256:448ddfece170b914e198679cb8b290c191486f752ea0792894db2555b6cb801d",
+  "packageIntegrity": "sha256:126b8c516e92c8e90bd2840af2b777ca58d6f8384979fadb829a857140a33f68",
   "signature": {
     "algorithm": "ed25519",
-    "keyId": "first-party-2026",
-    "value": "xXE5p9LN5vjZQF1t4wZQQ4YIvRxuJELZ5UvLqLUVLjKgBWdSJx/vwEAEYTBg4wUBRzDAfBpMqi2dzwprDH3PDA=="
+    "keyId": "first-party-2026-0.7.3-beta.1",
+    "value": "Qdnmm7N1kBxCI38rJJtVdeNQGOKLDHaa2ybm791NKniK/E4O02v3MFfJxDZPgBogDvVSRKch7Cqrucr7a8HcDw=="
   },
   "pricing": {
     "model": "free"

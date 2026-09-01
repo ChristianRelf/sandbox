@@ -4,6 +4,8 @@ browser-sidecar/runtime/
 browser-sidecar/browsers/
 browser-sidecar/dist/
 dist/
+!plugins/first-party/dist/
+!plugins/first-party/dist/*.sandbox-plugin
 .next/
 target/
 src-tauri/target/

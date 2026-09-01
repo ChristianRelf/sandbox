@@ -7,6 +7,7 @@ const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const privateKey = process.argv[2];
 const publicKey = process.argv[3];
 if (!privateKey || !publicKey) throw new Error("Usage: node scripts/generate-first-party-plugins.mjs <private-key.pem> <public-key.pem>");
+const signingKeyId = "first-party-2026-0.7.3-beta.1";
 
 const guest = path.join(repository, "plugins/first-party/guest/target/wasm32-unknown-unknown/release/sndbox_first_party_integration_guest.wasm");
 const outputRoot = path.join(repository, "plugins/first-party");
@@ -138,7 +139,7 @@ for (const plugin of plugins) {
     description: `First-party ${plugin.name} workflow integration.`,
     version: "1.0.0",
     publisherId: "com.sndbox",
-    minimumHostVersion: ">=0.8.0-beta.1",
+    minimumHostVersion: ">=0.7.3-beta.1",
     homepage: "https://sndbox.dev/integrations",
     documentation: "https://docs.sndbox.dev/integrations",
     supportUrl: "https://sndbox.dev/support",
@@ -154,15 +155,15 @@ for (const plugin of plugins) {
     migrations: [],
     entrypoints: [{ id: "main", path: "components/main.wasm", export: "execute" }],
     packageIntegrity: "",
-    signature: { algorithm: "ed25519", keyId: "first-party-2026", value: "" },
+    signature: { algorithm: "ed25519", keyId: signingKeyId, value: "" },
     pricing: { model: "free" },
     privacyPolicy: "https://sndbox.dev/privacy"
   };
   await writeFile(path.join(root, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   const output = path.join(dist, `${plugin.id}-1.0.0.sandbox-plugin`);
-  const signed = await signDirectory(root, privateKey, "first-party-2026", output);
+  const signed = await signDirectory(root, privateKey, signingKeyId, output);
   await writeFile(path.join(root, "manifest.json"), `${JSON.stringify(signed.manifest, null, 2)}\n`);
   registry.push({ manifest: signed.manifest, packageFile: path.relative(repository, output).split(path.sep).join("/") });
 }
-await writeFile(path.join(outputRoot, "registry.json"), `${JSON.stringify({ publisherId: "com.sndbox", keyId: "first-party-2026", publicKeyPem: await readFile(publicKey, "utf8"), plugins: registry }, null, 2)}\n`);
+await writeFile(path.join(outputRoot, "registry.json"), `${JSON.stringify({ publisherId: "com.sndbox", keyId: signingKeyId, publicKeyPem: await readFile(publicKey, "utf8"), plugins: registry }, null, 2)}\n`);
 console.log(`Generated and signed ${registry.length} first-party packages with ${registry.reduce((sum, item) => sum + item.manifest.nodes.length, 0)} nodes.`);

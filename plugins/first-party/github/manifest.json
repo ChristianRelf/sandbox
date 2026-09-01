@@ -5,7 +5,7 @@
   "description": "First-party GitHub workflow integration.",
   "version": "1.0.0",
   "publisherId": "com.sndbox",
-  "minimumHostVersion": ">=0.8.0-beta.1",
+  "minimumHostVersion": ">=0.7.3-beta.1",
   "homepage": "https://sndbox.dev/integrations",
   "documentation": "https://docs.sndbox.dev/integrations",
   "supportUrl": "https://sndbox.dev/support",
@@ -1468,11 +1468,11 @@
       "export": "execute"
     }
   ],
-  "packageIntegrity": "sha256:9ee25719f0c889f0cf252bf31856f7220b9f80910574b10558c48a2c83e82ecc",
+  "packageIntegrity": "sha256:ad22d3551897e8ac820975eba72f760ad9b4ba5b89cc6e95499abbf2dcb84dec",
   "signature": {
     "algorithm": "ed25519",
-    "keyId": "first-party-2026",
-    "value": "EbM2a1s7BJKySSs5/i85hqw3a4f+SNUBfKvtbDL+v+QIekxoYBnlAL7K+Y3DigJD9XIAbqkmvxlVSqF23DHUCw=="
+    "keyId": "first-party-2026-0.7.3-beta.1",
+    "value": "BWfpsYIBXICFLg7DxplM78ZXAZBbzzqU0weG6auxkXRzKdtNfh8LVe9bVyAesVfrmUq/jfx+KBoM/DuTxlvQAA=="
   },
   "pricing": {
     "model": "free"

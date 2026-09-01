@@ -5,7 +5,7 @@
   "description": "First-party Notion workflow integration.",
   "version": "1.0.0",
   "publisherId": "com.sndbox",
-  "minimumHostVersion": ">=0.8.0-beta.1",
+  "minimumHostVersion": ">=0.7.3-beta.1",
   "homepage": "https://sndbox.dev/integrations",
   "documentation": "https://docs.sndbox.dev/integrations",
   "supportUrl": "https://sndbox.dev/support",
@@ -547,11 +547,11 @@
       "export": "execute"
     }
   ],
-  "packageIntegrity": "sha256:1e9cfe9eb72618785cb21a5741de926722dadf3b66f83763711419b608767a39",
+  "packageIntegrity": "sha256:b937cae11b8f76d5e2e6ecc5da8cef6cc33c594f0e6fe4c40542d50922e97944",
   "signature": {
     "algorithm": "ed25519",
-    "keyId": "first-party-2026",
-    "value": "kbWKNCfhkOP+O0xJ4Q+lglbCE4UZPp/H+kk0jIfTRJmgwo79UaBNMs+yO3nBqqrwrCDAmppwYGPkw//d9AmaAQ=="
+    "keyId": "first-party-2026-0.7.3-beta.1",
+    "value": "/urTgP6jvcH16COe1FKWd2yL12nvexEJSiomFUocB5kKzv6r6Em+VsEO79MRD6AFinM1tDiIb11kpj3AvwAfDg=="
   },
   "pricing": {
     "model": "free"

@@ -1,7 +1,7 @@
 {
   "publisherId": "com.sndbox",
-  "keyId": "first-party-2026",
-  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGEFWvpDToZDs0hwi1ZBFczAUE5x9/LAZr+xBByJF73s=\n-----END PUBLIC KEY-----\n",
+  "keyId": "first-party-2026-0.7.3-beta.1",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAKq4rQA0iT3UpCRVbqwSJxkQX8ZyNWI2ql+1D4MSfmkM=\n-----END PUBLIC KEY-----\n",
   "plugins": [
     {
       "manifest": {
@@ -11,7 +11,7 @@
         "description": "First-party Google Workspace workflow integration.",
         "version": "1.0.0",
         "publisherId": "com.sndbox",
-        "minimumHostVersion": ">=0.8.0-beta.1",
+        "minimumHostVersion": ">=0.7.3-beta.1",
         "homepage": "https://sndbox.dev/integrations",
         "documentation": "https://docs.sndbox.dev/integrations",
         "supportUrl": "https://sndbox.dev/support",
@@ -1199,11 +1199,11 @@
             "export": "execute"
           }
         ],
-        "packageIntegrity": "sha256:c2dc87591fed3ddb9b1c568ad47b9045fe38c2dcf0556b5fa5f5d60304e1811c",
+        "packageIntegrity": "sha256:a9be760fdb2ba598dbaf4273a60cd68ba2b20f2f63414fee63b85dc5c44f080a",
         "signature": {
           "algorithm": "ed25519",
-          "keyId": "first-party-2026",
-          "value": "0+9WUlmrXak936nDeLxqb4lupez8N7jDgwoR29B4czraInMN3I7E2afy5dhhdscVGq7pmal0UB6GIMNvJhHfCg=="
+          "keyId": "first-party-2026-0.7.3-beta.1",
+          "value": "Ss80TfMSy67nYaWuR1tAVIThWLsCg8HzvyB/a6dtdRTrAFkyQH+ajEh2KMUwVIzvJeUU6qbwuWyapwq3n3yXAw=="
         },
         "pricing": {
           "model": "free"
@@ -1220,7 +1220,7 @@
         "description": "First-party Slack workflow integration.",
         "version": "1.0.0",
         "publisherId": "com.sndbox",
-        "minimumHostVersion": ">=0.8.0-beta.1",
+        "minimumHostVersion": ">=0.7.3-beta.1",
         "homepage": "https://sndbox.dev/integrations",
         "documentation": "https://docs.sndbox.dev/integrations",
         "supportUrl": "https://sndbox.dev/support",
@@ -1885,11 +1885,11 @@
             "export": "execute"
           }
         ],
-        "packageIntegrity": "sha256:448ddfece170b914e198679cb8b290c191486f752ea0792894db2555b6cb801d",
+        "packageIntegrity": "sha256:126b8c516e92c8e90bd2840af2b777ca58d6f8384979fadb829a857140a33f68",
         "signature": {
           "algorithm": "ed25519",
-          "keyId": "first-party-2026",
-          "value": "xXE5p9LN5vjZQF1t4wZQQ4YIvRxuJELZ5UvLqLUVLjKgBWdSJx/vwEAEYTBg4wUBRzDAfBpMqi2dzwprDH3PDA=="
+          "keyId": "first-party-2026-0.7.3-beta.1",
+          "value": "Qdnmm7N1kBxCI38rJJtVdeNQGOKLDHaa2ybm791NKniK/E4O02v3MFfJxDZPgBogDvVSRKch7Cqrucr7a8HcDw=="
         },
         "pricing": {
           "model": "free"
@@ -1906,7 +1906,7 @@
         "description": "First-party Notion workflow integration.",
         "version": "1.0.0",
         "publisherId": "com.sndbox",
-        "minimumHostVersion": ">=0.8.0-beta.1",
+        "minimumHostVersion": ">=0.7.3-beta.1",
         "homepage": "https://sndbox.dev/integrations",
         "documentation": "https://docs.sndbox.dev/integrations",
         "supportUrl": "https://sndbox.dev/support",
@@ -2448,11 +2448,11 @@
             "export": "execute"
           }
         ],
-        "packageIntegrity": "sha256:1e9cfe9eb72618785cb21a5741de926722dadf3b66f83763711419b608767a39",
+        "packageIntegrity": "sha256:b937cae11b8f76d5e2e6ecc5da8cef6cc33c594f0e6fe4c40542d50922e97944",
         "signature": {
           "algorithm": "ed25519",
-          "keyId": "first-party-2026",
-          "value": "kbWKNCfhkOP+O0xJ4Q+lglbCE4UZPp/H+kk0jIfTRJmgwo79UaBNMs+yO3nBqqrwrCDAmppwYGPkw//d9AmaAQ=="
+          "keyId": "first-party-2026-0.7.3-beta.1",
+          "value": "/urTgP6jvcH16COe1FKWd2yL12nvexEJSiomFUocB5kKzv6r6Em+VsEO79MRD6AFinM1tDiIb11kpj3AvwAfDg=="
         },
         "pricing": {
           "model": "free"
@@ -2469,7 +2469,7 @@
         "description": "First-party GitHub workflow integration.",
         "version": "1.0.0",
         "publisherId": "com.sndbox",
-        "minimumHostVersion": ">=0.8.0-beta.1",
+        "minimumHostVersion": ">=0.7.3-beta.1",
         "homepage": "https://sndbox.dev/integrations",
         "documentation": "https://docs.sndbox.dev/integrations",
         "supportUrl": "https://sndbox.dev/support",
@@ -3932,11 +3932,11 @@
             "export": "execute"
           }
         ],
-        "packageIntegrity": "sha256:9ee25719f0c889f0cf252bf31856f7220b9f80910574b10558c48a2c83e82ecc",
+        "packageIntegrity": "sha256:ad22d3551897e8ac820975eba72f760ad9b4ba5b89cc6e95499abbf2dcb84dec",
         "signature": {
           "algorithm": "ed25519",
-          "keyId": "first-party-2026",
-          "value": "EbM2a1s7BJKySSs5/i85hqw3a4f+SNUBfKvtbDL+v+QIekxoYBnlAL7K+Y3DigJD9XIAbqkmvxlVSqF23DHUCw=="
+          "keyId": "first-party-2026-0.7.3-beta.1",
+          "value": "BWfpsYIBXICFLg7DxplM78ZXAZBbzzqU0weG6auxkXRzKdtNfh8LVe9bVyAesVfrmUq/jfx+KBoM/DuTxlvQAA=="
         },
         "pricing": {
           "model": "free"

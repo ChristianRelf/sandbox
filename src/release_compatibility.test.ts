@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { RUNNER_PROTOCOL_VERSION } from "@sandbox/contracts";
 
 const root = resolve(import.meta.dirname, "..");
-const betaVersion = "0.8.0-beta.1";
-const escapedBetaVersion = betaVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const releaseVersion = "0.7.3-beta.1";
+const escapedReleaseVersion = releaseVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe("v0.8 beta release compatibility", () => {
+describe("v0.7.3 beta release compatibility", () => {
   it("keeps first-party surfaces and runtime components on one beta version", () => {
     const packages = [
       "package.json",
@@ -27,7 +27,7 @@ describe("v0.8 beta release compatibility", () => {
       "services/scheduler/package.json"
     ];
     for (const file of packages) {
-      expect(JSON.parse(read(file)).version, file).toBe(betaVersion);
+      expect(JSON.parse(read(file)).version, file).toBe(releaseVersion);
     }
 
     const crates = [
@@ -38,10 +38,10 @@ describe("v0.8 beta release compatibility", () => {
       "src-tauri/plugin-runtime/Cargo.toml"
     ];
     for (const file of crates) {
-      expect(read(file), file).toMatch(new RegExp(`^version = "${escapedBetaVersion}"$`, "m"));
+      expect(read(file), file).toMatch(new RegExp(`^version = "${escapedReleaseVersion}"$`, "m"));
     }
     const tauriConfig = JSON.parse(read("src-tauri/tauri.conf.json"));
-    expect(tauriConfig.version).toBe(betaVersion);
+    expect(tauriConfig.version).toBe(releaseVersion);
     expect(tauriConfig.bundle.targets).toEqual(["nsis"]);
     expect(tauriConfig.bundle.windows.nsis.installerIcon).toBe("icons/icon.ico");
     expect(tauriConfig.bundle.windows.nsis.uninstallerIcon).toBe("icons/icon.ico");
@@ -53,10 +53,10 @@ describe("v0.8 beta release compatibility", () => {
   it("keeps runtime constants and protocol boundaries aligned", () => {
     expect(RUNNER_PROTOCOL_VERSION).toBe(2);
     expect(read("agents/server/src/lib.rs")).toContain('pub const RUNNER_PROTOCOL_VERSION: u16 = 2;');
-    expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${betaVersion}";`);
-    expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${betaVersion}";`);
-    expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${betaVersion}";`);
-    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.8.0-beta.1,<0.9"');
+    expect(read("agents/server/src/lib.rs")).toContain(`pub const ENGINE_VERSION: &str = "${releaseVersion}";`);
+    expect(read("agents/server/src/lib.rs")).toContain(`pub const PLUGIN_RUNTIME_VERSION: &str = "${releaseVersion}";`);
+    expect(read("src-tauri/plugin-runtime/src/lib.rs")).toContain(`pub const HOST_VERSION: &str = "${releaseVersion}";`);
+    expect(read("agents/server/config.example.toml")).toContain('pinned_version_range = ">=0.7.3-beta.1,<0.8"');
   });
 
   it("attests prerelease artifacts while keeping stable Windows releases fail-closed", () => {

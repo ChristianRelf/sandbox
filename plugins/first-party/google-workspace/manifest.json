@@ -5,7 +5,7 @@
   "description": "First-party Google Workspace workflow integration.",
   "version": "1.0.0",
   "publisherId": "com.sndbox",
-  "minimumHostVersion": ">=0.8.0-beta.1",
+  "minimumHostVersion": ">=0.7.3-beta.1",
   "homepage": "https://sndbox.dev/integrations",
   "documentation": "https://docs.sndbox.dev/integrations",
   "supportUrl": "https://sndbox.dev/support",
@@ -1193,11 +1193,11 @@
       "export": "execute"
     }
   ],
-  "packageIntegrity": "sha256:c2dc87591fed3ddb9b1c568ad47b9045fe38c2dcf0556b5fa5f5d60304e1811c",
+  "packageIntegrity": "sha256:a9be760fdb2ba598dbaf4273a60cd68ba2b20f2f63414fee63b85dc5c44f080a",
   "signature": {
     "algorithm": "ed25519",
-    "keyId": "first-party-2026",
-    "value": "0+9WUlmrXak936nDeLxqb4lupez8N7jDgwoR29B4czraInMN3I7E2afy5dhhdscVGq7pmal0UB6GIMNvJhHfCg=="
+    "keyId": "first-party-2026-0.7.3-beta.1",
+    "value": "Ss80TfMSy67nYaWuR1tAVIThWLsCg8HzvyB/a6dtdRTrAFkyQH+ajEh2KMUwVIzvJeUU6qbwuWyapwq3n3yXAw=="
   },
   "pricing": {
     "model": "free"
