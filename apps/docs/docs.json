@@ -258,7 +258,7 @@
       },
       {
         "tab": "Developers",
-        "icon": "code-2",
+        "icon": "code-xml",
         "groups": [
           {
             "group": "Plugins",
