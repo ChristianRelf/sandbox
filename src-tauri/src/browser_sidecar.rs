@@ -11,6 +11,8 @@ use uuid::Uuid;
 
 const PROTOCOL_VERSION: u32 = 1;
 const EXPECTED_SIDECAR_VERSION: &str = "0.2.0";
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -188,7 +190,10 @@ impl BrowserSidecar {
                 return Err(format!("Browser engine unavailable: {label} was not packaged at '{}'. Run npm.cmd run browser:prepare before building.", path.display()));
             }
         }
-        let mut child = Command::new(&node)
+        let mut command = Command::new(&node);
+        #[cfg(windows)]
+        command.creation_flags(CREATE_NO_WINDOW);
+        let mut child = command
             // Tauri returns verbatim resource paths (`\\?\C:\...`) in packaged
             // Windows builds. Node's entry-point resolver does not handle that
             // prefix, so launch the script relative to the working directory.

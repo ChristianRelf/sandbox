@@ -40,8 +40,14 @@ describe("v0.7 beta release compatibility", () => {
     for (const file of crates) {
       expect(read(file), file).toMatch(new RegExp(`^version = "${escapedBetaVersion}"$`, "m"));
     }
-    expect(JSON.parse(read("src-tauri/tauri.conf.json")).version).toBe(betaVersion);
-    expect(JSON.parse(read("src-tauri/tauri.conf.json")).bundle.targets).toEqual(["nsis"]);
+    const tauriConfig = JSON.parse(read("src-tauri/tauri.conf.json"));
+    expect(tauriConfig.version).toBe(betaVersion);
+    expect(tauriConfig.bundle.targets).toEqual(["nsis"]);
+    expect(tauriConfig.bundle.windows.nsis.installerIcon).toBe("icons/icon.ico");
+    expect(tauriConfig.bundle.windows.nsis.uninstallerIcon).toBe("icons/icon.ico");
+    const browserSidecar = read("src-tauri/src/browser_sidecar.rs");
+    expect(browserSidecar).toContain("const CREATE_NO_WINDOW: u32 = 0x0800_0000;");
+    expect(browserSidecar).toContain("command.creation_flags(CREATE_NO_WINDOW);");
   });
 
   it("keeps runtime constants and protocol boundaries aligned", () => {
