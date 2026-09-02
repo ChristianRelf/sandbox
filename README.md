@@ -96,7 +96,7 @@ Rust tests cover validation, cycles, ordering, true/false branches, failed depen
 ## Beta limitations
 
 - Local desktop schedules stop when the app is fully quit; use the paired Linux runner for always-on execution.
-- Workflows are DAGs only; loops and arbitrary expression execution remain intentionally unsupported.
+- Workflows are DAGs only; loops remain intentionally unsupported. Schema 5 adds the constrained expression language and item-based JavaScript/Python Code contract documented in `docs/code-and-expressions-stage-1.md`.
 - The small-Droplet profile is for the marketing site and one headless runner. Run PostgreSQL, the control plane, and browser workers elsewhere.
 - PostgreSQL integration tests require `TEST_DATABASE_URL` and are skipped when it is not provided.
 - Publication requires the protected GitHub release environment and the immutable `v0.7.6-beta.1` tag. This invite-only prerelease may publish an unsigned Windows installer with checksums and attestations.

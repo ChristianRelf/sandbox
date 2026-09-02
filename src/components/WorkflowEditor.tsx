@@ -190,6 +190,8 @@ export function WorkflowEditor() {
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [runningNode, setRunningNode] = useState<string>();
   const [run, setRun] = useState<ExecutionRecord>();
+  const [testDataExecutions,setTestDataExecutions]=useState<ExecutionRecord[]>([]);
+  const [testDataExecutionId,setTestDataExecutionId]=useState("");
   const [bottomOpen, setBottomOpen] = useState(false);
   const [saveState, setSaveState] = useState<
     "saved" | "unsaved" | "saving" | "failed"
@@ -237,6 +239,7 @@ export function WorkflowEditor() {
   useEffect(() => {
     if (selectedNodeId) setAuxiliaryTab("inspector");
   }, [selectedNodeId]);
+  useEffect(()=>{void api.listExecutions(workflow.id,25).then(items=>setTestDataExecutions(items)).catch(()=>setTestDataExecutions([]));},[workflow.id,run?.id]);
   const {
     accessibleEditorDefault,
     confirmBeforeLeaving,
@@ -444,7 +447,7 @@ export function WorkflowEditor() {
         workflow,
         selectedNode.id,
         {},
-        run?.id,
+        testDataExecutionId || undefined,
         allowSideEffects,
       );
       setRun(execution);
@@ -456,7 +459,7 @@ export function WorkflowEditor() {
       setTestingNode(false);
       setPendingSideEffectTest(false);
     }
-  }, [run?.id, selectedNode, testingNode, toast, workflow]);
+  }, [testDataExecutionId, selectedNode, testingNode, toast, workflow]);
   useEffect(() => {
     const request = ++validationRequest.current;
     const timer = window.setTimeout(() => {
@@ -1224,6 +1227,10 @@ export function WorkflowEditor() {
             <NodeInspector
               workflow={workflow}
               node={selectedNode}
+              sampleRun={testDataExecutions.find(item=>item.id===testDataExecutionId)??run}
+              testDataExecutions={testDataExecutions}
+              testDataExecutionId={testDataExecutionId}
+              onTestDataExecutionChange={setTestDataExecutionId}
               issues={issues.filter(
                 (issue) => issue.nodeId === selectedNode.id,
               )}
@@ -1528,7 +1535,7 @@ function PermissionReview({
     })
     .filter(Boolean);
   const commandNodes = workflow.nodes.filter(
-    (node) => node.type === "run_command" || (node.type === "code" && node.configuration.executionMode === "run"),
+    (node) => node.type === "run_command" || (["code","javascript_code","python_code"].includes(node.type) && node.configuration.executionMode === "run"),
   );
   const browserProfiles = [
     ...new Set(
@@ -1785,8 +1792,8 @@ function PermissionReview({
                 <div className="command-review" key={node.id}>
                   <AlertTriangle size={15} />
                   <div>
-                    <b>{node.type === "code" ? `${String(node.configuration.language ?? "javascript")} code` : String(node.configuration.executable || "Executable not configured")}</b>
-                    <code>{node.type === "code" ? `${String(node.configuration.sourceCode ?? "").split("\n").length} lines · executed locally` : (((node.configuration.arguments as string[]) ?? []).join(" ") || "No arguments")}</code>
+                    <b>{["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.language ?? "javascript")} code` : String(node.configuration.executable || "Executable not configured")}</b>
+                    <code>{["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.sourceCode ?? "").split("\n").length} lines · restricted local runtime` : (((node.configuration.arguments as string[]) ?? []).join(" ") || "No arguments")}</code>
                   </div>
                 </div>
               ))}
@@ -1868,7 +1875,7 @@ function permissionKindFor(
     return "files";
   if (normalized.includes("network access") || normalized.includes("network domain"))
     return "network";
-  if (nodeType === "run_command" || nodeType === "code") return "command";
+  if (nodeType === "run_command" || ["code","javascript_code","python_code"].includes(nodeType ?? "")) return "command";
   if (
     nodeType &&
     [

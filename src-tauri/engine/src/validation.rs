@@ -1,4 +1,5 @@
-use crate::{EngineError, InputBinding, Workflow};
+use crate::{expressions::inspect_template, EngineError, InputBinding, Workflow};
+use serde_json::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -47,6 +48,9 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             None,
             None,
         ));
+    }
+    if workflow.settings.expression_language_version != crate::expressions::EXPRESSION_LANGUAGE_VERSION {
+        issues.push(issue("expression_version_incompatible",format!("Workflow requires expression language {}, but this runner supports {}.",workflow.settings.expression_language_version,crate::expressions::EXPRESSION_LANGUAGE_VERSION),None,None));
     }
     let ids: HashSet<_> = workflow.nodes.iter().map(|n| n.id.as_str()).collect();
     if ids.len() != workflow.nodes.len() {
@@ -170,6 +174,29 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
         }
     }
     for node in &workflow.nodes {
+        let reachable_sources = upstream_node_ids(workflow, &node.id);
+        for (field_path, source) in expression_strings(&node.configuration, "configuration") {
+            if field_path.starts_with("configuration.pinnedData")
+                || field_path.starts_with("configuration.dependencies")
+                || matches!(field_path.rsplit('.').next(),Some("sourceCode"|"credentialId"|"connectionId"|"profileId"|"runtimeVersion"))
+            { continue; }
+            if !source.contains("{{") { continue; }
+            match inspect_template(source) {
+                Err(error) => {
+                    let mut expression_issue = issue("expression_invalid", error.to_string(), Some(node.id.clone()), None);
+                    expression_issue.field_path = Some(field_path);
+                    issues.push(expression_issue);
+                }
+                Ok(references) => for source_id in references {
+                    if !reachable_sources.contains(source_id.as_str()) {
+                        let mut expression_issue = issue("expression_unreachable", format!("Expression references node '{source_id}', which is not reachable upstream."), Some(node.id.clone()), None);
+                        expression_issue.field_path = Some(field_path.clone());
+                        expression_issue.suggestion = Some("Choose a node connected before this field's node.".into());
+                        issues.push(expression_issue);
+                    }
+                }
+            }
+        }
         for (field, binding) in &node.input_bindings {
             if field.trim().is_empty() {
                 let mut binding_issue = issue(
@@ -200,7 +227,26 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                     );
                     binding_issue.field_path = Some(format!("inputBindings.{field}"));
                     issues.push(binding_issue);
+                } else if !reachable_sources.contains(node_id.as_str()) {
+                    let mut binding_issue = issue("binding_source_unreachable", format!("Input '{field}' references node '{node_id}', which does not run before this node."), Some(node.id.clone()), None);
+                    binding_issue.field_path = Some(format!("inputBindings.{field}"));
+                    issues.push(binding_issue);
                 }
+            }
+        }
+        if matches!(node.node_type.as_str(), "code" | "javascript_code" | "python_code") {
+            let expected_language = match node.node_type.as_str() { "javascript_code" => Some("javascript"), "python_code" => Some("python"), _ => None };
+            if expected_language.is_some_and(|expected| node.configuration.get("language").and_then(Value::as_str) != Some(expected)) {
+                let mut mismatch=issue("code_language_mismatch",format!("{} must use the {} runtime.",node.name,expected_language.unwrap()),Some(node.id.clone()),None);mismatch.field_path=Some("configuration.language".into());issues.push(mismatch);
+            }
+            if node.configuration.get("helperLanguageVersion").and_then(Value::as_u64).unwrap_or(1) != crate::expressions::EXPRESSION_LANGUAGE_VERSION as u64 {
+                let mut unsupported=issue("expression_version_incompatible",format!("{} requires an unsupported helper-language version.",node.name),Some(node.id.clone()),None);unsupported.field_path=Some("configuration.helperLanguageVersion".into());issues.push(unsupported);
+            }
+            if node.configuration.get("dependencies").and_then(Value::as_array).is_some_and(|dependencies|!dependencies.is_empty()) {
+                let mut packages=issue("package_policy_rejected","Stage 1 Code runtimes support built-in helpers only; package installation is not enabled.",Some(node.id.clone()),None);packages.field_path=Some("configuration.dependencies".into());packages.suggestion=Some("Remove package requirements or run the transformation through an approved integration node.".into());issues.push(packages);
+            }
+            if node.configuration.get("networkPolicy").and_then(Value::as_str).is_some_and(|policy|policy!="none") {
+                let mut network=issue("code_network_denied","Code nodes cannot request ambient network access in this runtime.",Some(node.id.clone()),None);network.field_path=Some("configuration.networkPolicy".into());issues.push(network);
             }
         }
         let missing = match node.node_type.as_str() {
@@ -272,7 +318,7 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                     None
                 }
             }
-            "code" => missing_string_or_binding(node, "sourceCode")
+            "code" | "javascript_code" | "python_code" => missing_string_or_binding(node, "sourceCode")
                 .then_some("Code requires source before it can run."),
             "web_builder" => (missing_string_or_binding(node, "html")
                 || missing_string_or_binding(node, "javascript")
@@ -394,7 +440,34 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             ));
         }
     }
+    for name in &workflow.settings.permissions.approved_environment_variables {
+        if name.is_empty() || name.len()>128 || !name.chars().all(|character|character.is_ascii_uppercase()||character.is_ascii_digit()||character=='_') {
+            issues.push(issue("environment_name_invalid",format!("Environment variable name '{name}' is invalid; use uppercase letters, digits and underscores."),None,None));
+        }
+    }
     issues
+}
+
+fn upstream_node_ids<'a>(workflow: &'a Workflow, node_id: &str) -> HashSet<&'a str> {
+    let mut reachable = HashSet::new();
+    let mut pending = vec![node_id];
+    while let Some(target) = pending.pop() {
+        for edge in workflow.edges.iter().filter(|edge| edge.target_node_id == target) {
+            if reachable.insert(edge.source_node_id.as_str()) { pending.push(edge.source_node_id.as_str()); }
+        }
+    }
+    reachable
+}
+
+fn expression_strings<'a>(value: &'a Value, prefix: &str) -> Vec<(String, &'a str)> {
+    let mut result = Vec::new();
+    match value {
+        Value::String(source) => result.push((prefix.to_string(), source.as_str())),
+        Value::Array(values) => for (index, value) in values.iter().enumerate() { result.extend(expression_strings(value, &format!("{prefix}.{index}"))); },
+        Value::Object(values) => for (key, value) in values { result.extend(expression_strings(value, &format!("{prefix}.{key}"))); },
+        _ => {}
+    }
+    result
 }
 
 fn missing_string_or_binding(node: &crate::WorkflowNode, field: &str) -> bool {
@@ -439,7 +512,7 @@ fn incomplete_field(node: &crate::WorkflowNode) -> Option<&'static str> {
         } else {
             "prompt"
         }),
-        "code" => Some("sourceCode"),
+        "code" | "javascript_code" | "python_code" => Some("sourceCode"),
         "web_builder" => Some(if missing_string_or_binding(node, "html") {
             "html"
         } else if missing_string_or_binding(node, "javascript") {

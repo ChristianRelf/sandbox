@@ -13,11 +13,13 @@ import {
 } from "react";
 import { api } from "../api";
 import { definitionFor, type NodeDefinition } from "../catalogue";
+import { expressionContext, previewExpression } from "../expressions";
 import type { CodeLanguage } from "./CodeEditorDialog";
 import { CustomSelect } from "./ui/CustomSelect";
 import type {
   BrowserProfile,
   ConnectionMetadata,
+  ExecutionRecord,
   InputBinding,
   StructuredLocator,
   ValidationIssue,
@@ -39,6 +41,7 @@ const locatorKinds = [
 const CodeEditorDialog = lazy(() =>
   import("./CodeEditorDialog").then((module) => ({ default: module.CodeEditorDialog })),
 );
+const isCodeNode = (type: string) => type === "code" || type === "javascript_code" || type === "python_code";
 
 export function NodeInspector({
   workflow,
@@ -46,12 +49,20 @@ export function NodeInspector({
   issues = [],
   onChange,
   onDelete,
+  sampleRun,
+  testDataExecutions = [],
+  testDataExecutionId = "",
+  onTestDataExecutionChange,
 }: {
   workflow: Workflow;
   node: WorkflowNode;
   issues?: ValidationIssue[];
   onChange: (node: WorkflowNode, workflowPatch?: Partial<Workflow>) => void;
   onDelete: () => void;
+  sampleRun?: ExecutionRecord;
+  testDataExecutions?: ExecutionRecord[];
+  testDataExecutionId?: string;
+  onTestDataExecutionChange?: (id:string)=>void;
 }) {
   const definition = definitionFor(node.type);
   const Icon = definition.icon;
@@ -206,6 +217,7 @@ export function NodeInspector({
       value={String(config[key] ?? "")}
       workflow={workflow}
       currentNodeId={node.id}
+      sampleRun={sampleRun}
       multiline={options?.multiline}
       sensitive={options?.sensitive}
       onChange={(value) => set(key, value)}
@@ -264,6 +276,7 @@ export function NodeInspector({
             workflow={workflow}
             node={node}
             onChange={onChange}
+            sampleRun={sampleRun}
           />
         )}
 
@@ -1343,7 +1356,7 @@ export function NodeInspector({
             <TimeoutField config={config} set={set} />
           </>
         )}
-        {node.type === "code" && (
+        {isCodeNode(node.type) && (
           <>
             <div className="code-node-summary">
               <span><Code2 size={17} /></span>
@@ -1360,8 +1373,30 @@ export function NodeInspector({
             )}
             {config.executionMode === "run" && (config.language === "python" || config.language === "javascript") && (
               <div className="risk-callout">
-                <AlertTriangle size={16} /><div><b>Local code execution</b><p>Requires command execution permission. The script receives mapped input through the SNDBOX_INPUT environment variable.</p></div>
+                <AlertTriangle size={16} /><div><b>Restricted local code execution</b><p>Requires command execution permission. Input is delivered over a private runtime protocol; ambient environment, network, process, module and filesystem access are denied.</p></div>
               </div>
+            )}
+            {config.executionMode === "run" && (
+              <>
+                <Field label="Execution mode">
+                  <CustomSelect value={String(config.itemMode ?? "all_items")} onChange={(event) => set("itemMode", event.target.value)}>
+                    <option value="all_items">Run once for all items</option>
+                    <option value="each_item">Run once for each item</option>
+                  </CustomSelect>
+                </Field>
+                <div className="info-note">Runtime {String(config.runtimeVersion ?? (config.language === "python" ? ">=3.11" : ">=20"))} · helpers v{String(config.helperLanguageVersion ?? 1)} · built-ins only. Local desktop is the only compatible target in this release.</div>
+                <Field label="Manual test data source" hint="Pinned data is used when no execution is selected">
+                  <CustomSelect value={testDataExecutionId} onChange={event=>onTestDataExecutionChange?.(event.target.value)}>
+                    <option value="">Pinned input / empty input</option>
+                    {testDataExecutions.map(execution=><option key={execution.id} value={execution.id}>{new Date(execution.startedAt).toLocaleString()} · {execution.status} · {execution.id.slice(0,8)}</option>)}
+                  </CustomSelect>
+                </Field>
+                <Field label="Expression environment allowlist" hint="Names only; values stay runner-side">
+                  <textarea rows={3} value={(workflow.settings.permissions.approvedEnvironmentVariables??[]).join("\n")} placeholder="ALLOWED_VALUE" onChange={event=>onChange(node,{settings:{...workflow.settings,permissions:{...workflow.settings.permissions,approvedEnvironmentVariables:event.target.value.split("\n").map(value=>value.trim()).filter(Boolean)}}})} />
+                </Field>
+                <JsonField label="Pinned test input" value={config.pinnedData ?? []} onChange={(value) => set("pinnedData", value)} />
+                <Info>Pinned data is used only by manual node tests and is never substituted into scheduled or deployed runs.</Info>
+              </>
             )}
             {config.executionMode === "run" && <TimeoutField config={config} set={set} />}
             <Info>HTML, JavaScript, and CSS source blocks can connect directly to a Web Builder node.</Info>
@@ -1502,18 +1537,19 @@ export function NodeInspector({
           Delete node
         </button>
       </div>
-      {node.type === "code" && (
+      {isCodeNode(node.type) && (
         <Suspense fallback={null}>
           <CodeEditorDialog
             open={codeEditorOpen}
             onOpenChange={setCodeEditorOpen}
-            language={String(config.language ?? "javascript") as CodeLanguage}
+            language={String(config.language ?? (node.type === "python_code" ? "python" : "javascript")) as CodeLanguage}
             value={String(config.sourceCode ?? "")}
+            lockedLanguage={node.type === "javascript_code" || node.type === "python_code"}
             onSave={(language, sourceCode) => onChange({
               ...node,
               configuration: {
                 ...config,
-                language,
+                language: node.type === "python_code" ? "python" : node.type === "javascript_code" ? "javascript" : language,
                 sourceCode,
                 executionMode: language === "html" || language === "css" ? "source" : (config.executionMode ?? "source"),
               },
@@ -1766,11 +1802,13 @@ function DataBindings({
   workflow,
   node,
   onChange,
+  sampleRun,
 }: {
   definition: NodeDefinition;
   workflow: Workflow;
   node: WorkflowNode;
   onChange: (node: WorkflowNode) => void;
+  sampleRun?: ExecutionRecord;
 }) {
   const upstreamIds = new Set<string>();
   const pending = [node.id];
@@ -1807,7 +1845,7 @@ function DataBindings({
             ? JSON.stringify([binding.nodeId, binding.path ?? []])
             : "";
           const options = sources.flatMap((source) =>
-            definitionFor(source.type).outputs
+            samplePaths(source, sampleRun).length ? samplePaths(source, sampleRun).filter((item) => compatiblePort(input.type, item.type)).map((item) => ({source,output:item})) : definitionFor(source.type).outputs
               .filter((output) => compatiblePort(input.type, output.type))
               .map((output) => ({ source, output })),
           );
@@ -1828,7 +1866,7 @@ function DataBindings({
               >
                 <option value="">Use static configuration</option>
                 {options.map(({ source, output }) => (
-                  <option key={`${source.id}:${output.key}`} value={JSON.stringify([source.id,[output.key]])}>
+                  <option key={`${source.id}:${output.key}`} value={JSON.stringify([source.id,output.key.split(".")])}>
                     {source.name} · {output.label} ({output.type})
                   </option>
                 ))}
@@ -1841,6 +1879,21 @@ function DataBindings({
     </details>
   );
 }
+
+function samplePaths(node: WorkflowNode, run?: ExecutionRecord) {
+  const execution = run?.nodeExecutions.find((entry) => entry.nodeId === node.id);
+  if (!execution) return [];
+  const paths:Array<{key:string;label:string;type:import("../types").ValueType}> = [];
+  const visit=(value:unknown,path:string[],depth:number)=>{
+    if(depth>5||paths.length>=100)return;
+    const type:import("../types").ValueType=Array.isArray(value)?"array":value===null?"any":typeof value==="object"?"object":typeof value==="number"?"number":typeof value==="boolean"?"boolean":"string";
+    if(path.length)paths.push({key:path.join("."),label:`${path.join(".")} · ${previewSample(value)}`,type});
+    if(value&&typeof value==="object"&&!Array.isArray(value))Object.entries(value as Record<string,unknown>).forEach(([key,child])=>visit(child,[...path,key],depth+1));
+    else if(Array.isArray(value)&&value.length)visit(value[0],[...path,"0"],depth+1);
+  };
+  visit(execution.output,[],0);return paths;
+}
+function previewSample(value:unknown){if(value&&typeof value==="object"&&("reference" in (value as object)))return "binary reference";const text=typeof value==="string"?value:JSON.stringify(value);return (text??"null").slice(0,42)+(String(text??"").length>42?"…":"");}
 
 function compatiblePort(expected: string, actual: string) {
   return expected === "any" || actual === "any" || expected === actual || (expected === "string" && actual === "path") || (expected === "path" && actual === "string");
@@ -1877,6 +1930,7 @@ function MappedInput({
   currentNodeId,
   multiline,
   sensitive,
+  sampleRun,
   onChange,
 }: {
   fieldName: string;
@@ -1886,19 +1940,34 @@ function MappedInput({
   currentNodeId: string;
   multiline?: boolean;
   sensitive?: boolean;
+  sampleRun?: ExecutionRecord;
   onChange: (value: string) => void;
 }) {
-  const nodes = workflow.nodes.filter((node) => node.id !== currentNodeId);
+  const upstreamIds=new Set<string>();const pending=[currentNodeId];while(pending.length){const target=pending.pop()!;workflow.edges.filter(edge=>edge.targetNodeId===target).forEach(edge=>{if(!upstreamIds.has(edge.sourceNodeId)){upstreamIds.add(edge.sourceNodeId);pending.push(edge.sourceNodeId);}});}
+  const nodes = workflow.nodes.filter((node) => upstreamIds.has(node.id));
   const mapped =
     value.includes("{{") ||
     value.startsWith("nodes.") ||
     value.startsWith("trigger.");
+  const [pickerValue,setPickerValue]=useState("");
+  const variableOptions=[
+    ...(workflow.settings.permissions.approvedEnvironmentVariables??[]).map(name=>({value:`env.${name}`,label:`Environment: ${name} (runner-side)`})),
+    {value:"trigger.body",label:"Trigger · body"},{value:"input",label:"Current input"},{value:"workflow.name",label:"Workflow · name"},{value:"execution.id",label:"Execution · ID"},
+    ...nodes.flatMap(source=>{const sampled=samplePaths(source,sampleRun);const outputs=sampled.length?sampled:definitionFor(source.type).outputs;return outputs.map(output=>({value:`nodes.${source.id}.output.${output.key}`,label:`${source.name} · ${output.label} (${output.type})`}));}),
+  ];
+  const runnerOnlyEnvironment=/{{\s*env(?:\.|\[)/.test(value);
+  const staleSample=Boolean(sampleRun&&sampleRun.workflowVersion!==workflow.schemaVersion);
+  let preview:ReturnType<typeof previewExpression>|undefined;let previewError="";if(mapped&&!runnerOnlyEnvironment){try{preview=previewExpression(value,expressionContext(workflow,sampleRun,currentNodeId));}catch(error){previewError=String(error instanceof Error?error.message:error);}}
   return (
     <Field
       label={label}
       hint={mapped ? "Mapped safe reference" : "Static value or mapped output"}
     >
       <div className="mapped-field">
+        <div className="expression-mode-tabs" role="group" aria-label={`${label} value mode`}>
+          <button type="button" className={!mapped?"active":""} onClick={()=>{if(mapped)onChange("");}}>Fixed</button>
+          <button type="button" className={mapped?"active":""} onClick={()=>{if(!mapped)onChange(`{{ ${value || "input"} }}`);}}>Expression</button>
+        </div>
         {multiline ? (
           <textarea
             name={fieldName}
@@ -1916,26 +1985,12 @@ function MappedInput({
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        <CustomSelect
-          aria-label={`Insert mapping into ${label}`}
-          value=""
-          onChange={(event) => {
-            if (event.target.value)
-              onChange(
-                value
-                  ? `${value} {{${event.target.value}}}`
-                  : `{{${event.target.value}}}`,
-              );
-          }}
-        >
-          <option value="">Insert value…</option>
-          <option value="trigger.path">Trigger · path</option>
-          {nodes.map((node) => (
-            <option key={node.id} value={`nodes.${node.id}.output`}>
-              {node.name} · output
-            </option>
-          ))}
-        </CustomSelect>
+        <div className="path-input">
+          <input type="search" list={`variables-${currentNodeId}-${fieldName}`} aria-label={`Search variables for ${label}`} placeholder="Search or enter a variable…" value={pickerValue} onChange={event=>setPickerValue(event.target.value)} />
+          <datalist id={`variables-${currentNodeId}-${fieldName}`}>{variableOptions.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</datalist>
+          <button type="button" className="button" disabled={!pickerValue} onClick={()=>{onChange(value?`${value} {{ ${pickerValue} }}`:`{{ ${pickerValue} }}`);setPickerValue("");}}>Insert</button>
+        </div>
+        {mapped && <div className={previewError?"expression-preview error":"expression-preview"}>{runnerOnlyEnvironment?<><b>unavailable</b><span>Environment values stay on the runner and are never sent to the editor.</span></>:previewError||<><b>{preview?.type}</b><span>{previewSample(preview?.value)}</span>{preview?.fallbackUsed&&<em>fallback used</em>}{staleSample&&<em>sample is from another schema revision</em>}</>}</div>}
       </div>
     </Field>
   );

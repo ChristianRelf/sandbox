@@ -34,4 +34,11 @@ describe("contracts", () => {
     expect(mismatch.compatible).toBe(false);
     expect(mismatch.reasons).toEqual(expect.arrayContaining(["Runner is draining.", expect.stringContaining("is unavailable") ]));
   });
+  it("reports actionable Code runtime constraint mismatches",()=>{
+    const available={runtime:"javascript",runtimeVersions:["2.7.0"],helperLanguageVersion:1,packageEnvironmentId:null,networkPolicy:"none",filesystemPolicy:"none",binaryData:true,maximumMemoryBytes:134217728,maximumDurationMs:120000,credentialBindings:[]};
+    const required={runtime:"python",runtimeVersion:">=3.11",helperLanguageVersion:1,packageEnvironmentId:null,networkPolicy:"none",filesystemPolicy:"none",binaryData:true,maximumMemoryBytes:134217728,maximumDurationMs:30000,credentialBindings:[]};
+    const base={runnerId:"11111111-1111-4111-8111-111111111111",keyId:"key",runnerType:"hosted" as const,protocolVersion:RUNNER_PROTOCOL_VERSION,engineVersion:"1",pluginRuntimeVersion:"1",architecture:"x86_64" as const,operatingSystem:"linux",workspaceId:"22222222-2222-4222-8222-222222222222",environmentId:"33333333-3333-4333-8333-333333333333",region:"eu",tags:[],concurrencyLimit:1,maintenanceState:"active" as const,nodeCapabilities:[{nodeType:"python_code",nodeVersions:[1],constraints:available}],plugins:[],connections:[]};
+    const result=checkRunnerCompatibility(base,{protocolVersion:RUNNER_PROTOCOL_VERSION,engineVersion:"1",pluginRuntimeVersion:"1",runnerTypes:["hosted"],architectures:["x86_64"],workspaceId:base.workspaceId,environmentId:base.environmentId,region:"eu",requiredTags:[],capabilities:[{nodeType:"python_code",nodeVersions:[1],constraints:required}],plugins:[],connectionIds:[],minimumAvailableConcurrency:1});
+    expect(result.compatible).toBe(false);expect(result.reasons).toEqual(expect.arrayContaining([expect.stringContaining("requires runtime python"),expect.stringContaining("requires runtime >=3.11")]));
+  });
 });

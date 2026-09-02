@@ -30,12 +30,13 @@ const blank = (template = "blank"): Workflow => {
   const createdAt = now();
   const base = {
     id,
-    schemaVersion: 4,
+    schemaVersion: 5,
     description: "",
     enabled: false,
     settings: {
       defaultNodeTimeoutMs: 30000,
       maxConcurrentNodes: 4,
+      expressionLanguageVersion: 1,
       permissions: {
         approvedFolders: [],
         approvedNetworkDomains: [],
@@ -638,8 +639,8 @@ const blank = (template = "blank"): Workflow => {
     edges: [],
   };
 };
-const workflows = () =>
-  JSON.parse(localStorage.getItem(KEY) ?? "[]") as Workflow[];
+const workflows = (): Workflow[] =>
+  (JSON.parse(localStorage.getItem(KEY) ?? "[]") as Workflow[]).map(workflow=>({...workflow,schemaVersion:5,settings:{...workflow.settings,expressionLanguageVersion:workflow.settings.expressionLanguageVersion??1,permissions:{...workflow.settings.permissions,approvedEnvironmentVariables:workflow.settings.permissions.approvedEnvironmentVariables??[]}}} as Workflow));
 const saveAll = (v: Workflow[]) => localStorage.setItem(KEY, JSON.stringify(v));
 const runs = () =>
   JSON.parse(localStorage.getItem(RUNS) ?? "[]") as ExecutionRecord[];
@@ -692,7 +693,7 @@ export const previewApi = {
     return workflow;
   },
   async saveWorkflow(workflow: Workflow) {
-    workflow.schemaVersion = 4;
+    workflow.schemaVersion = 5;
     workflow.updatedAt = now();
     const all = workflows();
     const i = all.findIndex((w) => w.id === workflow.id);
@@ -957,6 +958,8 @@ export const previewApi = {
       "delete_path",
       "run_command",
       "code",
+      "javascript_code",
+      "python_code",
       "web_builder",
       "gmail_create_draft",
       "gmail_send_email",

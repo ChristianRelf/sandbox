@@ -1,6 +1,7 @@
 pub mod db;
 pub mod engine;
 pub mod error;
+pub mod expressions;
 pub mod model;
 pub mod permissions;
 pub mod redaction;

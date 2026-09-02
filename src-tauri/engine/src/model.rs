@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -247,6 +247,10 @@ pub struct PermissionSummary {
     pub external_data_write_permitted: bool,
     #[serde(default)]
     pub communication_approval_revision: Option<String>,
+    /// Names only. Values are read by the runner at execution time and never
+    /// persisted in the workflow document.
+    #[serde(default)]
+    pub approved_environment_variables: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -258,6 +262,8 @@ pub struct WorkflowSettings {
     pub max_concurrent_nodes: usize,
     #[serde(default)]
     pub permissions: PermissionSummary,
+    #[serde(default = "default_expression_language_version")]
+    pub expression_language_version: u32,
 }
 fn default_timeout() -> u64 {
     30_000
@@ -265,12 +271,14 @@ fn default_timeout() -> u64 {
 fn default_concurrency() -> usize {
     4
 }
+fn default_expression_language_version() -> u32 { 1 }
 impl Default for WorkflowSettings {
     fn default() -> Self {
         Self {
             default_node_timeout_ms: default_timeout(),
             max_concurrent_nodes: default_concurrency(),
             permissions: PermissionSummary::default(),
+            expression_language_version: default_expression_language_version(),
         }
     }
 }
@@ -327,6 +335,71 @@ pub struct ExecutionError {
     pub detail: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggestion: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryReference {
+    pub reference: String,
+    #[serde(default)]
+    pub file_name: Option<String>,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub sha256: Option<String>,
+}
+
+/// Canonical runtime unit used by Code nodes and persisted inspection data.
+/// `data` remains JSON while large bytes live behind scoped artifact grants.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowItem {
+    #[serde(default)]
+    pub data: Value,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub binary: std::collections::BTreeMap<String, BinaryReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_item_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+}
+
+impl WorkflowItem {
+    pub fn json(data: Value) -> Self {
+        Self { data, binary: Default::default(), source_node_id: None, source_item_index: None, branch: None }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMetadata {
+    pub runtime: String,
+    pub runtime_version: String,
+    pub helper_language_version: u32,
+    pub dependency_environment_id: String,
+    pub execution_mode: String,
+    #[serde(default)]
+    pub output_bytes: u64,
+    #[serde(default)]
+    pub log_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DataLineage {
+    pub source: String,
+    #[serde(default)]
+    pub path: Vec<String>,
+    #[serde(default)]
+    pub target_field: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -350,6 +423,20 @@ pub struct NodeExecution {
     pub branch_followed: Option<String>,
     #[serde(default)]
     pub browser_diagnostics: Option<BrowserDiagnostics>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_items: Vec<WorkflowItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_items: Vec<WorkflowItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lineage: Vec<DataLineage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<RuntimeMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_data_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capability_usage: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

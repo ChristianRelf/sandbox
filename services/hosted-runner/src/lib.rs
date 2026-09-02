@@ -176,6 +176,8 @@ pub fn validate_hosted_workflow(request: &WorkloadRequest) -> Vec<CompatibilityI
                     "Managed hosted runners cannot access the user's local filesystem."
                 }
                 "run_command" => "Managed hosted runners do not allow arbitrary shell commands.",
+                "javascript_code" => "JavaScript Code requires the pinned Node.js runtime, which is not installed in the selected hosted runner image.",
+                "python_code" => "Python Code requires the pinned Python runtime, which is not installed in the selected hosted runner image.",
                 "desktop_notification" => "Desktop notifications require a desktop runner.",
                 "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option"
                 | "press_key" | "wait_for" | "extract_data" | "screenshot" | "download_file"
@@ -415,6 +417,7 @@ mod tests {
                 default_node_timeout_ms: 5_000,
                 max_concurrent_nodes: 1,
                 permissions: PermissionSummary::default(),
+                ..WorkflowSettings::default()
             },
             created_at: Utc::now(),
             updated_at: Utc::now(),

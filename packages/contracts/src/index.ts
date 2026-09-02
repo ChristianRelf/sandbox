@@ -170,6 +170,21 @@ export const nodeCapabilitySchema = z.object({
 }).strict();
 export type NodeCapability = z.infer<typeof nodeCapabilitySchema>;
 
+export const codeRuntimeConstraintsSchema = z.object({
+  runtime: z.enum(["javascript", "python"]),
+  runtimeVersion: z.string().min(1).max(50),
+  helperLanguageVersion: z.number().int().positive(),
+  architecture: runnerArchitectureSchema.optional(),
+  packageEnvironmentId: z.string().min(1).max(200).nullable().default(null),
+  networkPolicy: z.enum(["none", "approved_domains"]).default("none"),
+  filesystemPolicy: z.enum(["none", "approved_roots"]).default("none"),
+  credentialBindings: z.array(z.string().min(1).max(200)).max(100).default([]),
+  maximumMemoryBytes: z.number().int().positive(),
+  maximumDurationMs: z.number().int().positive(),
+  binaryData: z.boolean()
+}).strict();
+export type CodeRuntimeConstraints = z.infer<typeof codeRuntimeConstraintsSchema>;
+
 export const runnerPluginAvailabilitySchema = z.object({
   pluginId: z.string().min(3).max(200),
   version: z.string().min(1).max(50),
@@ -388,6 +403,7 @@ export function checkRunnerCompatibility(identity: RunnerIdentity, requirements:
     const available = identity.nodeCapabilities.find(item => item.nodeType === required.nodeType);
     if (!available) { reasons.push(`Missing capability ${required.nodeType}.`); continue; }
     for (const version of required.nodeVersions) if (!available.nodeVersions.includes(version)) reasons.push(`Missing capability ${required.nodeType}@${version}.`);
+    if (available) reasons.push(...capabilityConstraintReasons(required.nodeType, required.constraints, available.constraints));
   }
   for (const required of requirements.plugins) {
     const available = identity.plugins.find(item => item.pluginId === required.pluginId && item.version === required.version && item.packageIntegrity === required.packageIntegrity);
@@ -398,6 +414,23 @@ export function checkRunnerCompatibility(identity: RunnerIdentity, requirements:
   }
   return { compatible: reasons.length === 0, reasons };
 }
+
+function capabilityConstraintReasons(nodeType:string, required:Record<string,unknown>, available:Record<string,unknown>):string[] {
+  const reasons:string[]=[];
+  for(const key of ["runtime","helperLanguageVersion","architecture","packageEnvironmentId","networkPolicy","filesystemPolicy","binaryData"]){
+    if(key in required && required[key]!==available[key]) reasons.push(`${nodeType} requires ${key} ${String(required[key])}, but the runner declares ${String(available[key]??"none")}.`);
+  }
+  if(typeof required.runtimeVersion==="string"){
+    const versions=Array.isArray(available.runtimeVersions)?available.runtimeVersions.filter((value):value is string=>typeof value==="string"):typeof available.runtimeVersion==="string"?[available.runtimeVersion]:[];
+    if(!versions.some(version=>runtimeVersionSatisfies(version,required.runtimeVersion as string))) reasons.push(`${nodeType} requires runtime ${required.runtimeVersion}, but the runner declares ${versions.join(", ")||"none"}.`);
+  }
+  for(const [requiredKey,availableKey,label] of [["maximumMemoryBytes","maximumMemoryBytes","memory"],["maximumDurationMs","maximumDurationMs","duration"]] as const){
+    if(typeof required[requiredKey]==="number"&&(typeof available[availableKey]!=="number"||(available[availableKey] as number)<(required[requiredKey] as number))) reasons.push(`${nodeType} runner ${label} limit is insufficient.`);
+  }
+  if(Array.isArray(required.credentialBindings)){const bindings=Array.isArray(available.credentialBindings)?available.credentialBindings:[];for(const binding of required.credentialBindings)if(!bindings.includes(binding))reasons.push(`${nodeType} credential binding ${String(binding)} is unavailable.`);}
+  return reasons;
+}
+function runtimeVersionSatisfies(actual:string,requirement:string){const parse=(value:string)=>value.replace(/^v/,"").split(".").map(Number);const a=parse(actual),r=parse(requirement.replace(/^>=/,""));if(a.some(Number.isNaN)||r.some(Number.isNaN))return actual===requirement;return requirement.startsWith(">=")?(a[0]>r[0]||(a[0]===r[0]&&(a[1]??0)>=(r[1]??0))):r.every((value,index)=>a[index]===value);}
 
 export const environmentKeySchema = z.enum(["development", "staging", "production"]);
 export type EnvironmentKey = z.infer<typeof environmentKeySchema>;

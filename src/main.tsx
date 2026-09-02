@@ -4,6 +4,7 @@ import "./styles.css";
 import "./attribution.css";
 import "./preferences.css";
 import "./qol.css";
+import "./expression.css";
 import App from "./App";
 import { ToastProvider } from "./components/ui/Toast";
 import { TooltipProvider } from "./components/ui/Tooltip";

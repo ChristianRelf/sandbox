@@ -107,6 +107,13 @@ impl CommandVerifier {
                 if !matches!(payload.manifest_version, 1 | 2) || !matches!(payload.invocation_version, 1 | 2) {
                     return Err("workflow requires an unsupported manifest or invocation protocol version".into());
                 }
+                for node in payload.workflow.nodes.iter().filter(|node| !node.disabled) {
+                    if matches!(node.node_type.as_str(), "javascript_code" | "python_code")
+                        || (node.node_type == "code" && node.configuration.get("executionMode").and_then(Value::as_str) == Some("run"))
+                    {
+                        return Err(format!("{} requires a pinned code runtime; the packaged self-hosted runner does not declare JavaScript or Python runtime capability", node.id));
+                    }
+                }
                 let pinned = payload.workflow.nodes.iter().filter_map(|node| node.plugin.as_ref())
                     .map(|pin| (pin.plugin_id.clone(), pin.plugin_version.clone(), pin.package_integrity.clone())).collect::<BTreeSet<_>>();
                 let supplied = payload.packages.iter().map(|package| (package.plugin_id.clone(), package.version.clone(), package.package_integrity.clone())).collect::<BTreeSet<_>>();

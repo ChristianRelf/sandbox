@@ -117,6 +117,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/011_poll_backoff.sql"))
                 .map_err(storage)?;
         }
+        if version < 12 {
+            connection
+                .execute_batch(include_str!("../migrations/012_code_expressions.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         backfill_workflow_revisions(&connection)?;
         Ok(())
@@ -791,7 +796,7 @@ impl Database {
         } else if workflow
             .nodes
             .iter()
-            .any(|n| matches!(n.node_type.as_str(), "run_command" | "code"))
+            .any(|n| matches!(n.node_type.as_str(), "run_command" | "code" | "javascript_code" | "python_code"))
         {
             workflow.settings.permissions.command_execution_permitted = false;
             workflow.settings.permissions.approval_revision = None;
@@ -1330,6 +1335,8 @@ impl Database {
             message: "The local runner stopped before this execution completed.".into(),
             detail: None,
             suggestion: Some("Inspect the last completed node, then retry the workflow.".into()),
+            line: None,
+            column: None,
         })
         .unwrap();
         let connection = self
@@ -1638,7 +1645,7 @@ fn dangerous_fingerprint(workflow: &Workflow) -> String {
         &workflow
             .nodes
             .iter()
-            .filter(|n| matches!(n.node_type.as_str(), "run_command" | "code"))
+            .filter(|n| matches!(n.node_type.as_str(), "run_command" | "code" | "javascript_code" | "python_code"))
             .map(|n| (&n.id, &n.configuration))
             .collect::<Vec<_>>(),
     )
@@ -1833,7 +1840,7 @@ fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata>
 fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
     match workflow.schema_version {
         crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
-        1 | 2 | 3 => {
+        1 | 2 | 3 | 4 => {
             workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
             Ok(workflow)
         }
@@ -2004,7 +2011,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 11);
+            assert_eq!(db.schema_version().unwrap(), 12);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -2015,7 +2022,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_every_supported_database_version_to_eleven() {
+    fn migrates_every_supported_database_version_to_twelve() {
         let migrations = [
             include_str!("../migrations/001_initial.sql"),
             include_str!("../migrations/002_schedule_state.sql"),
@@ -2027,8 +2034,9 @@ mod tests {
             include_str!("../migrations/008_workflow_metadata.sql"),
             include_str!("../migrations/009_workflow_revisions_and_state.sql"),
             include_str!("../migrations/010_first_party_integrations.sql"),
+            include_str!("../migrations/011_poll_backoff.sql"),
         ];
-        for version in 1..=10 {
+        for version in 1..=11 {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join(format!("v{version}.db"));
             {
@@ -2043,7 +2051,7 @@ mod tests {
             let upgraded = Database::open(&path).unwrap();
             assert_eq!(
                 upgraded.schema_version().unwrap(),
-                11,
+                12,
                 "failed migration from v{version}"
             );
         }

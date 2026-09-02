@@ -59,7 +59,7 @@ pub async fn pair(
     }
     let (key, public_key, fingerprint) = StoredIdentity::create_request()?;
     let base = config.control_plane_url.trim_end_matches('/');
-    let capabilities = serde_json::json!({"runnerType":"self_hosted_server","environment":config.environment,"concurrency":config.concurrency,"managedChromium":config.enable_managed_chromium,"simpleCommands":config.allow_simple_commands,"approvedNetworkTargets":config.approved_network_targets});
+    let capabilities = serde_json::json!({"runnerType":"self_hosted_server","environment":config.environment,"concurrency":config.concurrency,"managedChromium":config.enable_managed_chromium,"simpleCommands":config.allow_simple_commands,"approvedNetworkTargets":config.approved_network_targets,"codeRuntimes":[],"expressionLanguageVersions":[1]});
     let request = ChallengeRequest {
         device_public_key_der_base64: &public_key,
         operating_system: "linux",

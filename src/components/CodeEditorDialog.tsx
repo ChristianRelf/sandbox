@@ -46,12 +46,14 @@ export function CodeEditorDialog({
   value,
   onOpenChange,
   onSave,
+  lockedLanguage = false,
 }: {
   open: boolean;
   language: CodeLanguage;
   value: string;
   onOpenChange: (open: boolean) => void;
   onSave: (language: CodeLanguage, value: string) => void;
+  lockedLanguage?: boolean;
 }) {
   const [draftLanguage, setDraftLanguage] = useState(language);
   const [draft, setDraft] = useState(value);
@@ -168,7 +170,7 @@ export function CodeEditorDialog({
     >
       <div className={`code-editor-dialog${aiOpen ? " code-editor-ai-open" : ""}`}>
         <div className="code-language-tabs" role="tablist" aria-label="Code language">
-          {languages.map((item) => {
+          {languages.filter(item=>!lockedLanguage||item.id===draftLanguage).map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -196,6 +198,9 @@ export function CodeEditorDialog({
             {diagnostics.length ? `${diagnostics.length} problem${diagnostics.length === 1 ? "" : "s"}` : "Types look good"}
           </span>
         </div>
+        {(draftLanguage === "javascript" || draftLanguage === "python") && (
+          <div className="info-note" role="note">Runtime API: <code>input</code>, <code>items</code>, <code>nodes</code>, <code>trigger</code>, <code>workflow</code>, <code>execution</code>, <code>helpers</code>{draftLanguage === "javascript" ? <>, and <code>ctx.log()</code></> : <>. Set <code>result</code> or define <code>main(ctx)</code></>}.</div>
+        )}
         <div className="code-editor-workspace">
           <div className="code-editor-main">
             <div className="code-editor-scroll">

@@ -1,10 +1,11 @@
 use crate::{
     permissions::{require_domain, require_path},
     redaction::{bounded_log, redact_value},
+    expressions::{resolve_value as resolve_expression_value, ExpressionContext, EXPRESSION_LANGUAGE_VERSION},
     references::resolve_value,
     validation::{topological_order, validate, ValidationSeverity},
-    Database, EngineError, ExecutionRecord, ExecutionStatus, InputBinding, NodeExecution,
-    NodeStatus, PendingApproval, Workflow, WorkflowNode,
+    DataLineage, Database, EngineError, ExecutionRecord, ExecutionStatus, InputBinding, NodeExecution,
+    NodeStatus, PendingApproval, RuntimeMetadata, Workflow, WorkflowItem, WorkflowNode,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -212,6 +213,7 @@ impl Engine {
                     skip_reason: None,
                     branch_followed: None,
                     browser_diagnostics: None,
+                    input_items: vec![], output_items: vec![], warnings: vec![], lineage: vec![], runtime: None, test_data_source: None, capability_usage: vec![],
                 })
                 .collect(),
             error: None,
@@ -304,6 +306,7 @@ impl Engine {
                 .collect();
             record.node_executions[idx].input =
                 redact_value(&json!({"dependencies": dependencies, "trigger": trigger}));
+            record.node_executions[idx].input_items = canonical_input_items(workflow, node, &outputs);
             record.node_executions[idx].status = NodeStatus::Running;
             record.node_executions[idx].started_at = Some(Utc::now());
             let _ = self.events.send(EngineEvent::NodeStarted {
@@ -344,6 +347,11 @@ impl Engine {
                     node_record.logs = result.logs.into_iter().map(bounded_log).take(100).collect();
                     node_record.retry_count = result.retry_count;
                     node_record.browser_diagnostics = result.browser_diagnostics;
+                    node_record.output_items = result.output_items;
+                    node_record.warnings = result.warnings;
+                    node_record.lineage = result.lineage;
+                    node_record.runtime = result.runtime;
+                    node_record.capability_usage = result.capability_usage;
                     if let Some(branch) = result.branch {
                         node_record.branch_followed = Some(branch.clone());
                         for edge in workflow
@@ -547,6 +555,7 @@ impl Engine {
                 skip_reason: None,
                 branch_followed: None,
                 browser_diagnostics: None,
+                input_items: canonical_input_items(workflow, node, &outputs), output_items: vec![], warnings: vec![], lineage: binding_lineage(node), runtime: None, test_data_source: Some(format!("execution:{}", previous.id)), capability_usage: vec![],
             }],
             error: None,
             skip_reason: None,
@@ -593,6 +602,11 @@ impl Engine {
                     .extend(result.logs.into_iter().map(bounded_log).take(99));
                 node_record.branch_followed = result.branch;
                 node_record.browser_diagnostics = result.browser_diagnostics;
+                node_record.output_items = result.output_items;
+                node_record.warnings = result.warnings;
+                node_record.lineage.extend(result.lineage);
+                node_record.runtime = result.runtime;
+                node_record.capability_usage = result.capability_usage;
                 if !result.state_updates.is_empty() {
                     self.db.set_workflow_states(
                         &workflow.id,
@@ -673,6 +687,13 @@ impl Engine {
             .map(|id| self.db.get_execution(id))
             .transpose()?
             .flatten();
+        if previous.is_none() {
+            if let Some(pinned) = node.configuration.get("pinnedData").cloned().filter(|value| !value.is_null()) {
+                if let Some(configuration) = node.configuration.as_object_mut() {
+                    configuration.insert("input".into(), json!({"items": fixture_items(&pinned)}));
+                }
+            }
+        }
         if previous
             .as_ref()
             .is_some_and(|record| record.workflow_id != workflow.id)
@@ -681,7 +702,7 @@ impl Engine {
                 "The selected execution snapshot belongs to another workflow.".into(),
             ));
         }
-        let outputs: HashMap<String, Value> = previous
+        let mut outputs: HashMap<String, Value> = previous
             .as_ref()
             .map(|record| {
                 record
@@ -692,6 +713,13 @@ impl Engine {
                     .collect()
             })
             .unwrap_or_default();
+        if previous.is_none() {
+            for candidate in &workflow.nodes {
+                if let Some(pinned) = candidate.configuration.get("pinnedData") {
+                    outputs.insert(candidate.id.clone(), json!({"items": fixture_items(pinned)}));
+                }
+            }
+        }
         let trigger = previous
             .as_ref()
             .map(|record| record.trigger.clone())
@@ -724,6 +752,7 @@ impl Engine {
                 skip_reason: None,
                 branch_followed: None,
                 browser_diagnostics: None,
+                input_items: canonical_input_items(&workflow, &node, &outputs), output_items: vec![], warnings: vec![], lineage: binding_lineage(&node), runtime: None, test_data_source: previous_execution_id.map(|id| format!("execution:{id}")).or_else(||(!outputs.is_empty()).then_some("pinned_data".into())), capability_usage: vec![],
             }],
             error: None,
             skip_reason: None,
@@ -756,6 +785,11 @@ impl Engine {
                     .extend(result.logs.into_iter().map(bounded_log));
                 node_record.branch_followed = result.branch;
                 node_record.browser_diagnostics = result.browser_diagnostics;
+                node_record.output_items = result.output_items;
+                node_record.warnings = result.warnings;
+                node_record.lineage.extend(result.lineage);
+                node_record.runtime = result.runtime;
+                node_record.capability_usage = result.capability_usage;
                 if !result.state_updates.is_empty() {
                     node_record.logs.push(
                         "Workflow state changes were previewed but not committed by this node test."
@@ -804,7 +838,18 @@ impl Engine {
         pending_state: &HashMap<String, Value>,
         cancellation: CancellationToken,
     ) -> Result<NodeResult, EngineError> {
-        let resolved_node = resolve_node_bindings(node, trigger, outputs)?;
+        let mut resolved_node = resolve_node_bindings(node, trigger, outputs)?;
+        let input_items = canonical_input_items(workflow, &resolved_node, outputs);
+        let input = input_items.first().map(|item| item.data.clone()).unwrap_or(Value::Null);
+        let item_values = input_items.iter().map(|item| item.data.clone()).collect::<Vec<_>>();
+        let workflow_meta = json!({"id":workflow.id,"name":workflow.name,"description":workflow.description,"schemaVersion":workflow.schema_version});
+        let execution_meta = json!({"id":execution_id,"startedAt":Utc::now(),"attempt":1});
+        let mut environment = Map::new();
+        for name in &workflow.settings.permissions.approved_environment_variables {
+            if let Ok(value) = std::env::var(name) { environment.insert(name.clone(), Value::String(value)); }
+        }
+        let context = ExpressionContext { input: &input, items: &item_values, trigger, outputs, workflow: &workflow_meta, execution: &execution_meta, environment: &environment };
+        resolved_node.configuration = resolve_configuration_expressions(&resolved_node.configuration, &context)?;
         let node = &resolved_node;
         match node.node_type.as_str() {
             "manual_trigger"
@@ -872,7 +917,7 @@ impl Engine {
             }
             "run_command" => execute_command(node, workflow, trigger, outputs, cancellation).await,
             "ai_prompt" => self.execute_ai_prompt(node, cancellation).await,
-            "code" => execute_code(node, workflow, cancellation).await,
+            "code" | "javascript_code" | "python_code" => execute_code(node, workflow, execution_id, &input, &input_items, trigger, outputs, cancellation).await,
             "web_builder" => {
                 self.execute_web_builder(node, workflow, trigger, outputs)
                     .await
@@ -1356,17 +1401,12 @@ impl Engine {
                     let body = serde_json::from_slice(&bytes).unwrap_or_else(|_| {
                         Value::String(String::from_utf8_lossy(&bytes).to_string())
                     });
-                    return Ok(NodeResult {
-                        output: json!({"status":status,"headers":headers,"body":body,"durationMs":started.elapsed().as_millis(),"finalUrl":final_url}),
-                        logs: vec![format!(
+                    return Ok(NodeResult::new(json!({"status":status,"headers":headers,"body":body,"durationMs":started.elapsed().as_millis(),"finalUrl":final_url}))
+                        .log(format!(
                             "{} {} completed with status {}.",
                             method, final_url, status
-                        )],
-                        retry_count: attempt,
-                        branch: None,
-                        browser_diagnostics: None,
-                        state_updates: vec![],
-                    });
+                        ))
+                        .with_retry_count(attempt));
                 }
                 Err(error) => {
                     last_error = Some(error);
@@ -1389,9 +1429,15 @@ impl Engine {
     }
 }
 
+#[derive(Debug)]
 struct NodeResult {
     output: Value,
+    output_items: Vec<WorkflowItem>,
     logs: Vec<String>,
+    warnings: Vec<String>,
+    lineage: Vec<DataLineage>,
+    runtime: Option<RuntimeMetadata>,
+    capability_usage: Vec<String>,
     retry_count: u32,
     branch: Option<String>,
     browser_diagnostics: Option<crate::BrowserDiagnostics>,
@@ -1400,8 +1446,13 @@ struct NodeResult {
 impl NodeResult {
     fn new(output: Value) -> Self {
         Self {
+            output_items: canonicalize_output(&output),
             output,
             logs: vec![],
+            warnings: vec![],
+            lineage: vec![],
+            runtime: None,
+            capability_usage: vec![],
             retry_count: 0,
             branch: None,
             browser_diagnostics: None,
@@ -1412,6 +1463,11 @@ impl NodeResult {
         self.logs.push(message.into());
         self
     }
+    fn with_runtime(mut self, runtime: RuntimeMetadata) -> Self { self.runtime = Some(runtime); self }
+    fn with_logs(mut self, logs: Vec<String>) -> Self { self.logs.extend(logs); self }
+    fn with_capability(mut self, capability: impl Into<String>) -> Self { self.capability_usage.push(capability.into()); self }
+    fn with_retry_count(mut self, retry_count: u32) -> Self { self.retry_count = retry_count; self }
+    fn with_branch(mut self, branch: impl Into<String>) -> Self { self.branch = Some(branch.into()); self }
     fn with_browser_diagnostics(mut self, diagnostics: Option<crate::BrowserDiagnostics>) -> Self {
         self.browser_diagnostics = diagnostics;
         self
@@ -1422,9 +1478,76 @@ impl NodeResult {
     }
 }
 
+fn canonicalize_output(output: &Value) -> Vec<WorkflowItem> {
+    if let Some(items) = output.get("items").and_then(Value::as_array) {
+        return items.iter().map(workflow_item_from_value).collect();
+    }
+    vec![WorkflowItem::json(output.clone())]
+}
+
+fn workflow_item_from_value(value: &Value) -> WorkflowItem {
+    let is_canonical=value.as_object().is_some_and(|object| {
+        object.contains_key("data") || object.contains_key("binary")
+            || object.contains_key("sourceNodeId") || object.contains_key("source_node_id")
+            || object.contains_key("sourceItemIndex") || object.contains_key("source_item_index")
+            || object.contains_key("branch")
+    });
+    if is_canonical {
+        serde_json::from_value::<WorkflowItem>(value.clone()).unwrap_or_else(|_| WorkflowItem::json(value.clone()))
+    } else {
+        WorkflowItem::json(value.clone())
+    }
+}
+
+fn resolve_configuration_expressions(configuration:&Value,context:&ExpressionContext<'_>)->Result<Value,EngineError>{
+    let Some(object)=configuration.as_object() else{return Err(EngineError::Validation("Node configuration must be a JSON object.".into()));};
+    let mut resolved=object.clone();
+    // Source, package metadata, fixtures, credential references and local
+    // permission identifiers are data, never expression-bearing fields.
+    for (key,value) in object {
+        if matches!(key.as_str(),"sourceCode"|"dependencies"|"runtimeVersion"|"helperLanguageVersion"|"pinnedData"|"credentialId"|"connectionId"|"profileId") { continue; }
+        resolved.insert(key.clone(),resolve_expression_value(value,context)?);
+    }
+    Ok(Value::Object(resolved))
+}
+
+fn fixture_items(value: &Value) -> Vec<WorkflowItem> {
+    match value {
+        Value::Array(values) => values.iter().map(workflow_item_from_value).collect(),
+        other => canonicalize_output(other),
+    }
+}
+
+fn canonical_input_items(workflow: &Workflow, node: &WorkflowNode, outputs: &HashMap<String, Value>) -> Vec<WorkflowItem> {
+    if let Some(value) = node.configuration.get("input") {
+        return canonicalize_output(value);
+    }
+    let mut items = Vec::new();
+    for edge in workflow.edges.iter().filter(|edge| edge.target_node_id == node.id) {
+        if let Some(output) = outputs.get(&edge.source_node_id) {
+            for (index, mut item) in canonicalize_output(output).into_iter().enumerate() {
+                item.source_node_id = Some(edge.source_node_id.clone());
+                item.source_item_index = Some(index);
+                item.branch = Some(edge.source_handle.clone());
+                items.push(item);
+            }
+        }
+    }
+    items
+}
+
+fn binding_lineage(node: &WorkflowNode) -> Vec<DataLineage> {
+    node.input_bindings.iter().filter_map(|(field, binding)| match binding {
+        InputBinding::NodeOutput { node_id, path } => Some(DataLineage { source: format!("node:{node_id}"), path: path.clone(), target_field: field.clone() }),
+        InputBinding::Template { .. } => Some(DataLineage { source: "expression".into(), path: vec![], target_field: field.clone() }),
+        InputBinding::ProtectedVariable { name } => Some(DataLineage { source: format!("environment:{name}"), path: vec![], target_field: field.clone() }),
+        _ => None,
+    }).collect()
+}
+
 fn resolve_node_bindings(
     node: &WorkflowNode,
-    trigger: &Value,
+    _trigger: &Value,
     outputs: &HashMap<String, Value>,
 ) -> Result<WorkflowNode, EngineError> {
     if node.input_bindings.is_empty() {
@@ -1451,13 +1574,9 @@ fn resolve_node_bindings(
                 })?
             }
             InputBinding::Template { template } => {
-                resolve_value(&Value::String(template.clone()), trigger, outputs)?
+                Value::String(template.clone())
             }
-            InputBinding::ProtectedVariable { name } => {
-                return Err(EngineError::Permission(format!(
-                    "Protected variable '{name}' must be mapped by the selected deployment environment."
-                )))
-            }
+            InputBinding::ProtectedVariable { name } => Value::String(format!("{{{{ env.{name} }}}}")),
             InputBinding::Connection { connection_id } => Value::String(connection_id.clone()),
         };
         configuration.insert(field.clone(), value);
@@ -1487,6 +1606,8 @@ fn node_has_side_effect(node_type: &str) -> bool {
             | "delete_path"
             | "run_command"
             | "code"
+            | "javascript_code"
+            | "python_code"
             | "web_builder"
             | "gmail_create_draft"
             | "gmail_send_email"
@@ -1600,6 +1721,11 @@ async fn serve_local_site(listener: TcpListener, page: Arc<String>) {
 async fn execute_code(
     node: &WorkflowNode,
     workflow: &Workflow,
+    execution_id: &str,
+    input: &Value,
+    input_items: &[WorkflowItem],
+    trigger: &Value,
+    outputs: &HashMap<String, Value>,
     cancellation: CancellationToken,
 ) -> Result<NodeResult, EngineError> {
     let language = node
@@ -1641,11 +1767,18 @@ async fn execute_code(
             "Executing a Code node requires command execution approval.".into(),
         ));
     }
-    let (executable, extension) = if language == "python" {
-        ("python", "py")
+    let runtime_requirement = node.configuration.get("runtimeVersion").and_then(Value::as_str).unwrap_or(if language == "python" { ">=3.11" } else { ">=20" });
+    let execution_mode = node.configuration.get("itemMode").and_then(Value::as_str).unwrap_or("all_items");
+    if !matches!(execution_mode, "all_items" | "each_item") { return Err(EngineError::Validation("Code itemMode must be 'all_items' or 'each_item'.".into())); }
+    let dependencies = node.configuration.get("dependencies").and_then(Value::as_array).cloned().unwrap_or_default();
+    if !dependencies.is_empty() { return Err(EngineError::Permission("Code packages are not installed during execution. Managed runtimes currently provide only the documented built-in helper library.".into())); }
+    let (executable, extension, wrapper) = if language == "python" {
+        ("python", "py", PYTHON_CODE_WRAPPER)
     } else {
-        ("node", "js")
+        ("node", "js", JAVASCRIPT_CODE_WRAPPER)
     };
+    let runtime_version = installed_runtime_version(executable).ok_or_else(|| EngineError::Node(format!("Code could not inspect the installed {language} runtime.")))?;
+    if !runtime_requirement_met(runtime_requirement, &runtime_version) { return Err(EngineError::Validation(format!("{language} runtime {runtime_version} does not satisfy the saved requirement {runtime_requirement}."))); }
     let code_directory = std::env::temp_dir().join("sndbox-code");
     tokio::fs::create_dir_all(&code_directory)
         .await
@@ -1655,29 +1788,46 @@ async fn execute_code(
             ))
         })?;
     let script_path = code_directory.join(format!("{}.{}", Uuid::new_v4(), extension));
-    tokio::fs::write(&script_path, source)
+    tokio::fs::write(&script_path, wrapper)
         .await
         .map_err(|error| {
             EngineError::Node(format!("Code could not prepare the script: {error}"))
         })?;
-    let input = node
-        .configuration
-        .get("input")
-        .cloned()
-        .unwrap_or(Value::Null);
+    let payload = json!({
+        "source": source,
+        "input": input,
+        "items": input_items,
+        "nodes": outputs,
+        "trigger": trigger,
+        "workflow": {"id":workflow.id,"name":workflow.name,"schemaVersion":workflow.schema_version},
+        "execution": {"id":execution_id,"attempt":1},
+        "mode": execution_mode,
+    });
     let mut command = Command::new(executable);
+    if language == "python" { command.arg("-I").arg("-B").arg(&script_path); }
+    else { command.arg("--max-old-space-size=128").arg(node_permission_flag()).arg(format!("--allow-fs-read={}", script_path.display())).arg(&script_path); }
     command
-        .arg(&script_path)
-        .env("SNDBOX_INPUT", input.to_string())
+        .env_clear()
         .kill_on_drop(true)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Windows' runtime loader and CSPRNG require these OS bootstrap paths.
+    // They are not exposed to user code (the wrapper shadows `process`) and
+    // no user or workflow environment variables are inherited.
+    #[cfg(windows)]
+    for name in ["SystemRoot", "WINDIR"] {
+        if let Ok(value) = std::env::var(name) { command.env(name, value); }
+    }
     let mut child = command.spawn().map_err(|error| {
         EngineError::Node(format!(
             "Code could not start {executable}. Install it or switch this node to source mode: {error}"
         ))
     })?;
-    let stdout_task = tokio::spawn(read_bounded(child.stdout.take().expect("piped stdout")));
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let encoded_payload = serde_json::to_vec(&payload).map_err(|error| EngineError::Node(format!("Code input could not be encoded: {error}")))?;
+    tokio::spawn(async move { let _ = stdin.write_all(&encoded_payload).await; });
+    let stdout_task = tokio::spawn(read_bounded_to(child.stdout.take().expect("piped stdout"), 1_048_576));
     let stderr_task = tokio::spawn(read_bounded(child.stderr.take().expect("piped stderr")));
     let timeout_ms = node
         .configuration
@@ -1702,7 +1852,8 @@ async fn execute_code(
             }
         }
     };
-    let stdout = String::from_utf8_lossy(&stdout_task.await.unwrap_or_default()).to_string();
+    let stdout_bytes = stdout_task.await.unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
     let stderr = String::from_utf8_lossy(&stderr_task.await.unwrap_or_default()).to_string();
     let _ = tokio::fs::remove_file(&script_path).await;
     if !status.success() {
@@ -1715,18 +1866,88 @@ async fn execute_code(
             bounded_log(&stderr)
         )));
     }
-    let trimmed = stdout.trim();
-    let result = serde_json::from_str::<Value>(trimmed)
-        .unwrap_or_else(|_| Value::String(trimmed.to_string()));
-    Ok(NodeResult::new(json!({
-        "language": language,
-        "code": source,
-        "result": result,
-        "stdout": stdout,
-        "stderr": stderr,
-        "exitCode": status.code(),
-    }))
-    .log(format!("Executed {language} and awaited its result.")))
+    if stdout_bytes.len() >= 1_048_576 { return Err(EngineError::Node("Code output exceeded the 1 MiB limit.".into())); }
+    let protocol: Value = serde_json::from_str(stdout.trim()).map_err(|_| EngineError::Node(format!("Code runtime returned an invalid output contract. {}", bounded_log(&stderr))))?;
+    let result = protocol.get("result").cloned().unwrap_or(Value::Null);
+    let logs = protocol.get("logs").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(bounded_log).take(100).collect::<Vec<_>>();
+    let output = json!({"language":language,"runtimeVersion":runtime_version,"runtimeRequirement":runtime_requirement,"helperLanguageVersion":EXPRESSION_LANGUAGE_VERSION,"items":result,"result":result,"exitCode":status.code()});
+    let log_bytes = logs.iter().map(String::len).sum::<usize>() as u64;
+    let dependency_environment_id = format!("builtin:{language}:{runtime_version}:helpers-v{EXPRESSION_LANGUAGE_VERSION}");
+    Ok(NodeResult::new(output)
+        .with_logs(logs)
+        .log(format!("Executed {language} in {execution_mode} mode and validated its item contract."))
+        .with_runtime(RuntimeMetadata { runtime: language.into(), runtime_version: runtime_version.clone(), helper_language_version: EXPRESSION_LANGUAGE_VERSION, dependency_environment_id, execution_mode: execution_mode.into(), output_bytes: stdout_bytes.len() as u64, log_bytes })
+        .with_capability("code.execute"))
+}
+
+const JAVASCRIPT_CODE_WRAPPER: &str = r#"'use strict';
+const nativeProcess = process;
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+let raw=''; nativeProcess.stdin.setEncoding('utf8');
+nativeProcess.stdin.on('data', c => raw += c);
+nativeProcess.stdin.on('end', async () => {
+  const payload=JSON.parse(raw), logs=[]; let logBytes=0,logsTruncated=false;
+  const pushLog=value=>{if(logsTruncated)return;const text=String(value),remaining=65536-logBytes;if(remaining<=0){logs.push('[logs truncated]');logsTruncated=true;return;}logs.push(text.slice(0,remaining));logBytes+=Math.min(text.length,remaining);if(text.length>remaining){logs.push('[logs truncated]');logsTruncated=true;}};
+  const safeConsole=Object.freeze({log:(...v)=>pushLog(v.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' ')),warn:(...v)=>pushLog('[warn] '+v.join(' ')),error:(...v)=>pushLog('[error] '+v.join(' '))});
+  const helpers=Object.freeze({json:Object.freeze({parse:JSON.parse,stringify:JSON.stringify}),string:Object.freeze({trim:v=>String(v).trim(),lower:v=>String(v).toLowerCase(),upper:v=>String(v).toUpperCase()}),number:v=>{const n=Number(v);if(!Number.isFinite(n))throw new TypeError('number() conversion failed');return n;},boolean:v=>v===true||v==='true'||(typeof v==='number'&&v!==0),array:Object.freeze({first:v=>v?.[0]??null,last:v=>v?.[v.length-1]??null,length:v=>Array.isArray(v)?v.length:0}),object:Object.freeze({keys:Object.keys,values:Object.values}),date:Object.freeze({iso:v=>new Date(v).toISOString()})});
+  let seed=2166136261; Math.random=()=>((seed=Math.imul(seed^seed>>>15,1|seed))>>>0)/4294967296; const NativeDate=Date,fixed=NativeDate.now(); globalThis.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[fixed]));}static now(){return fixed;}};
+  try { delete globalThis.process; delete globalThis.fetch; } catch {}
+  const run=async (input,items)=>{ const fn=new AsyncFunction('ctx','input','items','nodes','trigger','workflow','execution','helpers','console','require','process','fetch','"use strict";\n'+payload.source); return await fn(Object.freeze({input,items,nodes:payload.nodes,trigger:payload.trigger,workflow:payload.workflow,execution:payload.execution,helpers,log:safeConsole.log}),input,items,payload.nodes,payload.trigger,payload.workflow,payload.execution,helpers,safeConsole,undefined,undefined,undefined); };
+  try { let value;if(payload.mode==='each_item'){value=[];for(const item of payload.items)value.push(await run(item.data,[item]));}else value=await run(payload.input,payload.items); if(value===undefined)value=null; const items=Array.isArray(value)?value:(value&&Array.isArray(value.items)?value.items:[value]); nativeProcess.stdout.write(JSON.stringify({result:items.map((v,i)=>v&&Object.prototype.hasOwnProperty.call(v,'data')?v:{data:v,sourceItemIndex:i}),logs})); } catch(error){ nativeProcess.stderr.write(String(error?.stack||error)); nativeProcess.exitCode=1; }
+});"#;
+
+const PYTHON_CODE_WRAPPER: &str = r#"import sys,json,io,traceback,builtins,math,re,statistics,collections,itertools,functools,decimal
+payload=json.load(sys.stdin); logs=[]; log_bytes=0; logs_truncated=False
+def record_log(value):
+ global log_bytes,logs_truncated
+ if logs_truncated: return
+ text=str(value); remaining=65536-log_bytes
+ if remaining<=0: logs.append('[logs truncated]');logs_truncated=True;return
+ logs.append(text[:remaining]);log_bytes+=min(len(text),remaining)
+ if len(text)>remaining: logs.append('[logs truncated]');logs_truncated=True
+class Log(io.StringIO):
+ def write(self,s):
+  if s.strip(): record_log(s.rstrip())
+  return len(s)
+safe={'json','math','re','statistics','collections','itertools','functools','decimal'}
+native_import=builtins.__import__
+def limited_import(name,*args,**kwargs):
+ if name.split('.')[0] not in safe: raise PermissionError("module access is not permitted: "+name)
+ return native_import(name,*args,**kwargs)
+builtins.__import__=limited_import
+def audit(event,args):
+ if event.startswith(('open','socket.','subprocess.','os.system','ctypes.')): raise PermissionError("host capability is not permitted: "+event)
+sys.addaudithook(audit)
+helpers={'string':{'trim':lambda v:str(v).strip(),'lower':lambda v:str(v).lower(),'upper':lambda v:str(v).upper()},'array':{'first':lambda v:v[0] if v else None,'last':lambda v:v[-1] if v else None}}
+def run(inp,items):
+ scope={'ctx':{'input':inp,'items':items,'nodes':payload['nodes'],'trigger':payload['trigger'],'workflow':payload['workflow'],'execution':payload['execution'],'helpers':helpers},'input':inp,'items':items,'nodes':payload['nodes'],'trigger':payload['trigger'],'workflow':payload['workflow'],'execution':payload['execution'],'helpers':helpers,'result':None,'print':lambda *v,**k:record_log(' '.join(map(str,v)))}
+ exec(compile(payload['source'],'user_code.py','exec'),{'__builtins__':dict(vars(builtins),open=None,exec=None,eval=None,compile=None,input=None)},scope)
+ if callable(scope.get('main')): return scope['main'](scope['ctx'])
+ return scope.get('result')
+try:
+ value=[run(item.get('data'),[item]) for item in payload['items']] if payload['mode']=='each_item' else run(payload['input'],payload['items'])
+ values=value if isinstance(value,list) else (value.get('items') if isinstance(value,dict) and isinstance(value.get('items'),list) else [value])
+ print(json.dumps({'result':[v if isinstance(v,dict) and 'data' in v else {'data':v,'sourceItemIndex':i} for i,v in enumerate(values)],'logs':logs},separators=(',',':')),file=sys.__stdout__)
+except BaseException:
+ traceback.print_exc(file=sys.__stderr__);sys.exit(1)
+"#;
+
+fn node_permission_flag() -> &'static str {
+    let major = std::process::Command::new("node").arg("--version").output().ok().and_then(|output| String::from_utf8(output.stdout).ok()).and_then(|value| value.trim().trim_start_matches('v').split('.').next()?.parse::<u32>().ok()).unwrap_or(20);
+    if major >= 23 { "--permission" } else { "--experimental-permission" }
+}
+
+fn installed_runtime_version(executable: &str) -> Option<String> {
+    let output=std::process::Command::new(executable).arg("--version").output().ok()?;
+    let value=if output.stdout.is_empty(){output.stderr}else{output.stdout};
+    let text=String::from_utf8(value).ok()?;
+    text.split_whitespace().find(|part|part.chars().any(|character|character.is_ascii_digit())).map(|part|part.trim_start_matches('v').to_string())
+}
+fn runtime_requirement_met(requirement:&str,actual:&str)->bool {
+    let actual_parts=actual.split('.').filter_map(|part|part.parse::<u32>().ok()).collect::<Vec<_>>();
+    let expected=requirement.trim_start_matches(">=").split('.').filter_map(|part|part.parse::<u32>().ok()).collect::<Vec<_>>();
+    if actual_parts.is_empty()||expected.is_empty(){return false;}
+    if requirement.starts_with(">="){actual_parts>=expected}else{actual_parts.starts_with(&expected)}
 }
 
 fn execute_condition(
@@ -1769,16 +1990,11 @@ fn execute_condition(
         }
     };
     let branch = if result { "true" } else { "false" }.to_string();
-    Ok(NodeResult {
-        output: json!({"result":result,"left":left,"right":right,"operator":operator}),
-        logs: vec![format!(
+    Ok(NodeResult::new(json!({"result":result,"left":left,"right":right,"operator":operator}))
+        .log(format!(
             "Condition evaluated to {result}; followed the {branch} branch."
-        )],
-        retry_count: 0,
-        branch: Some(branch),
-        browser_diagnostics: None,
-        state_updates: vec![],
-    })
+        ))
+        .with_branch(branch))
 }
 fn contains(left: &Value, right: &Value) -> bool {
     match (left, right) {
@@ -2512,13 +2728,17 @@ async fn execute_command(
 }
 
 async fn read_bounded<R: tokio::io::AsyncRead + Unpin>(mut reader: R) -> Vec<u8> {
+    read_bounded_to(&mut reader, 65_536).await
+}
+
+async fn read_bounded_to<R: tokio::io::AsyncRead + Unpin>(mut reader: R, maximum: usize) -> Vec<u8> {
     let mut kept = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
         match reader.read(&mut chunk).await {
             Ok(0) | Err(_) => break,
             Ok(count) => {
-                let remaining = 65_536usize.saturating_sub(kept.len());
+                let remaining = maximum.saturating_sub(kept.len());
                 kept.extend_from_slice(&chunk[..count.min(remaining)]);
             }
         }
@@ -2797,6 +3017,51 @@ mod tests {
             result.output["code"],
             "document.body.dataset.ready = 'true';"
         );
+    }
+
+    fn executable_available(name: &str) -> bool {
+        std::process::Command::new(name).arg("--version").output().is_ok()
+    }
+
+    #[tokio::test]
+    async fn javascript_code_uses_items_logs_and_restricted_host_access() {
+        if !executable_available("node") { return; }
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let code = node("js", "javascript_code", json!({"language":"javascript","sourceCode":"console.log('count', items.length); console.log('x'.repeat(70000)); return items.map(item => ({value:item.data.value * 2}));","executionMode":"run","itemMode":"all_items","runtimeVersion":">=20","input":{"items":[{"data":{"value":2}},{"data":{"value":4}}]},"timeoutMs":5000}));
+        let mut workflow = base(vec![node("trigger","manual_trigger",json!({})),code.clone()],vec![]);
+        workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
+        let result=engine.execute_node(&code,&workflow,"run-js",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap();
+        assert_eq!(result.output["items"][0]["data"]["value"],4);
+        assert!(result.logs.iter().any(|line|line.contains("count 2")));
+        assert!(result.logs.iter().any(|line|line.contains("logs truncated")));
+        let escape=node("escape","javascript_code",json!({"language":"javascript","sourceCode":"return process.env;","executionMode":"run","runtimeVersion":">=20","timeoutMs":5000}));
+        assert!(engine.execute_node(&escape,&workflow,"run-escape",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn python_code_uses_the_same_item_contract_and_blocks_files() {
+        if !executable_available("python") { return; }
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let code=node("py","python_code",json!({"language":"python","sourceCode":"print('received', len(items))\nresult = [{'value': item['data']['value'] + 1} for item in items]","executionMode":"run","itemMode":"all_items","runtimeVersion":">=3.11","input":{"items":[{"data":{"value":1}},{"data":{"value":2}}]},"timeoutMs":5000}));
+        let mut workflow=base(vec![node("trigger","manual_trigger",json!({})),code.clone()],vec![]);workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
+        let result=engine.execute_node(&code,&workflow,"run-py",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap();
+        assert_eq!(result.output["items"][1]["data"]["value"],3);assert!(result.logs.iter().any(|line|line.contains("received 2")));
+        let escape=node("escape","python_code",json!({"language":"python","sourceCode":"result = open('secret.txt').read()","executionMode":"run","runtimeVersion":">=3.11","timeoutMs":5000}));
+        assert!(engine.execute_node(&escape,&workflow,"run-escape",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn code_timeout_and_pinned_manual_data_are_recorded() {
+        if !executable_available("node") { return; }
+        let engine=Engine::new(Database::in_memory().unwrap(),Arc::new(LocalHost));
+        let timeout=node("timeout","javascript_code",json!({"language":"javascript","sourceCode":"while(true) {}","executionMode":"run","runtimeVersion":">=20","timeoutMs":100}));
+        let mut workflow=base(vec![node("trigger","manual_trigger",json!({})),timeout.clone()],vec![]);workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
+        let error=engine.execute_node(&timeout,&workflow,"run-timeout",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap_err();assert!(error.to_string().contains("timeout"));
+        let pinned=node("pinned","javascript_code",json!({"language":"javascript","sourceCode":"return items.map(item => item.data);","executionMode":"run","runtimeVersion":">=20","pinnedData":[{"answer":42}],"timeoutMs":5000}));
+        assert_eq!(fixture_items(&json!([{"answer":42}]))[0].data,json!({"answer":42}));
+        workflow.nodes=vec![node("trigger","manual_trigger",json!({})),pinned.clone()];
+        engine.database().save_workflow(workflow.clone()).unwrap();
+        let record=engine.test_node(workflow,"pinned",json!({}),None,true,CancellationToken::new()).await.unwrap();let execution=&record.node_executions[0];assert_eq!(execution.test_data_source.as_deref(),Some("pinned_data"));assert_eq!(execution.output_items[0].data,json!({"answer":42}),"{execution:#?}");
     }
 
     #[tokio::test]

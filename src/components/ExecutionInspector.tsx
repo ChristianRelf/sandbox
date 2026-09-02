@@ -238,6 +238,7 @@ function NodeExecutionDetail({
           {execution.error.suggestion && (
             <span>{execution.error.suggestion}</span>
           )}
+          {execution.error.line != null && <code>Line {execution.error.line}{execution.error.column != null ? `, column ${execution.error.column}` : ""}</code>}
           {execution.error.code === "permission_required" &&
             onReviewPermissions && (
               <button
@@ -276,6 +277,9 @@ function NodeExecutionDetail({
         <Tabs.List className="detail-tabs">
           <Tabs.Trigger value="input">Input</Tabs.Trigger>
           <Tabs.Trigger value="output">Output</Tabs.Trigger>
+          {(execution.inputItems?.length||execution.outputItems?.length) ? <Tabs.Trigger value="items">Items <em>{execution.outputItems?.length??0}</em></Tabs.Trigger> : null}
+          {execution.runtime && <Tabs.Trigger value="runtime">Runtime</Tabs.Trigger>}
+          {(execution.lineage?.length||execution.capabilityUsage?.length) ? <Tabs.Trigger value="lineage">Lineage</Tabs.Trigger> : null}
           <Tabs.Trigger value="logs">
             Logs <em>{execution.logs.length}</em>
           </Tabs.Trigger>
@@ -285,6 +289,15 @@ function NodeExecutionDetail({
         </Tabs.Content>
         <Tabs.Content value="output">
           <CodeBlock value={execution.output} onCopy={onCopy} />
+        </Tabs.Content>
+        <Tabs.Content value="items">
+          <CodeBlock value={{inputItems:execution.inputItems??[],outputItems:execution.outputItems??[]}} onCopy={onCopy} />
+        </Tabs.Content>
+        <Tabs.Content value="runtime">
+          <CodeBlock value={{...execution.runtime,testDataSource:execution.testDataSource??"live execution",warnings:execution.warnings??[]}} onCopy={onCopy} />
+        </Tabs.Content>
+        <Tabs.Content value="lineage">
+          <CodeBlock value={{sources:execution.lineage??[],capabilities:execution.capabilityUsage??[]}} onCopy={onCopy} />
         </Tabs.Content>
         <Tabs.Content value="logs">
           <div className="logs">

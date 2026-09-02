@@ -44,11 +44,29 @@ impl EngineError {
                 "Inspect the locator attempts and failure screenshot, then test or re-record this node.",
             ),
         };
+        let (line, column) = source_location(&self.to_string());
         ExecutionError {
             code: code.into(),
             message: self.to_string(),
             detail: None,
             suggestion: Some(suggestion.into()),
+            line,
+            column,
         }
     }
+}
+
+fn source_location(message: &str) -> (Option<u32>, Option<u32>) {
+    for marker in ["user_code.py:", "<anonymous>:"] {
+        if let Some(position) = message.find(marker) {
+            let tail = &message[position + marker.len()..];
+            let mut numbers = tail.split(|character: char| !character.is_ascii_digit()).filter(|part| !part.is_empty());
+            let mut line = numbers.next().and_then(|value| value.parse::<u32>().ok());
+            let column = numbers.next().and_then(|value| value.parse::<u32>().ok());
+            // AsyncFunction adds two wrapper lines before user JavaScript.
+            if marker == "<anonymous>:" { line = line.map(|value| value.saturating_sub(2).max(1)); }
+            return (line, column);
+        }
+    }
+    (None, None)
 }

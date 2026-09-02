@@ -872,11 +872,12 @@ pub async fn export_workflow(
         "requiredPermissions": {
             "networkDomains": workflow.settings.permissions.approved_network_domains,
             "folderAccessCount": workflow.settings.permissions.approved_folders.len(),
-            "commandExecution": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "run_command" | "code")),
+            "commandExecution": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "run_command" | "code" | "javascript_code" | "python_code")),
             "backgroundExecution": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "schedule_trigger" | "file_watch_trigger" | "gmail_new_email_trigger")),
             "externalCommunication": workflow.nodes.iter().any(|node| matches!(node.node_type.as_str(), "gmail_create_draft" | "gmail_send_email" | "gmail_add_label" | "discord_webhook" | "discord_embed" | "slack_webhook"))
         },
         "localPathRequirements": local_path_fields,
+        "codeRuntimes": workflow.nodes.iter().filter(|node| matches!(node.node_type.as_str(), "code" | "javascript_code" | "python_code")).map(|node| json!({"nodeId":node.id,"language":node.configuration.get("language"),"runtimeVersion":node.configuration.get("runtimeVersion"),"helperLanguageVersion":node.configuration.get("helperLanguageVersion"),"itemMode":node.configuration.get("itemMode"),"dependencies":node.configuration.get("dependencies")})).collect::<Vec<_>>(),
         "templateMetadata": Value::Null,
         "warnings": if local_path_fields.is_empty() { Vec::<String>::new() } else { vec!["Local absolute paths were removed. Select approved files or folders after import.".to_string()] }
     });
@@ -2733,6 +2734,9 @@ fn sanitize_export_definition(
         else {
             continue;
         };
+        // Development fixtures are local by default. An explicit future export
+        // mode can include them after size/sensitivity review.
+        configuration.remove("pinnedData");
         if let Some(credential_id) = configuration
             .remove(connection_field)
             .and_then(|value| value.as_str().map(str::to_string))
@@ -2819,6 +2823,7 @@ fn sanitize_export_definition(
         permissions.insert("externalCommunicationPermitted".into(), Value::Bool(false));
         permissions.insert("approvalRevision".into(), Value::Null);
         permissions.insert("communicationApprovalRevision".into(), Value::Null);
+        permissions.insert("approvedEnvironmentVariables".into(), json!([]));
     }
     Ok(())
 }

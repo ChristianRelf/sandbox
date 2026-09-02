@@ -1,7 +1,7 @@
 export type BuiltInNodeType =
   | "manual_trigger" | "schedule_trigger" | "file_watch_trigger" | "condition" | "set_data" | "delay"
   | "http_request" | "desktop_notification" | "move_file" | "read_file" | "write_file" | "copy_path" | "delete_path" | "list_folder" | "parse_csv" | "parse_json" | "parse_text" | "get_workflow_state" | "set_workflow_state" | "compare_previous" | "run_command"
-  | "ai_prompt" | "code" | "web_builder"
+  | "ai_prompt" | "code" | "javascript_code" | "python_code" | "web_builder"
   | "open_browser" | "navigate" | "click_element" | "fill_field" | "select_option" | "press_key"
   | "wait_for" | "extract_data" | "screenshot" | "download_file" | "upload_file" | "close_browser"
   | "gmail_new_email_trigger" | "gmail_get_email" | "gmail_create_draft" | "gmail_send_email" | "gmail_add_label"
@@ -24,14 +24,18 @@ export type InputBinding=
   | {kind:"connection";connectionId:string};
 export interface WorkflowNode { id:string; type:NodeType; version:number; name:string; position:Position; configuration:Record<string,unknown>; disabled:boolean; inputBindings?:Record<string,InputBinding>; plugin?:PluginNodePin }
 export interface WorkflowEdge { id:string; sourceNodeId:string; sourceHandle:string; targetNodeId:string; targetHandle:string; kind?:"control"; sourcePort?:string; targetPort?:string }
-export interface PermissionSummary { approvedFolders:string[]; approvedNetworkDomains:string[]; commandExecutionPermitted:boolean; backgroundExecutionPermitted:boolean; approvalRevision?:string|null; approvedBrowserProfileIds:string[]; browserAutomationPermitted:boolean; externalCommunicationPermitted:boolean; externalDataWritePermitted?:boolean; communicationApprovalRevision?:string|null }
-export interface WorkflowSettings { defaultNodeTimeoutMs:number; maxConcurrentNodes:number; permissions:PermissionSummary }
+export interface PermissionSummary { approvedFolders:string[]; approvedNetworkDomains:string[]; commandExecutionPermitted:boolean; backgroundExecutionPermitted:boolean; approvalRevision?:string|null; approvedBrowserProfileIds:string[]; browserAutomationPermitted:boolean; externalCommunicationPermitted:boolean; externalDataWritePermitted?:boolean; communicationApprovalRevision?:string|null; approvedEnvironmentVariables?:string[] }
+export interface WorkflowSettings { defaultNodeTimeoutMs:number; maxConcurrentNodes:number; permissions:PermissionSummary; expressionLanguageVersion?:number }
 export interface Workflow { id:string; schemaVersion:number; owner?:WorkflowOwner; name:string; description:string; enabled:boolean; triggerNodeId:string; nodes:WorkflowNode[]; edges:WorkflowEdge[]; settings:WorkflowSettings; createdAt:string; updatedAt:string }
-export interface ExecutionError { code:string; message:string; detail?:string; suggestion?:string }
+export interface ExecutionError { code:string; message:string; detail?:string; suggestion?:string; line?:number; column?:number }
+export interface BinaryReference { reference:string; fileName?:string; contentType?:string; sizeBytes?:number; sha256?:string }
+export interface WorkflowItem { data:unknown; binary?:Record<string,BinaryReference>; sourceNodeId?:string; sourceItemIndex?:number; branch?:string }
+export interface RuntimeMetadata { runtime:string; runtimeVersion:string; helperLanguageVersion:number; dependencyEnvironmentId:string; executionMode:string; outputBytes:number; logBytes:number }
+export interface DataLineage { source:string; path:string[]; targetField:string }
 export interface LocatorCandidate { kind:"role"|"label"|"placeholder"|"test_id"|"text"|"attribute"|"css"|"xpath"; value:string; name?:string; exact?:boolean }
 export interface StructuredLocator { primary:LocatorCandidate; alternatives:LocatorCandidate[]; elementRole?:string; accessibleName?:string; tag:string; stableAttributes:Record<string,string>; framePath:string[]; recordingUrl:string; nearbyText?:string }
 export interface BrowserDiagnostics { currentUrl:string; pageTitle:string; locatorAttempts:Array<{kind:string;value:string;matchCount:number;succeeded:boolean;weakFallback:boolean;error?:string}>; successfulLocator?:LocatorCandidate; matchCount:number; consoleErrors:string[]; failedNetworkRequests:string[]; screenshotPath?:string; tracePath?:string; playwrightError?:string; unexpectedNavigation:boolean; rerecordAvailable:boolean }
-export interface NodeExecution { nodeId:string; status:NodeStatus; startedAt?:string; completedAt?:string; durationMs?:number; input:unknown; output:unknown; logs:string[]; retryCount:number; error?:ExecutionError; skipReason?:string; branchFollowed?:string; browserDiagnostics?:BrowserDiagnostics }
+export interface NodeExecution { nodeId:string; status:NodeStatus; startedAt?:string; completedAt?:string; durationMs?:number; input:unknown; output:unknown; logs:string[]; retryCount:number; error?:ExecutionError; skipReason?:string; branchFollowed?:string; browserDiagnostics?:BrowserDiagnostics; inputItems?:WorkflowItem[]; outputItems?:WorkflowItem[]; warnings?:string[]; lineage?:DataLineage[]; runtime?:RuntimeMetadata; testDataSource?:string; capabilityUsage?:string[] }
 export interface ExecutionRecord { id:string; workflowId:string; workflowVersion:number; trigger:unknown; status:ExecutionStatus; startedAt:string; completedAt?:string; durationMs?:number; nodeExecutions:NodeExecution[]; error?:ExecutionError; skipReason?:string; recoveredAfterCrash:boolean }
 export interface WorkflowMetadata { favorite:boolean; folder?:string; tags:string[]; archivedAt?:string; lastOpenedAt?:string }
 export interface WorkflowMetadataPatch { favorite?:boolean; folder?:string|null; tags?:string[]; archivedAt?:string|null; lastOpenedAt?:string|null }
