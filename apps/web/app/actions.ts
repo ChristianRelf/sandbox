@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { authenticatedClient } from "../lib/auth";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { authenticatedClient, sessionCookie } from "../lib/auth";
 
 async function client() {
   const value = await authenticatedClient();
@@ -84,6 +86,128 @@ export async function revokeSessionAction(formData: FormData) {
   const api = await client();
   await api.revokeAccountSession(field(formData, "sessionId"));
   revalidatePath("/security");
+}
+
+export interface PersonalTokenActionState {
+  token: string | null;
+  prefix: string | null;
+  error: string | null;
+}
+
+export async function issuePersonalTokenAction(
+  _state: PersonalTokenActionState,
+  formData: FormData,
+): Promise<PersonalTokenActionState> {
+  try {
+    const api = await client();
+    const [organisationId, workspaceId] = field(formData, "target").split(":");
+    if (!organisationId || !workspaceId) throw new Error("Choose a workspace for this key.");
+    const scopes = formData
+      .getAll("scope")
+      .filter((value): value is string => typeof value === "string");
+    if (!scopes.length) throw new Error("Choose at least one permission.");
+    const response = await api.createPersonalAccessToken({
+      name: field(formData, "name"),
+      organisationId,
+      workspaceIds: [workspaceId],
+      scopes,
+      expiresInDays: Number(field(formData, "expiresInDays")),
+    });
+    revalidatePath("/security");
+    return {
+      token: response.data.credential.token,
+      prefix: response.data.credential.prefix,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      token: null,
+      prefix: null,
+      error: error instanceof Error ? error.message : "The API key could not be created.",
+    };
+  }
+}
+
+export async function revokePersonalTokenAction(formData: FormData) {
+  const api = await client();
+  await api.revokePersonalAccessToken(
+    field(formData, "tokenId"),
+    "Revoked from account security settings",
+  );
+  revalidatePath("/security");
+}
+
+export interface RunnerPairingActionState {
+  token: string | null;
+  prefix: string | null;
+  error: string | null;
+}
+
+export async function issueRunnerPairingTokenAction(
+  _state: RunnerPairingActionState,
+  formData: FormData,
+): Promise<RunnerPairingActionState> {
+  try {
+    const api = await client();
+    const [organisationId, workspaceId] = field(formData, "target").split(":");
+    if (!organisationId || !workspaceId) throw new Error("Choose the workspace this runner will join.");
+    const response = await api.createPersonalAccessToken({
+      name: `Runner pairing · ${field(formData, "runnerName")}`,
+      organisationId,
+      workspaceIds: [workspaceId],
+      scopes: ["runners.manage"],
+      expiresInDays: 1,
+    });
+    revalidatePath("/operations");
+    return { token: response.data.credential.token, prefix: response.data.credential.prefix, error: null };
+  } catch (error) {
+    return { token: null, prefix: null, error: error instanceof Error ? error.message : "The pairing token could not be created." };
+  }
+}
+
+export async function updateRunnerStatusAction(formData: FormData) {
+  const api = await client();
+  const workspaceId = field(formData, "workspaceId");
+  await api.request({
+    method: "PATCH",
+    path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/runners/${encodeURIComponent(field(formData, "runnerId"))}`,
+    body: { displayName: null, status: field(formData, "status") },
+  });
+  revalidatePath("/operations");
+}
+
+export async function revokeRunnerAction(formData: FormData) {
+  const api = await client();
+  const workspaceId = field(formData, "workspaceId");
+  await api.request({
+    method: "DELETE",
+    path: `/v1/workspaces/${encodeURIComponent(workspaceId)}/runners/${encodeURIComponent(field(formData, "runnerId"))}`,
+    body: {},
+  });
+  revalidatePath("/operations");
+}
+
+export interface AccountDeletionState {
+  error: string | null;
+}
+
+export async function deleteAccountAction(
+  _state: AccountDeletionState,
+  formData: FormData,
+): Promise<AccountDeletionState> {
+  try {
+    if (field(formData, "confirmation") !== "DELETE") {
+      return { error: "Type DELETE exactly to confirm." };
+    }
+    const api = await client();
+    await api.request({ method: "DELETE", path: "/v1/account", body: {} });
+    (await cookies()).delete(sessionCookie);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Account deletion could not be completed.",
+    };
+  }
+  redirect("/sign-in");
 }
 
 export async function createRoleAction(formData: FormData) {

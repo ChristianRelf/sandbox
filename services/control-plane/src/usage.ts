@@ -49,6 +49,15 @@ export interface InvoiceUsageInput {
   evidenceDigest: string;
 }
 
+export interface WorkspaceUsageSummary {
+  workspaceId: string;
+  periodStartedAt: string;
+  periodEndedAt: string;
+  reconciliation: "matched";
+  meters: Array<{ meter:UsageMeter; unit:UsageUnit; quantity:number }>;
+  daily: Array<{ date:string; quantities:Record<UsageMeter,number> }>;
+}
+
 export class PostgresUsageLedger {
   constructor(private readonly pool: Pool) {}
 
@@ -135,6 +144,47 @@ export class PostgresUsageLedger {
       workspaceId:row.workspace_id,meter:row.meter,unit:row.unit,quantity:parseSafeQuantity(row.quantity),executionCount:parseSafeQuantity(row.execution_count),
       evidenceDigest:`sha256:${createHash("sha256").update(JSON.stringify({eventIds:row.event_ids,reconciliationIds:row.reconciliation_ids})).digest("hex")}`
     }));
+  }
+
+  async workspaceSummary(workspaceId:string,days:number,periodEndedAt=new Date()):Promise<WorkspaceUsageSummary> {
+    if (!Number.isSafeInteger(days) || days<1 || days>90) throw new DomainError("usage_period_invalid", "Usage history must cover between 1 and 90 days.");
+    if (!Number.isFinite(periodEndedAt.getTime())) throw new DomainError("usage_period_invalid", "The usage period is invalid.");
+    const periodStartedAt=new Date(Date.UTC(periodEndedAt.getUTCFullYear(),periodEndedAt.getUTCMonth(),periodEndedAt.getUTCDate()-(days-1)));
+    const result=await this.pool.query<{ day:string;meter:UsageMeter;unit:UsageUnit;quantity:string }>(
+      `WITH latest_reconciliation AS (
+         SELECT DISTINCT ON (execution_id) execution_id,status
+           FROM usage_reconciliations
+          WHERE workspace_id=$1
+          ORDER BY execution_id,reconciliation_version DESC
+       )
+       SELECT (u.period_ended_at AT TIME ZONE 'UTC')::date::text AS day,u.meter,u.unit,sum(u.quantity)::text AS quantity
+         FROM usage_events u
+         JOIN latest_reconciliation r ON r.execution_id=u.execution_id AND r.status='matched'
+        WHERE u.workspace_id=$1 AND u.period_ended_at>$2 AND u.period_ended_at<=$3
+        GROUP BY day,u.meter,u.unit
+        ORDER BY day,u.meter,u.unit`,
+      [workspaceId,periodStartedAt.toISOString(),periodEndedAt.toISOString()]
+    );
+    const zeroQuantities=():Record<UsageMeter,number>=>({hosted_runner_seconds:0,managed_browser_seconds:0,network_egress_bytes:0,artifact_storage_byte_seconds:0});
+    const points=new Map<string,Record<UsageMeter,number>>();
+    for(let index=0;index<days;index+=1){
+      const date=new Date(periodStartedAt);date.setUTCDate(date.getUTCDate()+index);
+      points.set(date.toISOString().slice(0,10),zeroQuantities());
+    }
+    const totals=zeroQuantities();
+    for(const row of result.rows){
+      const quantity=parseSafeQuantity(row.quantity),point=points.get(row.day);
+      if(!point||meterUnits[row.meter]!==row.unit)throw new DomainError("usage_aggregation_invalid","Stored usage could not be aggregated safely.",500);
+      point[row.meter]=quantity;
+      const total=totals[row.meter]+quantity;
+      if(!Number.isSafeInteger(total))throw new DomainError("usage_quantity_overflow","Aggregated usage exceeds the supported safe integer range.",500);
+      totals[row.meter]=total;
+    }
+    return{
+      workspaceId,periodStartedAt:periodStartedAt.toISOString(),periodEndedAt:periodEndedAt.toISOString(),reconciliation:"matched",
+      meters:usageMeters.map(meter=>({meter,unit:meterUnits[meter],quantity:totals[meter]})),
+      daily:[...points.entries()].map(([date,quantities])=>({date,quantities}))
+    };
   }
 
   private async transaction<T>(operation:(client:PoolClient)=>Promise<T>):Promise<T> {

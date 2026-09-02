@@ -274,9 +274,9 @@ export const api = {
     tauri
       ? invoke<BugReportReceipt>("submit_bug_report", { report })
       : previewApi.submitBugReport(report),
-  buildWorkflowWithAi: (connectionId: string, message: string, workflow: Workflow) =>
+  buildWorkflowWithAi: (connectionId: string, message: string, workflow: Workflow, requestId: string) =>
     tauri
-      ? invoke<AiWorkflowProposal>("build_workflow_with_ai", { connectionId, message, workflow })
+      ? invoke<AiWorkflowProposal>("build_workflow_with_ai", { connectionId, message, workflow, requestId })
       : Promise.reject(new Error("AI workflow building requires the desktop application so credentials stay in the operating-system vault.")),
   generateCodeWithAi: (
     connectionId: string,

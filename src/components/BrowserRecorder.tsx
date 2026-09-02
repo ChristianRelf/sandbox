@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { BrowserProfile, RecordedStep } from "../types";
 import { FocusDialog } from "./ui/Dialog";
+import { CustomSelect } from "./ui/CustomSelect";
 
 export function BrowserRecorder({
   profiles,
@@ -144,7 +145,7 @@ export function BrowserRecorder({
             <section>
               <label className="field">
                 <span>Browser profile</span>
-                <select
+                <CustomSelect
                   autoFocus
                   value={profileId}
                   onChange={(event) => setProfileId(event.target.value)}
@@ -155,7 +156,7 @@ export function BrowserRecorder({
                       {profile.name}
                     </option>
                   ))}
-                </select>
+                </CustomSelect>
               </label>
               <label className="field">
                 <span>

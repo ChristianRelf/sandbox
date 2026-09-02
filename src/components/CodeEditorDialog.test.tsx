@@ -48,9 +48,8 @@ describe("CodeEditorDialog AI chat", () => {
     fireEvent.change(composer, { target: { value: "Make it ready" } });
     fireEvent.keyDown(composer, { key: "Enter" });
 
-    expect(screen.getByText("Planning Draft")).toBeInTheDocument();
-    expect(screen.getByText("Investigating current code")).toBeInTheDocument();
-    expect(screen.getByText("Writing Code")).toBeInTheDocument();
+    expect(screen.getByText("Live activity")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for test-model to return updated code")).toBeInTheDocument();
     expect(api.generateCodeWithAi).toHaveBeenCalledWith(
       "ai-1",
       "javascript",

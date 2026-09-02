@@ -14,6 +14,8 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   showAskAiOnIssues: boolean;
   onAskAi: (node: WorkflowNode, issue?: string) => void;
   onAdd: (sourceId: string) => void;
+  connectionRole?: "input" | "output" | "both";
+  dimmed?: boolean;
 }
 
 export function WorkflowNodeCard({ data, selected }: NodeProps) {
@@ -26,6 +28,8 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
     showAskAiOnIssues,
     onAskAi,
     onAdd,
+    connectionRole,
+    dimmed,
   } = data as WorkflowNodeData;
   const definition = definitionFor(node.type);
 
@@ -46,6 +50,8 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
         inputPorts={node.type === "web_builder" ? [...WEB_BUILDER_INPUT_PORTS] : undefined}
         outputLabels={definition.outputs.map((port) => port.label)}
         onAdd={onAdd}
+        connectionRole={connectionRole}
+        dimmed={dimmed}
       />
       <NodeAskAiAction
         node={node}

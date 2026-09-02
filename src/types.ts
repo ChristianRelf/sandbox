@@ -60,7 +60,8 @@ export type ConnectionStatus="connected"|"expired"|"revoked"|"error"|"setup_requ
 export interface ConnectionMetadata { id:string; provider:string; displayName:string; accountIdentifier?:string; scopes:string[]; createdAt:string; lastUsedAt?:string; expiresAt?:string; status:ConnectionStatus; metadata:Record<string,unknown> }
 export interface BugReportDraft { summary:string; description:string; diagnostics?:Record<string,string> }
 export interface BugReportReceipt { delivered:boolean; provider:"discord"|"preview"; status:number; reportId:string }
-export interface AiWorkflowProposal { workflow:Workflow; message:string; addedNodeCount:number; removedNodeCount:number; issues:ValidationIssue[] }
+export interface AiWorkflowProposal { workflow:Workflow; message:string; addedNodeCount:number; removedNodeCount:number; issues:ValidationIssue[]; tested:boolean; validationAttempts:number }
+export interface AiWorkflowActivity { requestId:string; phase:string; message:string; attempt:number }
 export interface PendingApproval { id:string; executionId:string; workflowId:string; nodeId:string; action:Record<string,unknown>; status:string; createdAt:string; expiresAt:string; resolvedAt?:string }
 export interface RecordedStep { id:string; action:string; name:string; configuration:Record<string,unknown>; sensitiveInputRequired:boolean }
 export type PluginInstallState="disabled"|"enabled"|"revoked";

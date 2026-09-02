@@ -9,10 +9,11 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 type Result<T> = std::result::Result<T, String>;
+const MAX_AI_BUILD_ATTEMPTS: usize = 3;
 
 const SUPPORTED_NODES: &[&str] = &[
     "manual_trigger",
@@ -69,7 +70,7 @@ const TRIGGER_NODES: &[&str] = &[
     "gmail_new_email_trigger",
 ];
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AiGraph {
     #[serde(default)]
@@ -82,7 +83,7 @@ struct AiGraph {
     edges: Vec<AiEdge>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct AiNode {
     key: String,
     #[serde(rename = "type")]
@@ -97,7 +98,7 @@ struct AiNode {
     input_bindings: BTreeMap<String, AiBinding>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct AiBinding {
     source: String,
     #[serde(default = "default_output_port")]
@@ -108,7 +109,7 @@ fn default_output_port() -> String {
     "result".into()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AiEdge {
     source: String,
@@ -131,6 +132,8 @@ pub struct AiWorkflowProposal {
     added_node_count: usize,
     removed_node_count: usize,
     issues: Vec<ValidationIssue>,
+    tested: bool,
+    validation_attempts: usize,
 }
 
 fn empty_object() -> Value {
@@ -146,6 +149,8 @@ pub async fn build_workflow_with_ai(
     connection_id: String,
     message: String,
     workflow: Workflow,
+    request_id: String,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AiWorkflowProposal> {
     let request = message.trim();
@@ -156,6 +161,13 @@ pub async fn build_workflow_with_ai(
         return Err("AI workflow requests are limited to 8,000 characters.".into());
     }
 
+    emit_workflow_activity(
+        &app,
+        &request_id,
+        "connection",
+        "Checking the selected AI connection",
+        0,
+    );
     let connection = state
         .engine
         .database()
@@ -184,20 +196,151 @@ pub async fn build_workflow_with_ai(
     let system = system_prompt();
     let current = serde_json::to_string(&workflow)
         .map_err(|error| format!("The current workflow could not be prepared: {error}"))?;
-    let user = format!(
+    let mut user = format!(
         "USER REQUEST:\n{request}\n\nCURRENT WORKFLOW:\n{current}\n\nReturn the complete replacement graph as JSON."
     );
-    let content = request_provider(
-        &connection.provider,
-        &connection.metadata,
-        api_key,
-        model,
-        &system,
-        &user,
-    )
-    .await?;
-    let graph = parse_graph(&content)?;
-    graph_to_proposal(graph, workflow)
+    for attempt in 1..=MAX_AI_BUILD_ATTEMPTS {
+        emit_workflow_activity(
+            &app,
+            &request_id,
+            "provider",
+            &format!(
+                "Waiting for {model} to {} the workflow",
+                if attempt == 1 { "build" } else { "repair" }
+            ),
+            attempt,
+        );
+        let content = request_provider(
+            &connection.provider,
+            &connection.metadata,
+            api_key,
+            model,
+            &system,
+            &user,
+        )
+        .await?;
+        emit_workflow_activity(
+            &app,
+            &request_id,
+            "parsing",
+            "Parsing the returned nodes, bindings, and connections",
+            attempt,
+        );
+        let graph = match parse_graph(&content) {
+            Ok(graph) => graph,
+            Err(error) if attempt < MAX_AI_BUILD_ATTEMPTS => {
+                emit_workflow_activity(
+                    &app,
+                    &request_id,
+                    "repair",
+                    "The response was not valid workflow JSON; asking the model to correct it",
+                    attempt,
+                );
+                user = format!(
+                    "The previous response for this request was not valid workflow JSON. Return the complete corrected replacement graph in the required JSON shape, with no Markdown or commentary outside it.\n\nORIGINAL USER REQUEST:\n{request}\n\nPARSING FAILURE:\n{error}\n\nINVALID RESPONSE:\n{}",
+                    truncate(&content, 20_000)
+                );
+                continue;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "The AI did not return valid workflow JSON after {attempt} attempts. No draft was returned. {error}"
+                ));
+            }
+        };
+        let graph_json = serde_json::to_string(&graph)
+            .map_err(|error| format!("The AI graph could not be tested: {error}"))?;
+        emit_workflow_activity(
+            &app,
+            &request_id,
+            "validation",
+            "Testing the complete graph with the workflow validator",
+            attempt,
+        );
+        let mut proposal = match graph_to_proposal(graph, workflow.clone()) {
+            Ok(proposal) => proposal,
+            Err(error) if attempt < MAX_AI_BUILD_ATTEMPTS => {
+                emit_workflow_activity(
+                    &app,
+                    &request_id,
+                    "repair",
+                    "The graph could not be loaded by the workflow engine; asking the model to repair it",
+                    attempt,
+                );
+                user = format!(
+                    "The previous graph for this request could not be loaded by the workflow engine. Return the complete corrected replacement graph in the required JSON shape.\n\nORIGINAL USER REQUEST:\n{request}\n\nFAILED GRAPH:\n{graph_json}\n\nENGINE FAILURE:\n{error}\n\nFix the failure without removing requested behaviour."
+                );
+                continue;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "The AI graph still could not be loaded after {attempt} attempts. No draft was returned. {error}"
+                ));
+            }
+        };
+        if proposal.issues.is_empty() {
+            proposal.tested = true;
+            proposal.validation_attempts = attempt;
+            emit_workflow_activity(
+                &app,
+                &request_id,
+                "complete",
+                "Workflow test passed with no validation issues",
+                attempt,
+            );
+            return Ok(proposal);
+        }
+
+        let issue_summary = proposal
+            .issues
+            .iter()
+            .map(|issue| format!("- {}: {}", issue.code, issue.message))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if attempt == MAX_AI_BUILD_ATTEMPTS {
+            return Err(format!(
+                "The AI draft still failed workflow testing after {attempt} attempts. No draft was returned. {} Please add the missing details and try again.",
+                proposal
+                    .issues
+                    .first()
+                    .map(|issue| issue.message.as_str())
+                    .unwrap_or("The graph is incomplete.")
+            ));
+        }
+        emit_workflow_activity(
+            &app,
+            &request_id,
+            "repair",
+            &format!(
+                "Found {} issue{}; sending the exact failures back for repair",
+                proposal.issues.len(),
+                if proposal.issues.len() == 1 { "" } else { "s" }
+            ),
+            attempt,
+        );
+        user = format!(
+            "The previous graph for this request failed the application's workflow tests. Return a complete corrected replacement graph in the required JSON shape. Do not explain the errors outside the JSON.\n\nORIGINAL USER REQUEST:\n{request}\n\nFAILED GRAPH:\n{graph_json}\n\nVALIDATION FAILURES:\n{issue_summary}\n\nFix every failure. Do not remove requested behaviour merely to silence validation."
+        );
+    }
+    Err("The AI workflow test ended unexpectedly. No draft was returned.".into())
+}
+
+fn emit_workflow_activity(
+    app: &AppHandle,
+    request_id: &str,
+    phase: &str,
+    message: &str,
+    attempt: usize,
+) {
+    let _ = app.emit(
+        "ai-workflow-activity",
+        json!({
+            "requestId": request_id,
+            "phase": phase,
+            "message": message,
+            "attempt": attempt,
+        }),
+    );
 }
 
 pub(crate) async fn run_ai_prompt(
@@ -829,6 +972,8 @@ fn graph_to_proposal(graph: AiGraph, current: Workflow) -> Result<AiWorkflowProp
         added_node_count,
         removed_node_count,
         issues,
+        tested: false,
+        validation_attempts: 0,
     })
 }
 

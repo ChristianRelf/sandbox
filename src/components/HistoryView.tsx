@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { CustomSelect } from "./ui/CustomSelect";
 import { api } from "../api";
 import { useAppStore } from "../store";
 import type {
@@ -265,7 +266,7 @@ export function HistoryView() {
             </button>
           )}
         </div>
-        <select
+        <CustomSelect
           aria-label="Filter workflow"
           value={workflowId}
           onChange={(event) => setWorkflowId(event.target.value)}
@@ -276,8 +277,8 @@ export function HistoryView() {
               {item.workflow.name}
             </option>
           ))}
-        </select>
-        <select
+        </CustomSelect>
+        <CustomSelect
           aria-label="Filter status"
           value={status}
           onChange={(event) =>
@@ -297,8 +298,8 @@ export function HistoryView() {
               {value}
             </option>
           ))}
-        </select>
-        <select
+        </CustomSelect>
+        <CustomSelect
           aria-label="Filter trigger"
           value={trigger}
           onChange={(event) => setTrigger(event.target.value)}
@@ -308,7 +309,7 @@ export function HistoryView() {
           <option value="schedule">Schedule</option>
           <option value="file_watch">File watch</option>
           <option value="polling">Polling</option>
-        </select>
+        </CustomSelect>
         <label>
           From
           <input

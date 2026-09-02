@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useAppStore } from "../store";
+import { CustomSelect } from "./ui/CustomSelect";
 import type {
   AccountOrganisation,
   AccountStatus,
@@ -360,7 +361,7 @@ export function CloudView() {
                   <b>Workspace</b>
                   <small>Roles and permissions are enforced by the control plane.</small>
                 </div>
-                <select
+                <CustomSelect
                   aria-label="Cloud workspace"
                   value={workspaceId}
                   onChange={(event) => {
@@ -375,7 +376,7 @@ export function CloudView() {
                       ))}
                     </optgroup>
                   ))}
-                </select>
+                </CustomSelect>
               </div>
               {workspace && <small className="cloud-workspace-id">{workspace.name} · {workspace.id}</small>}
             </section>

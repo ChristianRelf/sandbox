@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { CustomSelect } from "./ui/CustomSelect";
 import {
   Archive,
   ArrowRight,
@@ -356,7 +357,7 @@ export function Dashboard() {
         </div>
         {tab === "workflows" ? (
           <>
-            <select
+            <CustomSelect
               aria-label="Filter workflows"
               value={filter}
               onChange={(event) => setFilter(event.target.value as FilterKey)}
@@ -366,8 +367,8 @@ export function Dashboard() {
               <option value="scheduled">Scheduled</option>
               <option value="failed">Failed</option>
               <option value="archived">Archived</option>
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               aria-label="Filter by folder"
               value={folder}
               onChange={(event) => setFolder(event.target.value)}
@@ -376,8 +377,8 @@ export function Dashboard() {
               {folders.map((value) => (
                 <option key={value}>{value}</option>
               ))}
-            </select>
-            <select
+            </CustomSelect>
+            <CustomSelect
               aria-label="Sort workflows"
               value={sort}
               onChange={(event) => setSort(event.target.value)}
@@ -386,10 +387,10 @@ export function Dashboard() {
               <option value="name">Name</option>
               <option value="last-run">Last run</option>
               <option value="next-run">Next run</option>
-            </select>
+            </CustomSelect>
           </>
         ) : (
-          <select
+          <CustomSelect
             aria-label="Filter template category"
             value={templateCategory}
             onChange={(event) =>
@@ -402,7 +403,7 @@ export function Dashboard() {
             {Object.keys(templateIcons).map((category) => (
               <option key={category}>{category}</option>
             ))}
-          </select>
+          </CustomSelect>
         )}
         {activeFilters && (
           <button className="button" onClick={clear}>

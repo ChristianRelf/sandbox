@@ -1,18 +1,13 @@
-import { AlertTriangle, Bot, Check, ChevronDown, Plus, Send, Sparkles, X } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { Bot, Check, Plus, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { AiWorkflowProposal, ConnectionMetadata, Workflow } from "../types";
+import type { AiWorkflowActivity, AiWorkflowProposal, ConnectionMetadata, Workflow } from "../types";
 import { AiActivityStatus } from "./AiActivityStatus";
 import { AiConnectionDialog } from "./AiConnectionDialog";
+import { CustomSelect } from "./ui/CustomSelect";
 
 const AI_PROVIDERS = new Set(["openai", "anthropic", "openai_compatible"]);
-const WORKFLOW_ACTIVITY = [
-  "Planning Draft",
-  "Investigating current workflow",
-  "Selecting and connecting nodes",
-  "Writing Code",
-];
-
 interface ChatMessage {
   id: string;
   role: "assistant" | "user";
@@ -46,6 +41,7 @@ export function AiWorkflowChat({
   const [connectOpen, setConnectOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activities, setActivities] = useState<string[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "hello",
@@ -81,11 +77,26 @@ export function AiWorkflowChat({
     setDraft("");
     setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text }]);
     setBusy(true);
+    setActivities(["Preparing the workflow and request context"]);
+    const requestId = crypto.randomUUID();
+    let stopListening: (() => void) | undefined;
     try {
-      const proposal = await api.buildWorkflowWithAi(connectionId, text, workflow);
+      stopListening = await listen<AiWorkflowActivity>("ai-workflow-activity", (event) => {
+        if (event.payload.requestId !== requestId) return;
+        setActivities((current) => {
+          const next = event.payload.message;
+          return current.at(-1) === next ? current : [...current, next];
+        });
+      });
+      const proposal = await api.buildWorkflowWithAi(connectionId, text, workflow, requestId);
+      setActivities((current) => [...current, "Re-checking the returned draft in the editor"]);
+      const issues = await api.validateWorkflow(proposal.workflow);
+      if (issues.length) {
+        throw new Error(`The returned workflow failed the editor's validation: ${issues[0].message}`);
+      }
       setMessages((current) => [
         ...current,
-        { id: crypto.randomUUID(), role: "assistant", text: proposal.message, proposal },
+        { id: crypto.randomUUID(), role: "assistant", text: proposal.message, proposal: { ...proposal, issues } },
       ]);
     } catch (value) {
       setMessages((current) => [
@@ -93,6 +104,7 @@ export function AiWorkflowChat({
         { id: crypto.randomUUID(), role: "assistant", text: `I couldn’t create that draft. ${String(value)}` },
       ]);
     } finally {
+      stopListening?.();
       setBusy(false);
     }
   };
@@ -113,14 +125,13 @@ export function AiWorkflowChat({
         <div className="ai-provider-bar">
           <label>
             <Bot size={13} />
-            <select aria-label="AI connection" value={connectionId} onChange={(event) => setConnectionId(event.target.value)}>
+            <CustomSelect aria-label="AI connection" value={connectionId} onChange={(event) => setConnectionId(event.target.value)}>
               {connections.map((connection) => (
                 <option key={connection.id} value={connection.id}>
                   {connection.displayName} · {String(connection.metadata.model ?? "model")}
                 </option>
               ))}
-            </select>
-            <ChevronDown size={12} />
+            </CustomSelect>
           </label>
           <button className="icon-button" onClick={() => setConnectOpen(true)} aria-label="Connect another AI">
             <Plus size={14} />
@@ -153,11 +164,10 @@ export function AiWorkflowChat({
                           {message.proposal.workflow.nodes.length} nodes · {message.proposal.workflow.edges.length} connections
                         </small>
                       </div>
-                      {message.proposal.issues.length > 0 && (
-                        <span className="ai-proposal-warning">
-                          <AlertTriangle size={11} /> {message.proposal.issues.length} to review
-                        </span>
-                      )}
+                      <span className="ai-proposal-verified">
+                        <ShieldCheck size={12} /> Tested · no validation errors
+                        {message.proposal.validationAttempts > 1 ? ` · repaired in ${message.proposal.validationAttempts} passes` : ""}
+                      </span>
                       <button
                         className="button primary"
                         onClick={() => {
@@ -165,7 +175,7 @@ export function AiWorkflowChat({
                           setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposal: undefined, text: `${item.text} Applied to the canvas.` } : item));
                         }}
                       >
-                        <Check size={13} /> Apply draft
+                        <Check size={13} /> Apply tested workflow
                       </button>
                     </div>
                   )}
@@ -175,7 +185,7 @@ export function AiWorkflowChat({
             {busy && (
               <div className="ai-message ai-message-assistant">
                 <span className="ai-avatar"><Sparkles size={12} /></span>
-                <AiActivityStatus active stages={WORKFLOW_ACTIVITY} />
+                <AiActivityStatus active activities={activities} />
               </div>
             )}
             <div ref={endRef} />

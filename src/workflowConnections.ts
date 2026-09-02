@@ -9,6 +9,24 @@ export const WEB_BUILDER_INPUT_PORTS = [
 ] as const;
 
 export type WebBuilderInputPort = (typeof WEB_BUILDER_INPUT_PORTS)[number]["id"];
+export type ConnectedNodeRole = "input" | "output" | "both";
+
+export function connectedNodeRoles(
+  edges: WorkflowEdge[],
+  selectedNodeId?: string,
+): Map<string, ConnectedNodeRole> {
+  const roles = new Map<string, ConnectedNodeRole>();
+  if (!selectedNodeId) return roles;
+  const addRole = (nodeId: string, role: "input" | "output") => {
+    const current = roles.get(nodeId);
+    roles.set(nodeId, current && current !== role ? "both" : role);
+  };
+  for (const edge of edges) {
+    if (edge.targetNodeId === selectedNodeId) addRole(edge.sourceNodeId, "input");
+    if (edge.sourceNodeId === selectedNodeId) addRole(edge.targetNodeId, "output");
+  }
+  return roles;
+}
 
 type CandidateConnection = {
   source: Connection["source"];

@@ -40,8 +40,12 @@ integration("immutable hosted usage and reconciliation",()=>{
     expect(stored.rows[0].metadata).toEqual({runnerClass:"standard",accessToken:"[REDACTED]"});
     expect(await ledger.reconcile(executionId,{hosted_runner_seconds:10},randomUUID())).toMatchObject({status:"matched",actual:{hosted_runner_seconds:10},discrepancies:{}});
     expect(await ledger.invoiceInputs(new Date(startedAt.getTime()-1000).toISOString(),new Date(endedAt.getTime()+1000).toISOString())).toEqual([expect.objectContaining({workspaceId,meter:"hosted_runner_seconds",unit:"seconds",quantity:10,executionCount:1,evidenceDigest:expect.stringMatching(/^sha256:[a-f0-9]{64}$/)})]);
+    const summary=await ledger.workspaceSummary(workspaceId,7,new Date(endedAt.getTime()+1000));
+    expect(summary).toMatchObject({workspaceId,reconciliation:"matched",meters:expect.arrayContaining([expect.objectContaining({meter:"hosted_runner_seconds",unit:"seconds",quantity:10})])});
+    expect(summary.daily.find(point=>point.date===endedAt.toISOString().slice(0,10))?.quantities.hosted_runner_seconds).toBe(10);
     expect(await ledger.reconcile(executionId,{hosted_runner_seconds:9},randomUUID())).toMatchObject({version:2,status:"discrepancy",discrepancies:{hosted_runner_seconds:1}});
     expect(await ledger.invoiceInputs(new Date(startedAt.getTime()-1000).toISOString(),new Date(endedAt.getTime()+1000).toISOString())).toEqual([]);
+    expect((await ledger.workspaceSummary(workspaceId,7,new Date(endedAt.getTime()+1000))).meters.every(meter=>meter.quantity===0)).toBe(true);
     await expect(pool.query(`UPDATE usage_events SET quantity=0 WHERE id=$1`,[input.eventId])).rejects.toThrow(/append-only/i);
   });
 });

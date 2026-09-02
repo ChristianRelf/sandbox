@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { listen } from "@tauri-apps/api/event";
+import { CustomSelect } from "./ui/CustomSelect";
 import {
   ArrowRight,
   Cable,
@@ -423,10 +424,10 @@ export function ConnectionsSettings() {
       >
         <div className="settings-modal connection-modal">
           <Field label="Installation">
-            <select value={githubInstallation||""} onChange={(event)=>{const next=Number(event.target.value);setGithubInstallation(next);setGithubRepositories([]);}}>
+            <CustomSelect value={githubInstallation||""} onChange={(event)=>{const next=Number(event.target.value);setGithubInstallation(next);setGithubRepositories([]);}}>
               <option value="">Select installation…</option>
               {[...new Set(githubResources.map((resource)=>Number(resource.metadata.installationId)).filter(Number.isSafeInteger))].map((id)=><option key={id} value={id}>{String(githubResources.find((resource)=>Number(resource.metadata.installationId)===id)?.metadata.owner??`Installation ${id}`)}</option>)}
-            </select>
+            </CustomSelect>
           </Field>
           <div className="checks">
             {githubResources.filter((resource)=>Number(resource.metadata.installationId)===githubInstallation).map((resource)=><label key={resource.id}><input type="checkbox" checked={githubRepositories.includes(resource.id)} onChange={(event)=>setGithubRepositories(event.target.checked?[...new Set([...githubRepositories,resource.id])]:githubRepositories.filter((name)=>name!==resource.id))}/>{resource.label}</label>)}
@@ -551,7 +552,7 @@ function WebhookModal({
         </header>
         <section>
           <Field label="Provider">
-            <select
+            <CustomSelect
               value={provider}
               onChange={(event) => {
                 const next = event.target.value as WebhookProvider;
@@ -561,7 +562,7 @@ function WebhookModal({
             >
               <option value="discord">Discord</option>
               <option value="slack">Slack</option>
-            </select>
+            </CustomSelect>
           </Field>
           <Field label="Display name">
             <input

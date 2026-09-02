@@ -27,6 +27,8 @@ export type ProductWorkflowNodeProps = {
   outputLabels: string[];
   onAdd?: (sourceId: string) => void;
   standalone?: boolean;
+  connectionRole?: "input" | "output" | "both";
+  dimmed?: boolean;
 };
 
 export function ProductWorkflowNode({
@@ -45,12 +47,26 @@ export function ProductWorkflowNode({
   outputLabels,
   onAdd,
   standalone = false,
+  connectionRole,
+  dimmed = false,
 }: ProductWorkflowNodeProps) {
   return (
     <div
-      className={`node-card ${selected ? "selected" : ""} node-${status} ${disabled ? "disabled" : ""} ${inputPorts?.length ? "node-card-multi-input" : ""}`}
+      className={`node-card ${selected ? "selected" : ""} node-${status} ${disabled ? "disabled" : ""} ${inputPorts?.length ? "node-card-multi-input" : ""} ${connectionRole ? `connection-${connectionRole}` : ""} ${dimmed ? "connection-dimmed" : ""}`}
+      data-connection-role={connectionRole}
       data-product-node="true"
     >
+      {connectionRole && (
+        <span className="node-connection-role" aria-label={
+          connectionRole === "input"
+            ? "Provides input to the selected node"
+            : connectionRole === "output"
+              ? "Receives output from the selected node"
+              : "Both provides input to and receives output from the selected node"
+        }>
+          {connectionRole === "input" ? "Input" : connectionRole === "output" ? "Output" : "Input + output"}
+        </span>
+      )}
       {!standalone && !trigger && inputPorts?.length ? (
         <>
           {inputPorts.map((port, index) => {

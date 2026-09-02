@@ -2,9 +2,38 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Workflow } from "./types";
 import {
   connectWorkflowNodes,
+  connectedNodeRoles,
   disconnectWorkflowEdge,
   isValidWorkflowConnection,
 } from "./workflowConnections";
+
+describe("connected node roles", () => {
+  it("classifies direct inputs and outputs around the selected node", () => {
+    const roles = connectedNodeRoles(
+      [
+        { id: "in", sourceNodeId: "source", sourceHandle: "output", targetNodeId: "selected", targetHandle: "input" },
+        { id: "out", sourceNodeId: "selected", sourceHandle: "output", targetNodeId: "target", targetHandle: "input" },
+        { id: "unrelated", sourceNodeId: "other-a", sourceHandle: "output", targetNodeId: "other-b", targetHandle: "input" },
+      ],
+      "selected",
+    );
+
+    expect(Object.fromEntries(roles)).toEqual({ source: "input", target: "output" });
+  });
+
+  it("marks a neighbour used in both directions without including unrelated nodes", () => {
+    const roles = connectedNodeRoles(
+      [
+        { id: "there", sourceNodeId: "selected", sourceHandle: "output", targetNodeId: "shared", targetHandle: "input" },
+        { id: "back", sourceNodeId: "shared", sourceHandle: "output", targetNodeId: "selected", targetHandle: "input" },
+      ],
+      "selected",
+    );
+
+    expect(roles.get("shared")).toBe("both");
+    expect(connectedNodeRoles([], undefined)).toEqual(new Map());
+  });
+});
 
 const workflow = (): Workflow => ({
   id: "site-workflow",
@@ -65,4 +94,3 @@ describe("Web Builder graph inputs", () => {
     expect(disconnected.nodes.find((node) => node.id === "site")?.inputBindings?.css).toBeUndefined();
   });
 });
-

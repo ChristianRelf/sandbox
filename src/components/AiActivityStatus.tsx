@@ -1,37 +1,23 @@
 import { Check, LoaderCircle } from "lucide-react";
-import { useEffect, useState } from "react";
 
 export function AiActivityStatus({
   active,
-  stages,
+  activities,
 }: {
   active: boolean;
-  stages: string[];
+  activities: string[];
 }) {
-  const [currentStage, setCurrentStage] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      setCurrentStage(0);
-      return;
-    }
-    setCurrentStage(0);
-    const interval = window.setInterval(() => {
-      setCurrentStage((current) => Math.min(current + 1, stages.length - 1));
-    }, 1_100);
-    return () => window.clearInterval(interval);
-  }, [active, stages.length]);
-
   if (!active) return null;
+  const currentStage = Math.max(activities.length - 1, 0);
   return (
     <div className="ai-activity-status" role="status" aria-live="polite">
-      <small>Activity</small>
-      {stages.map((stage, index) => (
+      <small>Live activity</small>
+      {(activities.length ? activities : ["Preparing request"]).map((stage, index) => (
         <span
-          className={index === currentStage ? "is-active" : index < currentStage ? "is-complete" : ""}
-          key={stage}
+          className={index === currentStage ? "is-active" : "is-complete"}
+          key={`${index}:${stage}`}
         >
-          {index < currentStage ? <Check size={11} /> : index === currentStage ? <LoaderCircle className="spin" size={11} /> : <i />}
+          {index < currentStage ? <Check size={11} /> : <LoaderCircle className="spin" size={11} />}
           {stage}
         </span>
       ))}

@@ -16,6 +16,7 @@ import {
   type OfficialIntegration,
 } from "@sandbox/content";
 import { api } from "../api";
+import { CustomSelect } from "./ui/CustomSelect";
 import { useAppStore } from "../store";
 import type {
   InstalledPlugin,
@@ -133,7 +134,7 @@ export function MarketplaceView() {
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search plugins and publishers"
         />
-        <select
+        <CustomSelect
           aria-label="Pricing"
           value={pricing}
           onChange={(event) => setPricing(event.target.value)}
@@ -141,8 +142,8 @@ export function MarketplaceView() {
           <option value="all">Free & paid</option>
           <option value="free">Free</option>
           <option value="paid">Paid</option>
-        </select>
-        <select
+        </CustomSelect>
+        <CustomSelect
           aria-label="Sort marketplace"
           value={sort}
           onChange={(event) => setSort(event.target.value)}
@@ -150,7 +151,7 @@ export function MarketplaceView() {
           <option value="recent">Recently updated</option>
           <option value="installs">Most installed</option>
           <option value="rating">Highest rated</option>
-        </select>
+        </CustomSelect>
         <label>
           <input
             type="checkbox"

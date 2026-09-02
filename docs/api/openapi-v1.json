@@ -8956,6 +8956,78 @@
         ]
       }
     },
+    "/v1/workspaces/{workspaceId}/usage": {
+      "get": {
+        "operationId": "get_v1_workspaces_workspaceId_usage",
+        "tags": [
+          "workspaces"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1WorkspacesWorkspaceIdUsageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/workspaces/{workspaceId}/webhooks": {
       "get": {
         "operationId": "get_v1_workspaces_workspaceId_webhooks",
@@ -11821,6 +11893,14 @@
           }
         ],
         "description": "Successful response for GET /v1/workspaces/{workspaceId}/activity."
+      },
+      "GetV1WorkspacesWorkspaceIdUsageResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/workspaces/{workspaceId}/usage."
       },
       "PostV1WorkflowsWorkflowIdRunsInput": {
         "allOf": [

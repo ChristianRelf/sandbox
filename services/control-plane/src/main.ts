@@ -76,6 +76,7 @@ if(!Number.isSafeInteger(privacyRetentionSweepIntervalMs)||privacyRetentionSweep
 const recurringTasks=new RecurringTaskMonitor();
 const recurringTaskMaximumAgeMs=credentialExpirySweepIntervalMs*2;
 const metrics=new ServiceMetrics();
+const usageLedger=new PostgresUsageLedger(pool);
 const readiness=new ReadinessService([
   {name:"database",check:async()=>{await pool.query("SELECT 1");}},
   recurringTasks.probe("credential-expiry-notifications",recurringTaskMaximumAgeMs),
@@ -99,7 +100,8 @@ const server = await createServer({
   entitlementSigner: entitlementSigningConfiguration?new Ed25519EntitlementClaimSigner(entitlementSigningConfiguration[0],controlPlanePublicUrl,entitlementSigningConfiguration[1].replace(/\\n/g, "\n")):undefined,
   webhookProtector,
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
-  usageLedger: new PostgresUsageLedger(pool),
+  usageLedger,
+  usageReader:usageLedger,
   usageProducerAuthenticator: usageProducerConfiguration?new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(usageProducerConfiguration[0])):undefined,
   executionCoordinator: new PostgresExecutionCoordinator(pool),
   bugReports: bugReportConfiguration?new DiscordBugReportSink(bugReportConfiguration[0]):undefined,

@@ -3,11 +3,14 @@ import type {
   AccountSession,
   OrganisationRole,
   ProductAccountSummary,
+  RunnerPool,
   ScimToken,
   SsoConnection,
   TokenSummary,
+  UsageMeter,
   WorkflowApproval,
   WorkspaceMember,
+  WorkspaceUsageSummary,
 } from "@sandbox/api-client";
 import { brand } from "@sandbox/brand";
 import { launchRelease } from "@sandbox/content";
@@ -18,10 +21,21 @@ import {
   CheckCircle2,
   CircleAlert,
   Cloud,
+  Cpu,
+  Database,
+  Download,
   KeyRound,
   LifeBuoy,
+  LogOut,
+  MonitorSmartphone,
+  Network,
+  Pause,
+  Play,
+  Radio,
   Server,
   ShieldCheck,
+  Trash2,
+  UserRound,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -36,10 +50,17 @@ import {
   inviteMemberAction,
   publishWorkflowAction,
   revokeScimTokenAction,
+  revokePersonalTokenAction,
+  revokeRunnerAction,
   revokeSessionAction,
   transitionDeploymentAction,
+  updateRunnerStatusAction,
 } from "../actions";
 import { ScimTokenForm } from "../ScimTokenForm";
+import { PersonalTokenIssuer } from "../SecurityControls";
+import { AccountDangerZone } from "../AccountDangerZone";
+import { SubmitButton } from "../SubmitButton";
+import { RunnerPairing } from "../RunnerPairing";
 
 export const dynamic = "force-dynamic";
 type Params = Promise<{ section: string }>;
@@ -85,6 +106,7 @@ export default async function Page({
     );
   if (section === "organisations")
     return <OrganisationsPage api={api} query={query} />;
+  if (section === "operations") return <OperationsPage api={api} query={query} />;
   if (section === "security") return <SecurityPage api={api} />;
   if (section === "usage") return <UsagePage api={api} query={query} />;
   if (section === "licences" || section === "purchases")
@@ -100,19 +122,13 @@ export default async function Page({
         title={page.title}
         description={page.description}
       />
-      {section === "downloads" && (
-        <section className="blocked-notice">
-          <CircleAlert />
-          <div>
-            <strong>No entitlement-aware release manifest</strong>
-            <p>
-              The build pipeline signs artifacts, but customer download grants
-              remain disabled until a release manifest is published.
-            </p>
-          </div>
+      {section === "downloads" ? (
+        <section className="resource-launch-card">
+          <span className="settings-card-icon"><Download /></span>
+          <div><small>RELEASE CENTRE</small><h2>Get the right sndbox build</h2><p>The public download centre checks the live release manifest, then shows only published artifacts with their checksum and provenance.</p></div>
+          <a className="portal-primary" href="https://sndbox.app/downloads">Open downloads <ArrowRight /></a>
         </section>
-      )}
-      <section className="section-list">
+      ) : <section className="section-list">
         <header>
           <h2>
             {section === "releases" ? "Current release" : "Release controls"}
@@ -125,11 +141,96 @@ export default async function Page({
             <strong>{item}</strong>
           </article>
         ))}
-      </section>
+      </section>}
       {section === "releases" && (
         <a className="cross-link" href="https://sndbox.app/changelog">
           Open public changelog <ArrowRight />
         </a>
+      )}
+    </main>
+  );
+}
+
+interface RunnerView {
+  runnerId: string;
+  displayName: string;
+  workspaceId: string | null;
+  operatingSystem: string;
+  architecture: string;
+  applicationVersion: string;
+  protocolVersion: number;
+  status: "online" | "offline" | "busy" | "paused" | "draining" | "maintenance";
+  currentWorkload: number;
+  tags: string[];
+  pairedAt: string;
+  lastSeenAt: string | null;
+}
+
+async function OperationsPage({
+  api,
+  query,
+}: {
+  api: NonNullable<Awaited<ReturnType<typeof authenticatedClient>>>;
+  query: Record<string, string | string[] | undefined>;
+}) {
+  const organisations = (await api.listAccountOrganisations()).data.items;
+  const workspace = selectWorkspace(organisations, query.workspaceId);
+  const results = workspace ? await Promise.allSettled([
+    api.listWorkspaceRunners<{ items: RunnerView[] }>(workspace.id),
+    api.listRunnerPools(workspace.id),
+    api.listWorkspaceEnvironments(workspace.id),
+  ]) : [];
+  const runners = value<{ items: RunnerView[] }>(results[0])?.items ?? [];
+  const pools = value<{ items: RunnerPool[] }>(results[1])?.items ?? [];
+  const environments = value<{ items: Array<{ environmentId: string; environment: string }> }>(results[2])?.items ?? [];
+  const online = runners.filter((runner) => runner.status === "online" || runner.status === "busy").length;
+  const activeWork = runners.reduce((total, runner) => total + runner.currentWorkload, 0);
+
+  return (
+    <main className="portal-page operations-page">
+      <PageHead eyebrow="WORKSPACE" title="Runner operations" description="Pair and manage Linux runners for this workspace." />
+      {workspace ? (
+        <>
+          <section className="workspace-switcher operations-switcher">
+            <form method="get">
+              <label>Workspace<select name="workspaceId" defaultValue={workspace.id}>{organisations.flatMap((organisation) => organisation.workspaces.map((item) => <option key={item.id} value={item.id}>{organisation.name} / {item.name}</option>))}</select></label>
+              <button className="portal-secondary">Switch workspace</button>
+            </form>
+          </section>
+          <section className="operations-setup">
+            <div><small>SELF-HOSTED EXECUTION</small><h2>Add a Linux runner</h2><p>Create a one-time, workspace-scoped pairing token and finish setup on the Linux host.</p></div>
+            <RunnerPairing organisations={organisations} selectedWorkspaceId={workspace.id} />
+          </section>
+          <section className="operations-grid operations-metrics">
+            <Metric icon={<Radio />} label="Available" value={online} />
+            <Metric icon={<Activity />} label="Active work" value={activeWork} />
+            <Metric icon={<Server />} label="Runner pools" value={pools.length} />
+            <Metric icon={<Cloud />} label="Environments" value={environments.length} />
+          </section>
+          <section className="fleet-section-head"><div><small>FLEET</small><h2>Paired runners</h2></div><span>{runners.length} runner{runners.length === 1 ? "" : "s"}</span></section>
+          <section className="runner-fleet">
+            {runners.map((runner) => {
+              const nextStatus = runner.status === "online" || runner.status === "busy" ? "draining" : ["paused", "draining", "maintenance"].includes(runner.status) ? "offline" : null;
+              return (
+                <article key={runner.runnerId}>
+                  <span className="runner-device-icon"><Cpu /></span>
+                  <div className="runner-identity"><strong>{runner.displayName}</strong><small>{runner.operatingSystem} · {runner.architecture} · v{runner.applicationVersion}</small><span>{runner.tags.map((tag) => <i key={tag}>{tag}</i>)}</span></div>
+                  <div className="runner-heartbeat"><small>LAST HEARTBEAT</small><strong>{runner.lastSeenAt ? new Date(runner.lastSeenAt).toLocaleString("en-GB") : "Waiting for first connection"}</strong></div>
+                  <div className="runner-workload"><small>WORKLOAD</small><strong>{runner.currentWorkload}</strong></div>
+                  <span className={`runner-status ${runner.status}`}><i />{runner.status}</span>
+                  <div className="runner-actions">
+                    {nextStatus && <form action={updateRunnerStatusAction}><input type="hidden" name="workspaceId" value={workspace.id} /><input type="hidden" name="runnerId" value={runner.runnerId} /><input type="hidden" name="status" value={nextStatus} /><button title={nextStatus === "draining" ? "Drain runner" : "Resume runner"}>{nextStatus === "draining" ? <Pause /> : <Play />}{nextStatus === "draining" ? "Drain" : "Resume"}</button></form>}
+                    <form action={revokeRunnerAction}><input type="hidden" name="workspaceId" value={workspace.id} /><input type="hidden" name="runnerId" value={runner.runnerId} /><button className="runner-revoke" title="Revoke runner"><Trash2 />Revoke</button></form>
+                  </div>
+                </article>
+              );
+            })}
+            {!runners.length && <div className="fleet-empty"><Server /><h3>No runners paired yet</h3><p>Create a pairing token above, then run the supplied command on a Linux x64 or ARM64 host.</p></div>}
+          </section>
+          <section className="operations-guidance"><ShieldCheck /><div><strong>Device verification</strong><p>Runner keys are generated locally. Verify the printed fingerprint before starting the service.</p></div><a href="https://docs.sndbox.app/execution/self-hosted-runner">Setup guide <ArrowRight /></a></section>
+        </>
+      ) : (
+        <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><small>WORKSPACE REQUIRED</small><h2>Create a workspace first</h2><p>Every runner belongs to a workspace so permissions, environments and audit history stay scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>
       )}
     </main>
   );
@@ -237,7 +338,7 @@ async function OrganisationsPage({
                 maxLength={63}
               />
             </label>
-            <button className="portal-primary">Create</button>
+            <SubmitButton pendingLabel="Creating…">Create organisation</SubmitButton>
           </form>
         </section>
       ) : (
@@ -297,7 +398,7 @@ async function OrganisationsPage({
                   <option>administrator</option>
                 </select>
               </label>
-              <button className="portal-primary">Invite member</button>
+              <SubmitButton pendingLabel="Sending…">Invite member</SubmitButton>
             </form>
           </section>
           <section className="live-panel">
@@ -503,7 +604,7 @@ async function OrganisationsPage({
                         Audit
                       </label>
                     </fieldset>
-                    <button className="portal-primary">Create role</button>
+                    <SubmitButton pendingLabel="Creating…">Create role</SubmitButton>
                   </form>
                 </section>
                 <section className="live-panel">
@@ -574,9 +675,7 @@ async function OrganisationsPage({
                         placeholder="example.com, subsidiary.com"
                       />
                     </label>
-                    <button className="portal-primary">
-                      Add disabled connection
-                    </button>
+                    <SubmitButton pendingLabel="Adding…">Add disabled connection</SubmitButton>
                   </form>
                 </section>
                 <section className="live-panel">
@@ -647,60 +746,45 @@ async function SecurityPage({
 }: {
   api: NonNullable<Awaited<ReturnType<typeof authenticatedClient>>>;
 }) {
-  const [profile, sessions, tokens] = await Promise.all([
+  const [profile, sessions, tokens, organisations] = await Promise.all([
     (await api.getAccountProfile()).data,
     (await api.listAccountSessions()).data.items,
     (await api.listPersonalAccessTokens()).data.items,
+    (await api.listAccountOrganisations()).data.items,
   ]);
   return (
     <main className="portal-page">
       <PageHead
         eyebrow="ACCOUNT SECURITY"
-        title="Security"
-        description="Inspect active sessions and scoped API credentials."
+        title="Security & API"
+        description="Review signed-in devices and manage personal API keys."
       />
-      <section className="plan-banner">
+      <section className="security-identity-card">
         <div>
-          <small>SIGNED IN AS</small>
+          <span className="settings-card-icon"><ShieldCheck /></span>
+          <span><small>SIGNED IN AS</small>
           <strong>{profile.displayName}</strong>
-          <span>{profile.email}</span>
+          <small>{profile.email}</small></span>
         </div>
-        <ShieldCheck />
+        <span className="health-badge"><CheckCircle2 /> Protected</span>
       </section>
-      <section className="two-panel-grid">
-        <section className="live-panel">
-          <header>
-            <div>
-              <KeyRound />
-              <span>
-                <strong>Sessions</strong>
-                <small>Revoke devices you no longer recognise.</small>
-              </span>
-            </div>
-          </header>
-          <div className="live-list">
-            {sessions.map((session) => (
-              <SessionRow key={session.id} session={session} />
-            ))}
-          </div>
-        </section>
-        <section className="live-panel">
-          <header>
-            <div>
-              <KeyRound />
-              <span>
-                <strong>Personal access tokens</strong>
-                <small>Token plaintext is shown only when issued.</small>
-              </span>
-            </div>
-          </header>
-          <div className="live-list">
-            {tokens.map((token) => (
-              <TokenRow key={token.id} token={token} />
-            ))}
-            {!tokens.length && <EmptyRow text="No personal access tokens." />}
-          </div>
-        </section>
+      <section className="security-section-head"><div><small>ACCESS</small><h2>Signed-in devices</h2><p>End any session you do not recognise. Your current session is marked below.</p></div></section>
+      <section className="live-panel security-list-card">
+        <div className="live-list">
+          {sessions.map((session) => (
+            <SessionRow key={session.id} session={session} />
+          ))}
+          {!sessions.length && <EmptyRow text="No active sessions were returned." />}
+        </div>
+      </section>
+      <section className="security-section-head token-heading"><div><small>DEVELOPER ACCESS</small><h2>Personal API keys</h2><p>Use the smallest scope and shortest expiry that will do the job.</p></div><PersonalTokenIssuer organisations={organisations} /></section>
+      <section className="live-panel security-list-card">
+        <div className="live-list">
+          {tokens.map((token) => (
+            <TokenRow key={token.id} token={token} />
+          ))}
+          {!tokens.length && <EmptyRow text="No API keys yet. Create one only when a tool needs access." />}
+        </div>
       </section>
     </main>
   );
@@ -715,42 +799,86 @@ async function UsagePage({
 }) {
   const organisations = (await api.listAccountOrganisations()).data.items,
     workspace = selectWorkspace(organisations, query.workspaceId);
-  const activity = workspace
-    ? (await api.getWorkspaceActivity(workspace.id, 100)).data
+  const usage = workspace && typeof api.getWorkspaceUsage === "function"
+    ? await api.getWorkspaceUsage(workspace.id, 30).then((result) => isWorkspaceUsageSummary(result.data) ? result.data : null).catch(() => null)
     : null;
   return (
-    <main className="portal-page">
+    <main className="portal-page usage-page">
       <PageHead
-        eyebrow="OPERATIONS"
+        eyebrow="WORKSPACE"
         title="Usage"
-        description="Hosted infrastructure activity is measured separately from unmetered local runs."
+        description="Verified hosted infrastructure usage, separate from unmetered local execution."
       />
-      <section className="operations-grid">
-        <Metric
-          icon={<Activity />}
-          label="Recent runs"
-          value={activity?.runs.length ?? 0}
-        />
-        <Metric
-          icon={<Server />}
-          label="Runners"
-          value={activity?.runners.length ?? 0}
-        />
-        <Metric
-          icon={<ShieldCheck />}
-          label="Pending approvals"
-          value={activity?.pendingApprovalCount ?? 0}
-        />
-        <Metric
-          icon={<CircleAlert />}
-          label="Webhook failures"
-          value={activity?.webhookFailureCount ?? 0}
-        />
-      </section>
-      <p className="support-fallback">
-        Local desktop execution is not sent to the hosted usage ledger.
-      </p>
+      {workspace ? <>
+        <section className="workspace-switcher usage-switcher">
+          <form method="get">
+            <label>Workspace<select name="workspaceId" defaultValue={workspace.id}>{organisations.flatMap((organisation) => organisation.workspaces.map((item) => <option key={item.id} value={item.id}>{organisation.name} / {item.name}</option>))}</select></label>
+            <button className="portal-secondary">Switch workspace</button>
+          </form>
+        </section>
+        <section className="operations-grid usage-totals">
+          <Metric icon={<Cloud />} label="Hosted runner" value={formatDuration(meterQuantity(usage,"hosted_runner_seconds"))} />
+          <Metric icon={<MonitorSmartphone />} label="Managed browser" value={formatDuration(meterQuantity(usage,"managed_browser_seconds"))} />
+          <Metric icon={<Network />} label="Network egress" value={formatBytes(meterQuantity(usage,"network_egress_bytes"))} />
+          <Metric icon={<Database />} label="Artifact storage" value={formatStorageTime(meterQuantity(usage,"artifact_storage_byte_seconds"))} />
+        </section>
+        <section className="usage-chart-panel">
+          <header><div><small>METERED COMPUTE</small><h2>Hosted compute</h2><p>Runner and managed-browser time recorded each day.</p></div><span>Last 30 days</span></header>
+          <UsageChart usage={usage} />
+          {!usage && <p className="usage-report-state">The usage reporting endpoint is unavailable in this local preview.</p>}
+        </section>
+        <section className="usage-notes">
+          <article className="usage-token-note"><KeyRound /><div><strong>Usage is not metered in tokens</strong><p>API keys, session tokens and runner pairing tokens are credentials. They do not count toward billing.</p></div></article>
+          <div className="usage-meter-list">
+            <div><strong>Hosted runner</strong><span>Execution time</span><small>seconds</small></div>
+            <div><strong>Managed browser</strong><span>Browser worker time</span><small>seconds</small></div>
+            <div><strong>Network egress</strong><span>Data sent out</span><small>bytes</small></div>
+            <div><strong>Artifact storage</strong><span>Stored size over time</span><small>byte-seconds</small></div>
+          </div>
+        </section>
+        <p className="support-fallback">Only matched, reconciled ledger events appear here. Local desktop and self-hosted runner execution are not sent to the hosted usage meter.</p>
+      </> : <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><small>WORKSPACE REQUIRED</small><h2>Create a workspace first</h2><p>Usage is reported per workspace so hosted execution and billing evidence remain scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>}
     </main>
+  );
+}
+
+function UsageChart({usage}:{usage:WorkspaceUsageSummary|null}) {
+  const daily=usage?.daily ?? emptyUsageDays(30);
+  const compute=daily.map((point)=>point.quantities.hosted_runner_seconds+point.quantities.managed_browser_seconds);
+  const peak=Math.max(1,...compute),total=compute.reduce((sum,quantity)=>sum+quantity,0),activeDays=compute.filter(Boolean).length;
+  const browserTotal=daily.reduce((sum,point)=>sum+point.quantities.managed_browser_seconds,0);
+  const ticks=[0,7,14,21,daily.length-1].filter((index,position,items)=>index>=0&&index<daily.length&&items.indexOf(index)===position);
+  return (
+    <figure className="usage-chart" aria-label="Daily hosted compute usage">
+      <div className="usage-chart-key"><span className="runner-key">Hosted runner</span><span className="browser-key">Managed browser</span><i>unit: time</i></div>
+      <div className="usage-chart-body">
+        <div className="usage-y-axis" aria-hidden="true"><span>{formatDurationAxis(peak)}</span><span>{formatDurationAxis(peak/2)}</span><span>0</span></div>
+        <div className="usage-plot">
+          <div className="usage-grid-lines" aria-hidden="true"><i /><i /><i /></div>
+          <div className="usage-bars">
+            {daily.map((point)=>{
+              const runner=point.quantities.hosted_runner_seconds,browser=point.quantities.managed_browser_seconds,dayTotal=runner+browser;
+              const description=`${formatUsageDateLong(point.date)}: ${formatDuration(dayTotal)} total — ${formatDuration(runner)} runner, ${formatDuration(browser)} browser`;
+              return <div className="usage-day" key={point.date} role="img" aria-label={description} title={description}>
+                <div className="usage-stack" style={{height:barHeight(dayTotal,peak)}}>
+                  <span className="usage-segment runner" style={{height:segmentHeight(runner,dayTotal)}} />
+                  <span className="usage-segment browser" style={{height:segmentHeight(browser,dayTotal)}} />
+                </div>
+              </div>;
+            })}
+          </div>
+          {!total&&<div className="usage-empty-plot">No verified hosted compute in this period</div>}
+        </div>
+      </div>
+      <div className="usage-x-axis" aria-hidden="true">{ticks.map((index)=><span key={daily[index].date}>{formatUsageDate(daily[index].date)}</span>)}</div>
+      <div className="usage-chart-summary">
+        <div><small>Peak day</small><strong>{formatDuration(peak)}</strong></div>
+        <div><small>Daily average</small><strong>{formatDuration(Math.round(total/daily.length))}</strong></div>
+        <div><small>Active days</small><strong>{activeDays} / {daily.length}</strong></div>
+        <div><small>Browser share</small><strong>{total?Math.round(browserTotal/total*100):0}%</strong></div>
+      </div>
+      <figcaption>Daily hosted runner and managed-browser time for the selected workspace. Only matched ledger events are included.</figcaption>
+    </figure>
   );
 }
 
@@ -809,35 +937,34 @@ async function SettingsPage({
     <main className="portal-page">
       <PageHead
         eyebrow="ACCOUNT"
-        title="Settings"
-        description="Account identity and privacy controls."
+        title="Account settings"
+        description="Your identity, privacy controls and account lifecycle."
       />
-      <section className="live-panel">
-        <header>
-          <div>
-            <ShieldCheck />
-            <span>
-              <strong>{profile.displayName}</strong>
-              <small>{profile.email}</small>
-            </span>
-          </div>
-        </header>
-        <div className="detail-grid">
-          <div>
-            <small>Account ID</small>
-            <code>{profile.accountId}</code>
-          </div>
-          <div>
-            <small>Current session</small>
-            <code>{profile.sessionId}</code>
-          </div>
+      <section className="settings-stack">
+        <article className="settings-profile-card">
+          <span className="profile-avatar">{profile.displayName.slice(0, 2).toUpperCase()}</span>
+          <div><small>PERSONAL ACCOUNT</small><h2>{profile.displayName}</h2><p>{profile.email}</p></div>
+          <span className="health-badge"><CheckCircle2 /> Verified</span>
+        </article>
+        <div className="settings-card-grid">
+          <section className="settings-card">
+            <span className="settings-card-icon"><UserRound /></span>
+            <div><strong>Identity</strong><p>Your name and email come from your identity provider. sndbox never stores a separate account password.</p><dl><div><dt>Account ID</dt><dd><code>{profile.accountId}</code></dd></div><div><dt>Session ID</dt><dd><code>{profile.sessionId}</code></dd></div></dl></div>
+          </section>
+          <section className="settings-card">
+            <span className="settings-card-icon"><MonitorSmartphone /></span>
+            <div><strong>Sessions & API access</strong><p>Review signed-in devices, revoke old sessions and manage API keys.</p><Link href="/security">Open security <ArrowRight /></Link></div>
+          </section>
+          <section className="settings-card">
+            <span className="settings-card-icon"><Download /></span>
+            <div><strong>Download your data</strong><p>Export a machine-readable copy of your account and workspace membership data.</p><a href="/api/account/export">Export account data <ArrowRight /></a></div>
+          </section>
+          <section className="settings-card">
+            <span className="settings-card-icon"><LogOut /></span>
+            <div><strong>Sign out</strong><p>End this browser session. Other signed-in devices will stay connected.</p><form action="/auth/sign-out" method="post"><button className="portal-secondary">Sign out of this device</button></form></div>
+          </section>
         </div>
-        <div className="panel-actions">
-          <Link className="portal-primary" href="/security">
-            Manage sessions
-          </Link>
-          <a href="/api/account/export">Export account data</a>
-        </div>
+        <AccountDangerZone />
       </section>
     </main>
   );
@@ -955,7 +1082,7 @@ function Metric({
 }: {
   icon: ReactNode;
   label: string;
-  value: number;
+  value: ReactNode;
 }) {
   return (
     <article>
@@ -966,6 +1093,53 @@ function Metric({
       </div>
     </article>
   );
+}
+function meterQuantity(usage:WorkspaceUsageSummary|null,meter:UsageMeter):number {
+  return usage?.meters.find((item)=>item.meter===meter)?.quantity ?? 0;
+}
+function isWorkspaceUsageSummary(value:unknown):value is WorkspaceUsageSummary {
+  if(!value||typeof value!=="object")return false;
+  const candidate=value as Partial<WorkspaceUsageSummary>;
+  return Array.isArray(candidate.meters)&&Array.isArray(candidate.daily);
+}
+function emptyUsageDays(days:number):WorkspaceUsageSummary["daily"] {
+  const end=new Date(),start=new Date(Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),end.getUTCDate()-(days-1)));
+  return Array.from({length:days},(_,index)=>{
+    const date=new Date(start);date.setUTCDate(date.getUTCDate()+index);
+    return{date:date.toISOString().slice(0,10),quantities:{hosted_runner_seconds:0,managed_browser_seconds:0,network_egress_bytes:0,artifact_storage_byte_seconds:0}};
+  });
+}
+function formatDuration(seconds:number):string {
+  if(seconds<60)return `${seconds}s`;
+  const hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60);
+  return hours?`${hours}h ${minutes}m`:`${minutes}m`;
+}
+function formatDurationAxis(seconds:number):string {
+  if(seconds<60)return `${Math.ceil(seconds)}s`;
+  if(seconds<3600)return `${Math.ceil(seconds/60)}m`;
+  return `${(seconds/3600).toFixed(seconds>=36_000?0:1)}h`;
+}
+function formatBytes(bytes:number):string {
+  if(bytes===0)return "0 B";
+  const units=["B","KB","MB","GB","TB"],index=Math.min(Math.floor(Math.log(bytes)/Math.log(1024)),units.length-1),quantity=bytes/(1024**index);
+  return `${quantity.toFixed(quantity>=10||index===0?0:1)} ${units[index]}`;
+}
+function formatStorageTime(byteSeconds:number):string {
+  if(byteSeconds===0)return "0 GB-days";
+  const megabyteDays=byteSeconds/(1024**2*86_400);
+  return megabyteDays<1024?`${megabyteDays.toFixed(megabyteDays>=10?0:1)} MB-days`:`${(megabyteDays/1024).toFixed(megabyteDays>=10_240?0:1)} GB-days`;
+}
+function barHeight(quantity:number,peak:number):string {
+  return quantity===0?"0%":`${Math.max(2,(quantity/peak)*100)}%`;
+}
+function segmentHeight(quantity:number,total:number):string {
+  return total===0?"0%":`${quantity/total*100}%`;
+}
+function formatUsageDate(date:string|undefined):string {
+  return date?new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}).format(new Date(`${date}T00:00:00Z`)):"";
+}
+function formatUsageDateLong(date:string):string {
+  return new Intl.DateTimeFormat("en-GB",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"}).format(new Date(`${date}T00:00:00Z`));
 }
 function EmptyRow({ text }: { text: string }) {
   return (
@@ -1075,7 +1249,8 @@ function DeploymentPanel({
 }
 function SessionRow({ session }: { session: AccountSession }) {
   return (
-    <article>
+    <article className="security-row">
+      <span className="row-icon"><MonitorSmartphone /></span>
       <div>
         <strong>
           {session.deviceName}
@@ -1085,7 +1260,7 @@ function SessionRow({ session }: { session: AccountSession }) {
           Last seen {new Date(session.lastSeenAt).toLocaleString("en-GB")}
         </small>
       </div>
-      {!session.current && (
+      {session.current ? <span className="status-pill approved">Current</span> : (
         <form action={revokeSessionAction}>
           <input type="hidden" name="sessionId" value={session.id} />
           <button>Revoke</button>
@@ -1096,7 +1271,8 @@ function SessionRow({ session }: { session: AccountSession }) {
 }
 function TokenRow({ token }: { token: TokenSummary }) {
   return (
-    <article>
+    <article className="security-row">
+      <span className="row-icon"><KeyRound /></span>
       <div>
         <strong>{token.name}</strong>
         <small>
@@ -1104,9 +1280,7 @@ function TokenRow({ token }: { token: TokenSummary }) {
           {new Date(token.expiresAt).toLocaleDateString("en-GB")}
         </small>
       </div>
-      <span className="status-pill">
-        {token.revokedAt ? "revoked" : "active"}
-      </span>
+      {token.revokedAt ? <span className="status-pill">Revoked</span> : <form action={revokePersonalTokenAction}><input type="hidden" name="tokenId" value={token.id} /><button>Revoke</button></form>}
     </article>
   );
 }

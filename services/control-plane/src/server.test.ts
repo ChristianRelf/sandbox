@@ -77,6 +77,12 @@ describe("control-plane API", () => {
     const accepted=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers,payload});expect(accepted.statusCode,accepted.body).toBe(200);expect(record).toHaveBeenCalledWith(payload);
     const rejected=await server.inject({method:"POST",url:"/v1/internal/usage-events",headers:{...headers,"x-sandbox-usage-signature":"0".repeat(64)},payload});expect(rejected.statusCode).toBe(401);expect(record).toHaveBeenCalledTimes(1);await server.close();
   });
+  it("returns reconciled workspace usage to members who can view execution summaries",async()=>{
+    const summary={workspaceId,periodStartedAt:"2026-08-04T00:00:00.000Z",periodEndedAt:"2026-09-02T12:00:00.000Z",reconciliation:"matched" as const,meters:[{meter:"hosted_runner_seconds" as const,unit:"seconds" as const,quantity:180}],daily:[{date:"2026-09-02",quantities:{hosted_runner_seconds:180,managed_browser_seconds:0,network_egress_bytes:0,artifact_storage_byte_seconds:0}}]};
+    const workspaceSummary=vi.fn(async()=>summary),deps={...dependencies(["executions.view_summary"]),usageReader:{workspaceSummary}};
+    const server=await createServer(deps),response=await server.inject({method:"GET",url:`/v1/workspaces/${workspaceId}/usage?days=30`,headers:{authorization:"Bearer token"}});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json()).toEqual(summary);expect(workspaceSummary).toHaveBeenCalledWith(workspaceId,30);expect(deps.repository.permissions).toHaveBeenCalledWith(session.accountId,workspaceId);await server.close();
+  });
   it("returns stable structured transport errors and correlation headers",async()=>{
     const deps=dependencies([]);const server=await createServer(deps);
     const response=await server.inject({method:"POST",url:"/v1/personal-access-tokens",headers:{authorization:"Bearer token","content-type":"application/json","x-correlation-id":"client-correlation-0001"},payload:'{"broken":'});
@@ -357,6 +363,23 @@ describe("control-plane API", () => {
     const confirmed = await server.inject({ method: "POST", url: "/v1/runners/pairing/confirm", headers: { authorization: "Bearer token", "x-sandbox-request-time": new Date().toISOString() }, payload: { challengeId, challenge: started.json().challenge, signatureBase64: Buffer.alloc(64, 3).toString("base64"), workspaceId, displayName: "Studio PC" } });
     expect(confirmed.statusCode, confirmed.body).toBe(200);
     expect(deps.repository.confirmRunnerPairing).toHaveBeenCalledWith(session, expect.objectContaining({ workspaceId, displayName: "Studio PC" }), expect.any(String));
+    await server.close();
+  });
+
+  it("accepts a workspace-scoped runner pairing token and rejects unrelated API keys", async () => {
+    const deps = dependencies(["runners.manage"]);
+    const challengeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const der = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.alloc(32, 8)]).toString("base64");
+    vi.mocked(deps.repository.createRunnerPairingChallenge).mockResolvedValue({ challengeId, challenge: "challenge-value-with-enough-entropy-123", expiresAt: new Date(Date.now()+600_000).toISOString() });
+    vi.mocked(deps.sessions.verify).mockResolvedValue({ ...session, principalType: "personal_access_token", credentialScopes: ["runners.manage"], workspaceRestrictions: [workspaceId] });
+    const server = await createServer(deps);
+    const payload = { devicePublicKeyDerBase64: der, operatingSystem: "linux", architecture: "x86_64", applicationVersion: "0.7.5-beta.1", protocolVersion: 2, pluginRuntimeVersion: "0.7.5-beta.1", capabilities: {}, tags: ["self-hosted"] };
+    const accepted = await server.inject({ method: "POST", url: "/v1/runners/pairing/challenges", headers: { authorization: "Bearer pairing-token", "x-sandbox-request-time": new Date().toISOString() }, payload });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    vi.mocked(deps.sessions.verify).mockResolvedValue({ ...session, principalType: "personal_access_token", credentialScopes: ["workflows.view"], workspaceRestrictions: [workspaceId] });
+    const rejected = await server.inject({ method: "POST", url: "/v1/runners/pairing/challenges", headers: { authorization: "Bearer unrelated-token", "x-sandbox-request-time": new Date().toISOString() }, payload });
+    expect(rejected.statusCode, rejected.body).toBe(403);
+    expect(rejected.json().error.code).toBe("runner_pairing_principal_required");
     await server.close();
   });
 

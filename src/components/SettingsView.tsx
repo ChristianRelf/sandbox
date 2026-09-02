@@ -17,6 +17,7 @@ import {
   Trash2,
   Workflow,
 } from "lucide-react";
+import { CustomSelect } from "./ui/CustomSelect";
 import { useEffect, useState, type ReactNode } from "react";
 import packageMetadata from "../../package.json";
 import { api } from "../api";
@@ -728,14 +729,14 @@ function SelectPreference({
         <b>{label}</b>
         <small>{description}</small>
       </span>
-      <select
+      <CustomSelect
         aria-label={label}
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
-      </select>
+      </CustomSelect>
     </label>
   );
 }

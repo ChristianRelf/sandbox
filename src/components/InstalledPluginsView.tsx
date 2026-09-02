@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { CustomSelect } from "./ui/CustomSelect";
 import type {
   InstalledPlugin,
   PackageTrustMetadata,
@@ -134,7 +135,7 @@ export function InstalledPluginsView() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <select
+        <CustomSelect
           aria-label="Filter installed plugin state"
           value={stateFilter}
           onChange={(event) => setStateFilter(event.target.value)}
@@ -144,7 +145,7 @@ export function InstalledPluginsView() {
           <option value="disabled">Disabled</option>
           <option value="revoked">Revoked</option>
           <option value="review">Permission review required</option>
-        </select>
+        </CustomSelect>
       </div>
       {error && (
         <div className="error-banner">

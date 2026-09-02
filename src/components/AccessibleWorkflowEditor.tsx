@@ -8,6 +8,7 @@ import {
   WEB_BUILDER_INPUT_PORTS,
   webBuilderPortForTarget,
 } from "../workflowConnections";
+import { CustomSelect } from "./ui/CustomSelect";
 
 const STEP = 20;
 
@@ -92,10 +93,10 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
     <section aria-labelledby="accessible-connect-title">
       <h3 id="accessible-connect-title">Add connection</h3>
       <div className="accessible-connection-form">
-        <label htmlFor="accessible-source">From</label><select id="accessible-source" value={sourceId} onChange={event => setSourceId(event.target.value)}>{workflow.nodes.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</select>
-        {source?.type === "condition" && <><label htmlFor="accessible-branch">Branch</label><select id="accessible-branch" value={sourceHandle} onChange={event => setSourceHandle(event.target.value)}><option value="true">True</option><option value="false">False</option></select></>}
-        <label htmlFor="accessible-target">To</label><select id="accessible-target" value={targetId} onChange={event => setTargetId(event.target.value)} disabled={!targets.length}>{targets.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</select>
-        {target?.type === "web_builder" && <><label htmlFor="accessible-target-input">Input</label><select id="accessible-target-input" value={targetHandle} onChange={event => setTargetHandle(event.target.value)}>{WEB_BUILDER_INPUT_PORTS.map(port => <option value={port.id} key={port.id}>{port.label}</option>)}</select></>}
+        <label htmlFor="accessible-source">From</label><CustomSelect id="accessible-source" value={sourceId} onChange={event => setSourceId(event.target.value)}>{workflow.nodes.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</CustomSelect>
+        {source?.type === "condition" && <><label htmlFor="accessible-branch">Branch</label><CustomSelect id="accessible-branch" value={sourceHandle} onChange={event => setSourceHandle(event.target.value)}><option value="true">True</option><option value="false">False</option></CustomSelect></>}
+        <label htmlFor="accessible-target">To</label><CustomSelect id="accessible-target" value={targetId} onChange={event => setTargetId(event.target.value)} disabled={!targets.length}>{targets.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</CustomSelect>
+        {target?.type === "web_builder" && <><label htmlFor="accessible-target-input">Input</label><CustomSelect id="accessible-target-input" value={targetHandle} onChange={event => setTargetHandle(event.target.value)}>{WEB_BUILDER_INPUT_PORTS.map(port => <option value={port.id} key={port.id}>{port.label}</option>)}</CustomSelect></>}
         <button className="button primary" disabled={!validConnection} onClick={connect}>Add connection</button>
       </div>
     </section>

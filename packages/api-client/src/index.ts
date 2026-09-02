@@ -106,6 +106,13 @@ export interface AccountProfile {accountId:string;email:string;displayName:strin
 export interface AccountSession {id:string;deviceName:string;createdAt:string;lastSeenAt:string;expiresAt:string;current:boolean}
 export interface WorkspaceMember {accountId:string;email:string;displayName:string;role:BuiltInRole;joinedAt:string}
 export interface WorkspaceEnvironment {environmentId:string;environment:"development"|"staging"|"production"}
+export type UsageMeter="hosted_runner_seconds"|"managed_browser_seconds"|"network_egress_bytes"|"artifact_storage_byte_seconds";
+export type UsageUnit="seconds"|"bytes"|"byte_seconds";
+export interface WorkspaceUsageSummary {
+  workspaceId:string;periodStartedAt:string;periodEndedAt:string;reconciliation:"matched";
+  meters:Array<{meter:UsageMeter;unit:UsageUnit;quantity:number}>;
+  daily:Array<{date:string;quantities:Record<UsageMeter,number>}>;
+}
 export interface OrganisationRole {id:string;organisationId:string;key:string;displayName:string;builtIn:boolean;permissions:string[]}
 export interface SsoConnection {id:string;organisationId:string;connectionType:"oidc"|"saml";displayName:string;issuerUrl:string;clientIdentifier:string;verifiedDomains:string[];enabled:boolean;createdAt:string;updatedAt:string}
 export interface SsoConnectionInput {connectionType:"oidc"|"saml";displayName:string;issuerUrl:string;clientIdentifier:string;verifiedDomains?:string[];enabled?:boolean}
@@ -303,6 +310,10 @@ export class SandboxApiClient {
 
   getWorkspaceActivity<T = {runners:unknown[];runs:unknown[];pendingApprovalCount:number;webhookFailureCount:number}>(workspaceId:string,limit=30,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/activity`,query:{limit},parse});
+  }
+
+  getWorkspaceUsage<T = WorkspaceUsageSummary>(workspaceId:string,days=30,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:`/v1/workspaces/${encodeURIComponent(workspaceId)}/usage`,query:{days},parse});
   }
 
   validateDeployment<T = {validation:Record<string,unknown>}>(workspaceId:string,input:unknown,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {

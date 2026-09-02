@@ -20,6 +20,37 @@
 .node-card.node-successful { border-color: rgba(99, 196, 141, 0.45); }
 .node-card.node-failed { border-color: rgba(225, 111, 112, 0.7); }
 .node-card.disabled { opacity: 0.5; }
+.node-card.connection-dimmed { opacity: 0.3; filter: saturate(.55); }
+.node-card.connection-input {
+  border-color: #62a8ff;
+  box-shadow: 0 0 0 2px rgba(98, 168, 255, .14), 0 5px 20px rgba(0, 0, 0, .3);
+}
+.node-card.connection-output {
+  border-color: var(--success, #63c48d);
+  box-shadow: 0 0 0 2px rgba(99, 196, 141, .14), 0 5px 20px rgba(0, 0, 0, .3);
+}
+.node-card.connection-both {
+  border-color: var(--accent, #d6ff4b);
+  box-shadow: -2px 0 0 #62a8ff, 2px 0 0 var(--success, #63c48d), 0 5px 20px rgba(0, 0, 0, .3);
+}
+.node-connection-role {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  padding: 3px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: var(--surface, #0f0f11);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.connection-input .node-connection-role { color: #62a8ff; }
+.connection-output .node-connection-role { color: var(--success, #63c48d); }
+.connection-both .node-connection-role { color: var(--accent, #d6ff4b); }
 .node-card:has(.branch) > small { max-width: 128px; }
 .node-card-multi-input { padding-left: 62px; }
 .node-card-multi-input > b,

@@ -14,6 +14,7 @@ import {
 import { api } from "../api";
 import { definitionFor, type NodeDefinition } from "../catalogue";
 import type { CodeLanguage } from "./CodeEditorDialog";
+import { CustomSelect } from "./ui/CustomSelect";
 import type {
   BrowserProfile,
   ConnectionMetadata,
@@ -269,7 +270,7 @@ export function NodeInspector({
         {node.type === "schedule_trigger" && (
           <>
             <Field label="Schedule">
-              <select
+              <CustomSelect
                 value={String(config.scheduleType ?? "minutes")}
                 onChange={(event) => set("scheduleType", event.target.value)}
               >
@@ -277,7 +278,7 @@ export function NodeInspector({
                 <option value="hourly">Hourly</option>
                 <option value="daily">Daily</option>
                 <option value="cron">Advanced cron</option>
-              </select>
+              </CustomSelect>
             </Field>
             {config.scheduleType === "minutes" && (
               <Field label="Every">
@@ -447,7 +448,7 @@ export function NodeInspector({
           <>
             {mapping("left", "Value")}
             <Field label="Operator">
-              <select
+              <CustomSelect
                 value={String(config.operator ?? "equals")}
                 onChange={(event) => set("operator", event.target.value)}
               >
@@ -467,7 +468,7 @@ export function NodeInspector({
                     {value.replaceAll("_", " ")}
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
             </Field>
             {!["exists", "not_exists"].includes(String(config.operator)) && (
               <Field label="Compare with">
@@ -500,13 +501,13 @@ export function NodeInspector({
               />
             </Field>
             <Field label="Unit">
-              <select
+              <CustomSelect
                 value={String(config.unit ?? "seconds")}
                 onChange={(event) => set("unit", event.target.value)}
               >
                 <option value="seconds">Seconds</option>
                 <option value="minutes">Minutes</option>
-              </select>
+              </CustomSelect>
             </Field>
           </>
         )}
@@ -514,14 +515,14 @@ export function NodeInspector({
         {node.type === "http_request" && (
           <>
             <Field label="Method">
-              <select
+              <CustomSelect
                 value={String(config.method ?? "GET")}
                 onChange={(event) => set("method", event.target.value)}
               >
                 {["GET", "POST", "PUT", "PATCH", "DELETE"].map((value) => (
                   <option key={value}>{value}</option>
                 ))}
-              </select>
+              </CustomSelect>
             </Field>
             {mapping("url", "URL")}
             <JsonField
@@ -551,7 +552,7 @@ export function NodeInspector({
         {node.type === "open_browser" && (
           <>
             <Field label="Browser profile">
-              <select
+              <CustomSelect
                 value={String(config.profileId ?? "")}
                 onChange={(event) => set("profileId", event.target.value)}
               >
@@ -561,7 +562,7 @@ export function NodeInspector({
                     {profile.name}
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
             </Field>
             {profiles.length === 0 && (
               <Info>
@@ -646,7 +647,7 @@ export function NodeInspector({
           <>
             {mapping("url", "URL")}
             <Field label="Wait condition">
-              <select
+              <CustomSelect
                 value={String(config.waitCondition ?? "dom_ready")}
                 onChange={(event) => set("waitCondition", event.target.value)}
               >
@@ -656,7 +657,7 @@ export function NodeInspector({
                 <option value="element_visible">
                   Specific element visible
                 </option>
-              </select>
+              </CustomSelect>
             </Field>
             {config.waitCondition === "element_visible" && (
               <LocatorEditor
@@ -678,24 +679,24 @@ export function NodeInspector({
             />
             <div className="field-grid">
               <Field label="Click type">
-                <select
+                <CustomSelect
                   value={String(config.clickType ?? "normal")}
                   onChange={(event) => set("clickType", event.target.value)}
                 >
                   <option value="normal">Normal</option>
                   <option value="double">Double</option>
                   <option value="right">Right</option>
-                </select>
+                </CustomSelect>
               </Field>
               <Field label="Mouse button">
-                <select
+                <CustomSelect
                   value={String(config.mouseButton ?? "left")}
                   onChange={(event) => set("mouseButton", event.target.value)}
                 >
                   <option>left</option>
                   <option>middle</option>
                   <option>right</option>
-                </select>
+                </CustomSelect>
               </Field>
             </div>
             <Field label="Wait after click (ms)">
@@ -769,14 +770,14 @@ export function NodeInspector({
               onTest={testLocator}
             />
             <Field label="Select by">
-              <select
+              <CustomSelect
                 value={String(config.selectBy ?? "value")}
                 onChange={(event) => set("selectBy", event.target.value)}
               >
                 <option value="value">Value</option>
                 <option value="label">Visible label</option>
                 <option value="index">Index</option>
-              </select>
+              </CustomSelect>
             </Field>
             {mapping("option", "Option")}
             <TimeoutField config={config} set={set} />
@@ -800,7 +801,7 @@ export function NodeInspector({
         {node.type === "wait_for" && (
           <>
             <Field label="Wait for">
-              <select
+              <CustomSelect
                 value={String(config.waitFor ?? "element_visible")}
                 onChange={(event) => set("waitFor", event.target.value)}
               >
@@ -812,7 +813,7 @@ export function NodeInspector({
                 <option value="download_begins">Download begins</option>
                 <option value="network_response">Network response</option>
                 <option value="page_load_state">Page load state</option>
-              </select>
+              </CustomSelect>
             </Field>
             {config.waitFor === "time" && (
               <Field label="Delay (ms)">
@@ -841,14 +842,14 @@ export function NodeInspector({
             ) && mapping("urlPattern", "URL pattern")}
             {config.waitFor === "page_load_state" && (
               <Field label="Load state">
-                <select
+                <CustomSelect
                   value={String(config.loadState ?? "dom_ready")}
                   onChange={(event) => set("loadState", event.target.value)}
                 >
                   <option value="dom_ready">DOM ready</option>
                   <option value="page_loaded">Page loaded</option>
                   <option value="network_idle">Network idle</option>
-                </select>
+                </CustomSelect>
               </Field>
             )}
             <TimeoutField config={config} set={set} />
@@ -863,7 +864,7 @@ export function NodeInspector({
               onTest={testLocator}
             />
             <Field label="Extract">
-              <select
+              <CustomSelect
                 value={String(config.extract ?? "text")}
                 onChange={(event) => set("extract", event.target.value)}
               >
@@ -872,7 +873,7 @@ export function NodeInspector({
                 <option value="link">Link</option>
                 <option value="image_source">Image source</option>
                 <option value="table">Table</option>
-              </select>
+              </CustomSelect>
             </Field>
             {config.extract === "attribute" && (
               <Field label="Attribute name">
@@ -913,14 +914,14 @@ export function NodeInspector({
         {node.type === "screenshot" && (
           <>
             <Field label="Capture">
-              <select
+              <CustomSelect
                 value={String(config.mode ?? "viewport")}
                 onChange={(event) => set("mode", event.target.value)}
               >
                 <option value="viewport">Current viewport</option>
                 <option value="full_page">Full page</option>
                 <option value="element">Selected element</option>
-              </select>
+              </CustomSelect>
             </Field>
             {config.mode === "element" && (
               <LocatorEditor
@@ -961,7 +962,7 @@ export function NodeInspector({
             </Field>
             {mapping("filename", "Filename")}
             <Field label="Collision behaviour">
-              <select
+              <CustomSelect
                 value={String(config.collisionBehaviour ?? "rename")}
                 onChange={(event) =>
                   set("collisionBehaviour", event.target.value)
@@ -970,7 +971,7 @@ export function NodeInspector({
                 <option value="rename">Create unique name</option>
                 <option value="overwrite">Overwrite</option>
                 <option value="fail">Fail</option>
-              </select>
+              </CustomSelect>
             </Field>
             <Field label="Maximum size (MB)">
               <input
@@ -1310,7 +1311,7 @@ export function NodeInspector({
             {mapping("key", "State key")}
             {node.type === "get_workflow_state" && <JsonField label="Default value" value={config.defaultValue ?? null} onChange={(value)=>set("defaultValue",value)}/>} 
             {(node.type === "set_workflow_state" || node.type === "compare_previous") && <JsonField label="Value" value={config.value ?? null} onChange={(value)=>set("value",value)}/>} 
-            {node.type === "compare_previous" && <Field label="Normalization"><select value={String(config.normalization ?? "trim")} onChange={(event)=>set("normalization",event.target.value)}><option value="trim">Trim</option><option value="lowercase">Trim and lowercase</option><option value="collapse_whitespace">Collapse whitespace</option><option value="none">Exact value</option></select></Field>}
+            {node.type === "compare_previous" && <Field label="Normalization"><CustomSelect value={String(config.normalization ?? "trim")} onChange={(event)=>set("normalization",event.target.value)}><option value="trim">Trim</option><option value="lowercase">Trim and lowercase</option><option value="collapse_whitespace">Collapse whitespace</option><option value="none">Exact value</option></CustomSelect></Field>}
             <Info>State changes are committed only after the complete workflow succeeds. Individual node tests only preview them.</Info>
           </>
         )}
@@ -1321,12 +1322,12 @@ export function NodeInspector({
               <div><b>Waits for a live model response</b><p>The workflow pauses here until the selected AI answers or the timeout is reached.</p></div>
             </div>
             <Field label="AI connection">
-              <select value={String(config.connectionId ?? "")} onChange={(event) => set("connectionId", event.target.value)}>
+              <CustomSelect value={String(config.connectionId ?? "")} onChange={(event) => set("connectionId", event.target.value)}>
                 <option value="">Select connected AI…</option>
                 {connections
                   .filter((connection) => ["openai", "anthropic", "openai_compatible"].includes(connection.provider) && connection.status === "connected")
                   .map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName} · {String(connection.metadata.model ?? "model")}</option>)}
-              </select>
+              </CustomSelect>
               {!connections.some((connection) => ["openai", "anthropic", "openai_compatible"].includes(connection.provider) && connection.status === "connected") && (
                 <small className="field-hint">Add an AI connection in Settings → Connections first.</small>
               )}
@@ -1351,10 +1352,10 @@ export function NodeInspector({
             </div>
             {(config.language === "python" || config.language === "javascript") && (
               <Field label="Workflow behaviour">
-                <select value={String(config.executionMode ?? "source")} onChange={(event) => set("executionMode", event.target.value)}>
+                <CustomSelect value={String(config.executionMode ?? "source")} onChange={(event) => set("executionMode", event.target.value)}>
                   <option value="source">Provide source to the next node</option>
                   <option value="run">Execute script and await result</option>
-                </select>
+                </CustomSelect>
               </Field>
             )}
             {config.executionMode === "run" && (config.language === "python" || config.language === "javascript") && (
@@ -1567,10 +1568,10 @@ function PluginSchemaForm({
           const available = connections.filter((connection) => connection.provider === provider && connection.status === "connected");
           return (
             <Field key={key} label={label} hint={description}>
-              <select value={String(value[key] ?? "")} onChange={(event) => patch(key, event.target.value, event.target.value)}>
+              <CustomSelect value={String(value[key] ?? "")} onChange={(event) => patch(key, event.target.value, event.target.value)}>
                 <option value="">Select connection…</option>
                 {available.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName}</option>)}
-              </select>
+              </CustomSelect>
               {!available.length && <small className="field-hint">Add an available {provider.replaceAll("_", " ")} connection in Settings.</small>}
             </Field>
           );
@@ -1589,7 +1590,7 @@ function PluginSchemaForm({
         const resourceKind=pluginResourceKind(nodeType,key);
         if(resourceKind){const options=resourceOptions[key]??[];const listId=`resource-${key}-${nodeType.replaceAll(".","-")}`;return <Field key={key} label={label} hint={description}><div className="path-input"><input list={listId} required={required.has(key)} value={String(value[key]??property.default??"")} onFocus={()=>{if(!options.length)void loadResource(key,resourceKind);}} onChange={(event)=>patch(key,event.target.value)} placeholder={resourceKind==="github_branch"?"Choose or enter an expression":"Choose or enter a value"}/><datalist id={listId}>{options.map((option)=><option key={option.id} value={option.id}>{option.label}</option>)}</datalist><button type="button" className="button" disabled={!value.connectionId||loadingResource===key} onClick={()=>void loadResource(key,resourceKind)}><RefreshCcw size={13}/>{loadingResource===key?"Loading…":"Browse"}</button></div></Field>;}
         if (Array.isArray(property.enum)) {
-          return <Field key={key} label={label} hint={description}><select value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value)}>{property.enum.map((option) => <option key={String(option)} value={String(option)}>{String(option).replaceAll("_", " ")}</option>)}</select></Field>;
+          return <Field key={key} label={label} hint={description}><CustomSelect value={String(value[key] ?? property.default ?? "")} onChange={(event) => patch(key, event.target.value)}>{property.enum.map((option) => <option key={String(option)} value={String(option)}>{String(option).replaceAll("_", " ")}</option>)}</CustomSelect></Field>;
         }
         if (property.type === "boolean") {
           return <label key={key} className="toggle-row"><span><b>{label}</b>{description && <small>{description}</small>}</span><input type="checkbox" checked={Boolean(value[key] ?? property.default)} onChange={(event) => patch(key, event.target.checked)} /></label>;
@@ -1644,7 +1645,7 @@ function LocatorEditor({
       </div>
       <div className="field-grid">
         <Field label="Strategy">
-          <select
+          <CustomSelect
             value={locator.primary.kind}
             onChange={(event) =>
               patchPrimary({
@@ -1658,7 +1659,7 @@ function LocatorEditor({
                 {kind.replace("_", " ")}
               </option>
             ))}
-          </select>
+          </CustomSelect>
         </Field>
         <Field label="Role / name">
           <input
@@ -1730,14 +1731,14 @@ function ConnectionSelect({
     <Field
       label={`${provider.charAt(0).toUpperCase() + provider.slice(1)} connection`}
     >
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <CustomSelect value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">Select connection…</option>
         {available.map((connection) => (
           <option key={connection.id} value={connection.id}>
             {connection.displayName}
           </option>
         ))}
-      </select>
+      </CustomSelect>
       {available.length === 0 && (
         <small className="locator-note">
           Add or reconnect this provider in Settings → Connections.
@@ -1816,7 +1817,7 @@ function DataBindings({
                 <b>{input.label}{input.required ? " *" : ""}</b>
                 <small>{input.type}</small>
               </span>
-              <select
+              <CustomSelect
                 aria-label={`Map ${input.label}`}
                 value={selected}
                 onChange={(event) => {
@@ -1831,7 +1832,7 @@ function DataBindings({
                     {source.name} · {output.label} ({output.type})
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
             </label>
           );
         })}
@@ -1915,7 +1916,7 @@ function MappedInput({
             onChange={(event) => onChange(event.target.value)}
           />
         )}
-        <select
+        <CustomSelect
           aria-label={`Insert mapping into ${label}`}
           value=""
           onChange={(event) => {
@@ -1934,7 +1935,7 @@ function MappedInput({
               {node.name} · output
             </option>
           ))}
-        </select>
+        </CustomSelect>
       </div>
     </Field>
   );

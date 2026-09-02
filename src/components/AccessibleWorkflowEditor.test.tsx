@@ -47,10 +47,13 @@ describe("AccessibleWorkflowEditor", () => {
     const onChange = vi.fn();
     render(<AccessibleWorkflowEditor workflow={workflow} onChange={onChange} onSelect={vi.fn()} onAddNode={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "condition" } });
+    fireEvent.keyDown(screen.getByLabelText("From"), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: "Check result" }));
     await waitFor(() => expect(screen.getByLabelText("Branch")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("Branch"), { target: { value: "false" } });
-    fireEvent.change(screen.getByLabelText("To"), { target: { value: "notify" } });
+    fireEvent.keyDown(screen.getByLabelText("Branch"), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: "False" }));
+    fireEvent.keyDown(screen.getByLabelText("To"), { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: "Notify" }));
     expect(screen.getByLabelText("To")).not.toHaveTextContent("Start");
     fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { brand } from "@sandbox/brand";
 import { SndboxMark } from "@sandbox/product-ui/brand";
-import { ArrowUpRight, User } from "lucide-react";
+import { ArrowUpRight, LogOut, User } from "lucide-react";
 import { authenticatedClient } from "../lib/auth";
 import { PortalMobileNavigation, PortalNavigation } from "./PortalNavigation";
 import "./globals.css";
@@ -11,7 +11,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL(brand.domains.app),
   title: { default: "sndbox account", template: "%s · sndbox" },
-  description: "Manage sndbox releases, licences, purchases, usage, organisations and support.",
+  description: "Manage your sndbox workspaces, plan, security, downloads and account settings.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -39,10 +39,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <aside className="portal-sidebar">
           <div className="portal-sidebar-intro">
             <strong>Account</strong>
-            <span>Identity and operations</span>
+            <span>Workspace, plan and security</span>
           </div>
           <PortalNavigation />
-          <footer><span>Local execution</span><strong>Unmetered</strong></footer>
+          <footer>
+            <div><span>Local execution</span><strong>Unmetered</strong></div>
+            <form action="/auth/sign-out" method="post">
+              <button type="submit"><LogOut aria-hidden="true" /> Sign out</button>
+            </form>
+          </footer>
         </aside>
 
         <div id="portal-main" className="portal-content">{children}</div>
@@ -57,9 +62,9 @@ async function AccountChip() {
   try {
     const profile = (await api.getAccountProfile()).data;
     return (
-      <div className="account-chip" title={`${profile.displayName} · ${profile.email}`} aria-label={`Signed in as ${profile.displayName}`}>
+      <Link href="/settings" className="account-chip" title={profile.email} aria-label={`Open settings for ${profile.displayName}`}>
         {profile.displayName.slice(0, 2).toUpperCase()}
-      </div>
+      </Link>
     );
   } catch {
     return <div className="account-chip" aria-label="Account unavailable"><User aria-hidden="true" size={13} /></div>;

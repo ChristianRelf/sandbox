@@ -11,16 +11,11 @@ import { diagnoseCode } from "../codeDiagnostics";
 import type { ConnectionMetadata } from "../types";
 import { AiActivityStatus } from "./AiActivityStatus";
 import { Dialog } from "./ui/Dialog";
+import { CustomSelect } from "./ui/CustomSelect";
 
 export type CodeLanguage = "python" | "html" | "javascript" | "css";
 
 const AI_PROVIDERS = new Set(["openai", "anthropic", "openai_compatible"]);
-const CODE_ACTIVITY = [
-  "Planning Draft",
-  "Investigating current code",
-  "Writing Code",
-  "Checking result",
-];
 const INITIAL_CODE_CHAT = {
   id: "hello",
   role: "assistant" as const,
@@ -65,6 +60,7 @@ export function CodeEditorDialog({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiActivities, setAiActivities] = useState<string[]>([]);
   const [aiMessages, setAiMessages] = useState<CodeChatMessage[]>([INITIAL_CODE_CHAT]);
   const aiEndRef = useRef<HTMLDivElement>(null);
   const aiComposerRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +72,7 @@ export function CodeEditorDialog({
     setAiOpen(false);
     setAiPrompt("");
     setAiBusy(false);
+    setAiActivities([]);
     setAiMessages([INITIAL_CODE_CHAT]);
   }, [language, open, value]);
   useEffect(() => {
@@ -122,8 +119,18 @@ export function CodeEditorDialog({
     setAiPrompt("");
     setAiMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", text: instruction }]);
     setAiBusy(true);
+    const connection = connections.find((item) => item.id === connectionId);
+    setAiActivities([
+      `Waiting for ${String(connection?.metadata.model ?? connection?.displayName ?? "the selected model")} to return updated code`,
+    ]);
     try {
       const result = await api.generateCodeWithAi(connectionId, draftLanguage, instruction, draft);
+      setAiActivities((current) => [...current, "Checking the returned code for syntax and type problems"]);
+      const returnedDiagnostics = diagnoseCode(draftLanguage, result.code);
+      const returnedErrors = returnedDiagnostics.filter((item) => item.severity === "error");
+      if (returnedErrors.length) {
+        throw new Error(`The generated code failed checking: ${returnedErrors[0].message}`);
+      }
       setDraft(result.code);
       setAiMessages((current) => [
         ...current,
@@ -244,9 +251,9 @@ export function CodeEditorDialog({
               {connections.length > 0 && (
                 <label className="code-ai-provider">
                   <Bot size={12} />
-                  <select aria-label="AI connection for code" value={connectionId} onChange={(event) => setConnectionId(event.target.value)}>
+                  <CustomSelect aria-label="AI connection for code" value={connectionId} onChange={(event) => setConnectionId(event.target.value)}>
                     {connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName} · {String(connection.metadata.model ?? "model")}</option>)}
-                  </select>
+                  </CustomSelect>
                 </label>
               )}
               <div className="code-ai-messages" aria-live="polite">
@@ -259,7 +266,7 @@ export function CodeEditorDialog({
                 {connections.length === 0 && (
                   <p className="code-ai-empty">Connect ChatGPT, Claude, or a local AI in Settings → Connections to use the coding assistant.</p>
                 )}
-                {aiBusy && <AiActivityStatus active stages={CODE_ACTIVITY} />}
+                {aiBusy && <AiActivityStatus active activities={aiActivities} />}
                 <div ref={aiEndRef} />
               </div>
               <form className="code-ai-composer" onSubmit={(event) => { event.preventDefault(); void writeWithAi(); }}>

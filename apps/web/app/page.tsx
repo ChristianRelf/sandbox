@@ -1,27 +1,122 @@
-import { launchRelease } from "@sandbox/content";
-import { ArrowRight, CheckCircle2, CircleAlert, Download, KeyRound, LifeBuoy, Package, ShieldCheck, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CircleAlert,
+  CreditCard,
+  Download,
+  KeyRound,
+  MonitorSmartphone,
+  Plus,
+  Server,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { authenticatedClient } from "../lib/auth";
 
-export const dynamic="force-dynamic";
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const api=await authenticatedClient();
-  if(!api)return <main className="portal-page"><section className="blocked-notice"><CircleAlert/><div><strong>Account unavailable</strong><p>Your authenticated control-plane session could not be created. Sign in again or check the account service configuration.</p></div></section></main>;
-  const [profile,organisations,commerce]=api?await Promise.allSettled([api.getAccountProfile(),api.listAccountOrganisations(),api.getProductAccount()]):[];
-  const account=profile?.status==="fulfilled"?profile.value.data:null;
-  const organisationItems=organisations?.status==="fulfilled"?organisations.value.data.items:[];
-  const product=commerce?.status==="fulfilled"?commerce.value.data:null;
-  const subscription=product?.subscriptions[0];
-  return <main className="portal-page">
-    <header className="page-head"><div><p>ACCOUNT OVERVIEW</p><h1>{account?`Welcome, ${account.displayName}.`:"Account and operations."}</h1><span>Identity, organisations, governed workflows, security and runners in one live account boundary.</span></div><Link href="/downloads" className="portal-primary"><Download size={14}/>Downloads</Link></header>
-    <section className="plan-banner"><div><small>CURRENT PLAN</small><strong>{subscription?.planName??"Local"}</strong><span>{subscription?`${subscription.status}${subscription.currentPeriodEndsAt?` · renews ${new Date(subscription.currentPeriodEndsAt).toLocaleDateString("en-GB")}`:""}`:"Local execution remains available without a product subscription."}</span></div><Link href="/billing">Billing details <ArrowRight size={13}/></Link></section>
-    <section className="overview-grid">
-      <article><header><Package/><span>Recent release</span></header><strong>sndbox {launchRelease.version}</strong><p>{launchRelease.summary}</p><Link href="/releases">View release notes <ArrowRight/></Link></article>
-      <article><header><Users/><span>Team workspaces</span></header><strong>{organisationItems.length} organisation{organisationItems.length===1?"":"s"}</strong><p>{organisationItems.flatMap(item=>item.workspaces).length} accessible workspaces with enforced roles and governance.</p><Link href="/organisations">Open operations <ArrowRight/></Link></article>
-      <article><header><KeyRound/><span>Developer access</span></header><strong>Versioned v1 beta API</strong><p>Personal tokens, service accounts and client assertions use the validated public contract.</p><Link href="/security">Review access <ArrowRight/></Link></article>
-      <article><header><LifeBuoy/><span>Support access</span></header><strong>Approval protected</strong><p>Temporary diagnostic access is time-boxed, auditable, revocable and automatically expires.</p><Link href="/support">Support options <ArrowRight/></Link></article>
-    </section>
-    <section className="account-status"><h2>Service readiness</h2><p><CheckCircle2/>Account data above is loaded from the authenticated control plane.</p><p><CheckCircle2/>Encrypted sync, publication approvals, deployment preflight and runner pools are available.</p><p><ShieldCheck/>Credentials stay server-side and every workspace operation is authorised again at the API.</p></section>
-  </main>;
+  const api = await authenticatedClient();
+  if (!api) {
+    return (
+      <main className="portal-page">
+        <section className="blocked-notice">
+          <CircleAlert />
+          <div><strong>Account unavailable</strong><p>Your account session could not be loaded. Sign in again to continue.</p></div>
+        </section>
+      </main>
+    );
+  }
+
+  const [profileResult, organisationsResult, commerceResult, sessionsResult, tokensResult] = await Promise.allSettled([
+    api.getAccountProfile(),
+    api.listAccountOrganisations(),
+    api.getProductAccount(),
+    api.listAccountSessions(),
+    api.listPersonalAccessTokens(),
+  ]);
+  const profile = profileResult.status === "fulfilled" ? profileResult.value.data : null;
+  const organisations = organisationsResult.status === "fulfilled" ? organisationsResult.value.data.items : [];
+  const commerce = commerceResult.status === "fulfilled" ? commerceResult.value.data : null;
+  const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value.data.items : [];
+  const tokens = tokensResult.status === "fulfilled" ? tokensResult.value.data.items : [];
+  const subscription = commerce?.subscriptions[0];
+  const licence = commerce?.licences[0];
+  const workspaceCount = organisations.flatMap((organisation) => organisation.workspaces).length;
+  const activeTokens = tokens.filter((token) => !token.revokedAt).length;
+
+  return (
+    <main className="portal-page account-home">
+      <header className="account-home-hero">
+        <div>
+          <p>ACCOUNT</p>
+          <h1>Overview</h1>
+          <span>{profile ? `${profile.displayName} · ${profile.email}` : "Your sndbox account"}</span>
+        </div>
+        <div className="account-home-actions">
+          <Link href="/downloads" className="portal-secondary"><Download aria-hidden="true" /> Download app</Link>
+          <Link href="/organisations" className="portal-primary"><Plus aria-hidden="true" /> New workspace</Link>
+        </div>
+      </header>
+
+      <section className="account-summary-grid" aria-label="Account summary">
+        <Link href="/billing">
+          <span><CreditCard aria-hidden="true" /> Plan</span>
+          <strong>{subscription?.planName ?? "Local"}</strong>
+          <small>{subscription?.status ?? "No subscription required"}</small>
+        </Link>
+        <Link href="/organisations">
+          <span><Users aria-hidden="true" /> Workspaces</span>
+          <strong>{workspaceCount}</strong>
+          <small>Across {organisations.length} organisation{organisations.length === 1 ? "" : "s"}</small>
+        </Link>
+        <Link href="/security">
+          <span><MonitorSmartphone aria-hidden="true" /> Sessions</span>
+          <strong>{sessions.length}</strong>
+          <small>{sessions.length === 1 ? "Signed-in device" : "Signed-in devices"}</small>
+        </Link>
+        <Link href="/security">
+          <span><KeyRound aria-hidden="true" /> API keys</span>
+          <strong>{activeTokens}</strong>
+          <small>Active personal token{activeTokens === 1 ? "" : "s"}</small>
+        </Link>
+      </section>
+
+      <section className="home-main-grid">
+        <div className="home-focus">
+          <header>
+            <div><small>SHORTCUTS</small><h2>Common tasks</h2></div>
+          </header>
+          <div className="home-action-list">
+            <Link href="/operations">
+              <span className="action-icon"><Server aria-hidden="true" /></span>
+              <span><strong>Runner operations</strong><small>Pair Linux hosts and manage runner availability.</small></span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/security">
+              <span className="action-icon"><KeyRound aria-hidden="true" /></span>
+              <span><strong>API keys</strong><small>Create and revoke workspace-scoped credentials.</small></span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+            <Link href="/billing">
+              <span className="action-icon"><CreditCard aria-hidden="true" /></span>
+              <span><strong>Plan & billing</strong><small>Review your plan, renewal and available options.</small></span>
+              <ArrowRight aria-hidden="true" />
+            </Link>
+          </div>
+        </div>
+
+        <aside className="account-health">
+          <header><small>ACCOUNT STATUS</small><span className="health-badge"><Check /> Healthy</span></header>
+          <div>
+            <span><ShieldCheck aria-hidden="true" /><span><strong>Identity provider</strong><small>{profile?.email ?? "Authenticated account"}</small></span></span>
+            <span><Check aria-hidden="true" /><span><strong>Local execution</strong><small>Unmetered</small></span></span>
+            <span><Check aria-hidden="true" /><span><strong>Licence</strong><small>{licence ? `${licence.devices} registered device${licence.devices === 1 ? "" : "s"}` : "Local access"}</small></span></span>
+          </div>
+          <Link href="/settings">View account settings <ArrowRight /></Link>
+        </aside>
+      </section>
+    </main>
+  );
 }

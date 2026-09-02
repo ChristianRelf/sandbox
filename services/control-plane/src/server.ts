@@ -175,6 +175,7 @@ export interface ApiDependencies {
   metricsBearerToken?: string;
   idempotencyStore?: ApiIdempotencyStore;
   usageLedger?: Pick<PostgresUsageLedger,"record">;
+  usageReader?: Pick<PostgresUsageLedger,"workspaceSummary">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
   executionCoordinator?: Pick<PostgresExecutionCoordinator,"enqueue"|"resolvePublicRunDeployment"|"getPublicRun">;
   bugReports?: BugReportSink;
@@ -817,7 +818,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/challenges", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
-    requireHumanPrincipal(session);
+    requireRunnerPairingPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingInput.parse(request.body);
     validateEd25519PublicKey(input.devicePublicKeyDerBase64);
@@ -828,7 +829,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
 
   app.post("/v1/runners/pairing/confirm", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async request => {
     const session = await authenticate(request, dependencies.sessions);
-    requireHumanPrincipal(session);
+    requireRunnerPairingPrincipal(session);
     requireFreshRequest(request);
     const input = runnerPairingConfirmation.parse(request.body);
     if (input.workspaceId) await authorizer.require(session, input.workspaceId, "runners.manage");
@@ -982,6 +983,16 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(request.query);
     await authorizer.require(session, workspaceId, "executions.view_summary");
     return dependencies.repository.listWorkspaceActivity(session, workspaceId, limit);
+  });
+
+  app.get("/v1/workspaces/:workspaceId/usage", async request => {
+    const session=await authenticate(request,dependencies.sessions);
+    requireHumanPrincipal(session);
+    const {workspaceId}=z.object({workspaceId:z.string().uuid()}).parse(request.params);
+    const {days}=z.object({days:z.coerce.number().int().min(7).max(90).default(30)}).parse(request.query);
+    await authorizer.require(session,{workspaceId,permission:"executions.view_summary",resourceType:"workspace_usage"});
+    if(!dependencies.usageReader)throw new DomainError("usage_reporting_unavailable","Usage reporting is not configured.",503);
+    return dependencies.usageReader.workspaceSummary(workspaceId,days);
   });
 
   app.post("/v1/workflows/:workflowId/runs",async(request,reply)=>{
@@ -1409,6 +1420,12 @@ function requirePlatform(session: AuthenticatedSession, permission: string): voi
 
 function requireHumanPrincipal(session:AuthenticatedSession):void {
   if((session.principalType??"user")!=="user")throw new DomainError("human_principal_required","This account-security operation requires an interactive human session.",403);
+}
+
+function requireRunnerPairingPrincipal(session:AuthenticatedSession):void {
+  if((session.principalType??"user")==="user")return;
+  if(session.principalType==="personal_access_token"&&session.credentialScopes?.includes("runners.manage"))return;
+  throw new DomainError("runner_pairing_principal_required","Runner pairing requires an interactive session or a workspace-scoped runner pairing token.",403);
 }
 
 function requireRecentStepUp(session:AuthenticatedSession):void {

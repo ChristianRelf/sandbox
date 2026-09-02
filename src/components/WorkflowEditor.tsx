@@ -52,6 +52,7 @@ import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
 import {
   connectWorkflowNodes,
+  connectedNodeRoles,
   isValidWorkflowConnection,
   WEB_BUILDER_INPUT_PORTS,
 } from "../workflowConnections";
@@ -221,6 +222,10 @@ export function WorkflowEditor() {
     [workflow, baseline],
   );
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId);
+  const connectionRoles = useMemo(
+    () => connectedNodeRoles(workflow.edges, selectedNodeId),
+    [selectedNodeId, workflow.edges],
+  );
   const openPermissionReview = (request?: PermissionReviewRequest) => {
     setPermissionRequest(request);
     setPermissionOpen(true);
@@ -592,7 +597,7 @@ export function WorkflowEditor() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest("input,textarea,select,[contenteditable=true]")) {
+      if (target.closest("input,textarea,select,.custom-select,[contenteditable=true]")) {
         if (e.key === "Escape") (target as HTMLElement).blur();
         return;
       }
@@ -814,6 +819,7 @@ export function WorkflowEditor() {
           (status === "failed"
             ? "This node failed during the latest run."
             : undefined);
+        const connectionRole = connectionRoles.get(node.id);
 
         return {
           id: node.id,
@@ -823,7 +829,7 @@ export function WorkflowEditor() {
           initialHeight: workflowNodeDimensions.height,
           handles: workflowNodeHandles(node),
           selected: node.id === selectedNodeId,
-          ariaLabel: `${node.name}, ${node.type.replaceAll("_", " ")}, position x ${Math.round(node.position.x)}, y ${Math.round(node.position.y)}`,
+          ariaLabel: `${node.name}, ${node.type.replaceAll("_", " ")}${connectionRole ? `, ${connectionRole} of selected node` : ""}, position x ${Math.round(node.position.x)}, y ${Math.round(node.position.y)}`,
           data: {
             node,
             status,
@@ -832,6 +838,8 @@ export function WorkflowEditor() {
             showAskAiOnInteraction: showAskAiOnNodeInteraction,
             showAskAiOnIssues: showAskAiOnNodeIssues,
             onAskAi: openAiForNode,
+            connectionRole,
+            dimmed: Boolean(selectedNodeId && node.id !== selectedNodeId && !connectionRole),
             onAdd: (sourceId: string) => {
               const source = workflow.nodes.find(
                 (item) => item.id === sourceId,
@@ -854,6 +862,7 @@ export function WorkflowEditor() {
       showAskAiOnNodeInteraction,
       showAskAiOnNodeIssues,
       openAiForNode,
+      connectionRoles,
     ],
   );
   const [displayNodes, setDisplayNodes, onDisplayNodesChange] =
@@ -876,12 +885,14 @@ export function WorkflowEditor() {
         targetHandle: edge.targetHandle,
         type: "smoothstep",
         animated: Boolean(runningNode && edge.sourceNodeId === runningNode),
-        className:
-          nodeExecutions.get(edge.sourceNodeId)?.status === "successful"
-            ? "edge-success"
-            : "",
+        className: [
+          nodeExecutions.get(edge.sourceNodeId)?.status === "successful" ? "edge-success" : "",
+          selectedNodeId && edge.targetNodeId === selectedNodeId ? "edge-input" : "",
+          selectedNodeId && edge.sourceNodeId === selectedNodeId ? "edge-output" : "",
+          selectedNodeId && edge.targetNodeId !== selectedNodeId && edge.sourceNodeId !== selectedNodeId ? "edge-dimmed" : "",
+        ].filter(Boolean).join(" "),
       })),
-    [workflow.edges, runningNode, nodeExecutions],
+    [workflow.edges, runningNode, nodeExecutions, selectedNodeId],
   );
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<WorkflowNodeData>>[]) => {
@@ -1111,6 +1122,7 @@ export function WorkflowEditor() {
           }}
         >
           <ReactFlow<Node<WorkflowNodeData>, Edge>
+            className={selectedNodeId ? "has-node-focus" : undefined}
             nodes={displayNodes}
             edges={flowEdges}
             nodeTypes={nodeTypes}
