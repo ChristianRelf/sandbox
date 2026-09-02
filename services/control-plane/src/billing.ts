@@ -30,6 +30,7 @@ export class StripeBillingProvider implements BillingProvider {
     const session = await this.stripe.checkout.sessions.create({
       mode: request.mode,
       customer: request.customerId,
+      customer_creation: request.mode === "payment" && !request.customerId ? "always" : undefined,
       line_items: [{
         ...(request.priceId
           ? { price: request.priceId }

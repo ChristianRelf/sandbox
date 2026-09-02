@@ -28,6 +28,8 @@ Some high-impact account and support decisions additionally require a recently s
 
 Tokens are visible once at creation and carry explicit scopes, organisation, workspace IDs, environment IDs, and expiry. Effective access is the intersection of these restrictions, the principal role, and the route's permission check. Revocation is immediate.
 
+Use [Security and account settings](/account/security-and-settings) to create a workspace-scoped personal API key in the account UI.
+
 ## Runner requests
 
 Runner endpoints use `x-sandbox-signature` plus runner ID, key ID, request time, and nonce headers. The Ed25519 device key is created during pairing and never sent to the control plane.

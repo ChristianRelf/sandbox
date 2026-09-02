@@ -30,7 +30,7 @@ export function RunnerPairing({
   return (
     <section className="runner-pairing-card">
       <header>
-        <div><span className="settings-card-icon"><Terminal /></span><span><small>LINUX RUNNER</small><strong>Pair a self-hosted machine</strong></span></div>
+        <div><span className="settings-card-icon"><Terminal /></span><span><strong>Pair a self-hosted machine</strong></span></div>
         {!state.token && <button type="button" aria-label="Close runner setup" onClick={() => setOpen(false)}><X /></button>}
       </header>
       {state.token ? (

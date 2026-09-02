@@ -1,0 +1,37 @@
+---
+title: "Usage"
+description: "Read the workspace usage totals, daily compute graph, meter units, and reconciliation boundary."
+icon: "chart-no-axes-column-increasing"
+---
+
+The **Usage** page reports the last 30 days for one selected workspace. It separates hosted infrastructure from local and self-hosted execution.
+
+## Meters
+
+| Meter | What it measures | Ledger unit |
+| --- | --- | --- |
+| Hosted runner | Managed runner execution time | seconds |
+| Managed browser | Isolated managed browser worker time | seconds |
+| Network egress | Data sent from managed infrastructure to the internet | bytes |
+| Artifact storage | Retained output size over time | byte-seconds |
+
+The summary cards format those base units into readable durations, byte quantities, and storage-time values. The daily graph combines hosted-runner and managed-browser seconds while keeping the two series visually distinct.
+
+The graph also shows peak day, daily average, active days, and browser share for the displayed period.
+
+## Tokens are not usage
+
+API keys, signed-in sessions, runner pairing tokens, and SCIM credentials authenticate a request or device. They are not billing units and their token length or request count does not affect the usage graph.
+
+<Info>
+  "Token" in the account area means a credential, not an AI model token. AI provider usage may be billed separately by the configured provider.
+</Info>
+
+## Reconciled events only
+
+Only matched ledger events appear in usage and invoice inputs. Managed workers sign usage events, and the control plane verifies the producer, execution, deployment, workspace, environment, timestamp, and immutable event identity.
+
+A later reconciliation discrepancy removes the affected event from invoice inputs rather than silently billing uncertain evidence.
+
+Local desktop and self-hosted runner execution never enter the hosted meter. See [Logs and evidence](/execution/logs-and-evidence) for execution records that are operational rather than billable.
+

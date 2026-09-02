@@ -1,0 +1,63 @@
+---
+title: "Workspaces and access"
+description: "Manage workspace membership, publication reviews, deployments, roles, SSO, SCIM, and the audit feed."
+icon: "building-2"
+---
+
+The **Workspaces** page keeps day-to-day workspace state and owner-only organisation controls in one place. Choose the intended organisation and workspace before changing access or deployment state.
+
+## Workspace controls
+
+The workspace summary shows member, runner, pending-review, and deployment counts. The panels below it provide the current workspace's:
+
+- members and invitation form;
+- publication reviews for exact immutable revisions;
+- runner pools;
+- deployments and their current state;
+- environments and identifiers; and
+- policy state returned by the control plane.
+
+Publication approval applies to the exact revision under review. Editing a workflow after approval does not transfer that approval to the new revision. See [Approvals and publishing](/cloud/approvals-and-publishing).
+
+## Roles
+
+Open **Roles, SSO and SCIM** to create reusable organisation roles. A custom role requires a stable lowercase key, display name, and at least the permissions needed for its job.
+
+| Permission | Allows |
+| --- | --- |
+| `workflows.view` | Read workflow metadata and state. |
+| `workflows.run` | Start permitted workflow runs. |
+| `workflows.approve` | Participate in configured publication approval. |
+| `audit.view` | Read authorised audit history and feeds. |
+
+Built-in owner, administrator, developer, operator, and viewer bundles remain available. Custom roles do not bypass the concrete workspace and environment checks applied to every API operation.
+
+## SSO connections
+
+An owner can add an OIDC or SAML connection with:
+
+- a display name;
+- issuer or metadata URL;
+- client or entity identifier; and
+- the verified domains associated with the connection.
+
+New connections are created disabled so their metadata can be reviewed before they affect sign-in. Enabling or changing organisation authentication can require a fresh passkey or multi-factor session.
+
+## SCIM credentials
+
+SCIM credentials allow an identity provider to provision users and groups. Choose a descriptive name and an expiry of 30, 90, 180, or 365 days.
+
+<Warning>
+  The credential value is displayed once. Copy it directly into the identity provider's secret store, then leave the account page. Revocation takes effect immediately.
+</Warning>
+
+## Audit stream
+
+The expanded organisation controls expose the workspace NDJSON audit endpoint:
+
+```text
+/v1/workspaces/{workspaceId}/audit/stream
+```
+
+Administrative changes include the actor, resource, action, time, bounded metadata, and request correlation ID. See [Audit history](/cloud/audit-history) for retention and event coverage.
+

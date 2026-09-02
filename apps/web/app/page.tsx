@@ -1,11 +1,10 @@
 import {
   ArrowRight,
-  Check,
   CircleAlert,
+  Cloud,
   CreditCard,
   Download,
   KeyRound,
-  MonitorSmartphone,
   Plus,
   Server,
   ShieldCheck,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { authenticatedClient } from "../lib/auth";
+import "./overview.css";
 
 export const dynamic = "force-dynamic";
 
@@ -29,28 +29,30 @@ export default async function Home() {
     );
   }
 
-  const [profileResult, organisationsResult, commerceResult, sessionsResult, tokensResult] = await Promise.allSettled([
+  const [profileResult, organisationsResult, commerceResult, sessionsResult, tokensResult, walletResult] = await Promise.allSettled([
     api.getAccountProfile(),
     api.listAccountOrganisations(),
     api.getProductAccount(),
     api.listAccountSessions(),
     api.listPersonalAccessTokens(),
+    api.getAccountWallet(),
   ]);
   const profile = profileResult.status === "fulfilled" ? profileResult.value.data : null;
   const organisations = organisationsResult.status === "fulfilled" ? organisationsResult.value.data.items : [];
   const commerce = commerceResult.status === "fulfilled" ? commerceResult.value.data : null;
   const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value.data.items : [];
   const tokens = tokensResult.status === "fulfilled" ? tokensResult.value.data.items : [];
+  const wallet = walletResult.status === "fulfilled" ? walletResult.value.data : null;
   const subscription = commerce?.subscriptions[0];
   const licence = commerce?.licences[0];
-  const workspaceCount = organisations.flatMap((organisation) => organisation.workspaces).length;
+  const workspaces = organisations.flatMap((organisation) => organisation.workspaces.map((workspace) => ({ organisation, workspace })));
+  const workspaceCount = workspaces.length;
   const activeTokens = tokens.filter((token) => !token.revokedAt).length;
 
   return (
     <main className="portal-page account-home">
       <header className="account-home-hero">
         <div>
-          <p>ACCOUNT</p>
           <h1>Overview</h1>
           <span>{profile ? `${profile.displayName} · ${profile.email}` : "Your sndbox account"}</span>
         </div>
@@ -60,63 +62,65 @@ export default async function Home() {
         </div>
       </header>
 
-      <section className="account-summary-grid" aria-label="Account summary">
-        <Link href="/billing">
-          <span><CreditCard aria-hidden="true" /> Plan</span>
-          <strong>{subscription?.planName ?? "Local"}</strong>
-          <small>{subscription?.status ?? "No subscription required"}</small>
-        </Link>
-        <Link href="/organisations">
-          <span><Users aria-hidden="true" /> Workspaces</span>
-          <strong>{workspaceCount}</strong>
-          <small>Across {organisations.length} organisation{organisations.length === 1 ? "" : "s"}</small>
-        </Link>
-        <Link href="/security">
-          <span><MonitorSmartphone aria-hidden="true" /> Sessions</span>
-          <strong>{sessions.length}</strong>
-          <small>{sessions.length === 1 ? "Signed-in device" : "Signed-in devices"}</small>
-        </Link>
-        <Link href="/security">
-          <span><KeyRound aria-hidden="true" /> API keys</span>
-          <strong>{activeTokens}</strong>
-          <small>Active personal token{activeTokens === 1 ? "" : "s"}</small>
-        </Link>
+      <section className="overview-lead-grid">
+        <article className="overview-cloud-card">
+          <header>
+            <div><span className="overview-card-icon"><Cloud aria-hidden="true" /></span><span><small>CLOUD BALANCE</small><strong>Hosted execution</strong></span></div>
+            <Link href="/billing">Billing <ArrowRight aria-hidden="true" /></Link>
+          </header>
+          <strong className="overview-balance">{formatMicros(wallet?.balanceMicros ?? 0)}</strong>
+          <p>{wallet && wallet.balanceMicros > 0 ? `${formatRunway(wallet.balanceMicros, wallet.rates.hostedRunnerMicrosPerMinute)} of hosted runner time at the current rate.` : "Add credit before starting a managed cloud run."}</p>
+          <footer>
+            <Link href="/billing" className="portal-primary">Add credit</Link>
+            <Link href="/usage" className="portal-secondary">View usage</Link>
+            <span>Local and self-hosted execution stays free.</span>
+          </footer>
+        </article>
+
+        <aside className="overview-account-card">
+          <div className="overview-plan">
+            <small>CURRENT PLAN</small>
+            <strong>{subscription?.planName ?? "Local"}</strong>
+          </div>
+          <dl>
+            <div><dt>WORKSPACES</dt><dd>{workspaceCount}</dd></div>
+            <div><dt>SESSIONS</dt><dd>{sessions.length}</dd></div>
+            <div><dt>API KEYS</dt><dd>{activeTokens}</dd></div>
+          </dl>
+          <footer>
+            <ShieldCheck aria-hidden="true" />
+            <span><strong>{profile?.email ?? "Authenticated account"}</strong><small>{licence ? `${licence.devices} registered device${licence.devices === 1 ? "" : "s"}` : "Local licence"}</small></span>
+            <Link href="/settings" aria-label="View account settings"><ArrowRight aria-hidden="true" /></Link>
+          </footer>
+        </aside>
       </section>
 
-      <section className="home-main-grid">
-        <div className="home-focus">
-          <header>
-            <div><small>SHORTCUTS</small><h2>Common tasks</h2></div>
-          </header>
-          <div className="home-action-list">
-            <Link href="/operations">
-              <span className="action-icon"><Server aria-hidden="true" /></span>
-              <span><strong>Runner operations</strong><small>Pair Linux hosts and manage runner availability.</small></span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link href="/security">
-              <span className="action-icon"><KeyRound aria-hidden="true" /></span>
-              <span><strong>API keys</strong><small>Create and revoke workspace-scoped credentials.</small></span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-            <Link href="/billing">
-              <span className="action-icon"><CreditCard aria-hidden="true" /></span>
-              <span><strong>Plan & billing</strong><small>Review your plan, renewal and available options.</small></span>
-              <ArrowRight aria-hidden="true" />
-            </Link>
-          </div>
-        </div>
-
-        <aside className="account-health">
-          <header><small>ACCOUNT STATUS</small><span className="health-badge"><Check /> Healthy</span></header>
+      <section className="overview-detail-grid">
+        <section className="overview-workspaces">
+          <header><div><h2>Where work runs</h2></div><Link href="/organisations">Manage <ArrowRight aria-hidden="true" /></Link></header>
           <div>
-            <span><ShieldCheck aria-hidden="true" /><span><strong>Identity provider</strong><small>{profile?.email ?? "Authenticated account"}</small></span></span>
-            <span><Check aria-hidden="true" /><span><strong>Local execution</strong><small>Unmetered</small></span></span>
-            <span><Check aria-hidden="true" /><span><strong>Licence</strong><small>{licence ? `${licence.devices} registered device${licence.devices === 1 ? "" : "s"}` : "Local access"}</small></span></span>
+            {workspaces.slice(0, 3).map(({ organisation, workspace }) => <Link href={`/organisations?workspaceId=${workspace.id}`} key={workspace.id}>
+              <span className="overview-row-icon"><Users aria-hidden="true" /></span>
+              <span><strong>{workspace.name}</strong><small>{organisation.name} · {sentenceCase(workspace.role)}</small></span>
+              <ArrowRight aria-hidden="true" />
+            </Link>)}
+            {!workspaces.length && <div className="overview-workspace-empty"><strong>No workspaces yet</strong><p>Create one to scope runners, environments and access.</p><Link href="/organisations" className="portal-primary">Create workspace</Link></div>}
           </div>
-          <Link href="/settings">View account settings <ArrowRight /></Link>
+        </section>
+
+        <aside className="overview-actions">
+          <header><div><h2>Start here</h2></div></header>
+          <nav aria-label="Overview actions">
+            <Link href="/operations"><Server aria-hidden="true" /><span><strong>Runner operations</strong><small>Pair and manage Linux hosts</small></span><ArrowRight aria-hidden="true" /></Link>
+            <Link href="/security"><KeyRound aria-hidden="true" /><span><strong>Security & API</strong><small>Sessions, keys and access</small></span><ArrowRight aria-hidden="true" /></Link>
+            <Link href="/billing"><CreditCard aria-hidden="true" /><span><strong>Plan & billing</strong><small>Credit, rates and plan</small></span><ArrowRight aria-hidden="true" /></Link>
+          </nav>
         </aside>
       </section>
     </main>
   );
 }
+
+function formatMicros(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value / 1_000_000); }
+function formatRunway(balance: number, rate: number) { const minutes = Math.floor(balance / rate), hours = Math.floor(minutes / 60), remainder = minutes % 60; return hours ? `${hours}h ${remainder}m` : `${minutes}m`; }
+function sentenceCase(value: string) { return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " "); }

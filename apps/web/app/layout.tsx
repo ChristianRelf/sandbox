@@ -24,7 +24,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SndboxMark size={30} />
             <strong>sndbox</strong>
           </Link>
-          <i>Account</i>
           <nav className="portal-destinations" aria-label="sndbox destinations">
             <a href={brand.domains.marketing}>Product</a>
             <a href={brand.domains.docs}>Docs <ArrowUpRight aria-hidden="true" size={12} /></a>
@@ -37,10 +36,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         <aside className="portal-sidebar">
-          <div className="portal-sidebar-intro">
-            <strong>Account</strong>
-            <span>Workspace, plan and security</span>
-          </div>
           <PortalNavigation />
           <footer>
             <div><span>Local execution</span><strong>Unmetered</strong></div>

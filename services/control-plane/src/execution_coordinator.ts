@@ -11,6 +11,7 @@ import {
   type ExecutionLease,
   type ExecutionRecovery,
   type ExecutionTransition,
+  type ExecutionTarget,
   type RunnerIdentity,
   type RunnerRequirements
 } from "@sandbox/contracts";
@@ -50,6 +51,7 @@ export interface PublicRunContext {
   pluginVersions: unknown[];
   connectionReferences: string[];
   requirements: RunnerRequirements;
+  targetType: ExecutionTarget;
 }
 
 export interface PublicRunRecord {
@@ -128,9 +130,9 @@ export class PostgresExecutionCoordinator {
   }
 
   async resolvePublicRunDeployment(workflowId:string,deploymentId:string):Promise<PublicRunContext|null>{
-    const result=await this.pool.query<{workspace_id:string;environment_id:string;deployment_id:string;workflow_id:string;workflow_revision_id:string;runner_pool_id:string|null;permission_snapshot_id:string;required_plugins:unknown[];required_connection_ids:string[];requirements:unknown}>(
+    const result=await this.pool.query<{workspace_id:string;environment_id:string;deployment_id:string;workflow_id:string;workflow_revision_id:string;runner_pool_id:string|null;permission_snapshot_id:string;required_plugins:unknown[];required_connection_ids:string[];requirements:unknown;target_type:ExecutionTarget}>(
       `SELECT deployment.workspace_id,deployment.environment_id,deployment.id AS deployment_id,deployment.workflow_id,deployment.workflow_revision_id,
-              deployment.runner_pool_id,deployment.permission_snapshot_id,deployment.required_plugins,deployment.required_connection_ids,
+              deployment.runner_pool_id,deployment.permission_snapshot_id,deployment.required_plugins,deployment.required_connection_ids,deployment.target_type,
               deployment.validation_result->'requirements' AS requirements
          FROM workflow_deployments deployment
          JOIN workflow_permission_snapshots snapshot ON snapshot.id=deployment.permission_snapshot_id AND snapshot.revoked_at IS NULL
@@ -139,7 +141,7 @@ export class PostgresExecutionCoordinator {
     if(!result.rowCount)return null;
     const row=result.rows[0];
     if(!row.requirements)throw new DomainError("deployment_routing_requirements_missing","The deployment predates durable routing requirements and must be redeployed before it can run through the public API.",409);
-    return{workspaceId:row.workspace_id,environmentId:row.environment_id,deploymentId:row.deployment_id,workflowId:row.workflow_id,workflowRevisionId:row.workflow_revision_id,runnerPoolId:row.runner_pool_id,permissionSnapshotId:row.permission_snapshot_id,pluginVersions:row.required_plugins,connectionReferences:row.required_connection_ids,requirements:runnerRequirementsSchema.parse(row.requirements)};
+    return{workspaceId:row.workspace_id,environmentId:row.environment_id,deploymentId:row.deployment_id,workflowId:row.workflow_id,workflowRevisionId:row.workflow_revision_id,runnerPoolId:row.runner_pool_id,permissionSnapshotId:row.permission_snapshot_id,pluginVersions:row.required_plugins,connectionReferences:row.required_connection_ids,requirements:runnerRequirementsSchema.parse(row.requirements),targetType:row.target_type};
   }
 
   async getPublicRun(runId:string):Promise<PublicRunRecord|null>{

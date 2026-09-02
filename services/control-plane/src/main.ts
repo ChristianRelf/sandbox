@@ -21,6 +21,7 @@ import { PostgresPrivacyService } from "./privacy.js";
 import { PostgresProductCommerce } from "./product_commerce.js";
 import { PostgresExecutionCoordinator } from "./execution_coordinator.js";
 import { DiscordBugReportSink } from "./bug_reports.js";
+import { PostgresPrepaidBilling } from "./prepaid.js";
 
 const required = (name: string): string => {
   const value = process.env[name];
@@ -77,6 +78,7 @@ const recurringTasks=new RecurringTaskMonitor();
 const recurringTaskMaximumAgeMs=credentialExpirySweepIntervalMs*2;
 const metrics=new ServiceMetrics();
 const usageLedger=new PostgresUsageLedger(pool);
+const prepaidBilling=new PostgresPrepaidBilling(pool);
 const readiness=new ReadinessService([
   {name:"database",check:async()=>{await pool.query("SELECT 1");}},
   recurringTasks.probe("credential-expiry-notifications",recurringTaskMaximumAgeMs),
@@ -102,6 +104,7 @@ const server = await createServer({
   idempotencyStore: new PostgresApiIdempotencyStore(pool,idempotencyProtector),
   usageLedger,
   usageReader:usageLedger,
+  prepaidBilling,
   usageProducerAuthenticator: usageProducerConfiguration?new HmacUsageProducerAuthenticator(parseUsageProducerSecrets(usageProducerConfiguration[0])):undefined,
   executionCoordinator: new PostgresExecutionCoordinator(pool),
   bugReports: bugReportConfiguration?new DiscordBugReportSink(bugReportConfiguration[0]):undefined,

@@ -15,6 +15,13 @@ let runners=[
   {runnerId:"44444444-4444-4444-8444-444444444444",displayName:"Backup ARM",workspaceId,operatingSystem:"linux",architecture:"aarch64",applicationVersion:"0.7.5-beta.1",protocolVersion:1,status:"offline",currentWorkload:0,tags:["backup"],pairedAt:now,lastSeenAt:null}
 ];
 let tokens=[{id:"55555555-5555-4555-8555-555555555555",name:"CLI access",prefix:"sbx_dev",kind:"personal",scopes:["workflows.view"],organisationId,workspaceIds:[workspaceId],environmentIds:[],createdAt:now,expiresAt:later,lastUsedAt:now,revokedAt:null}];
+let walletBalanceMicros=12_450_000;
+let walletEntries=[
+  {id:"aaaaaaaa-0000-4000-8000-000000000001",kind:"top_up",amountMicros:20_000_000,balanceAfterMicros:20_000_000,description:"Cloud credit top-up · $20.00",createdAt:new Date(Date.now()-8*86_400_000).toISOString()},
+  {id:"aaaaaaaa-0000-4000-8000-000000000002",kind:"usage",amountMicros:-4_930_000,balanceAfterMicros:15_070_000,description:"Cloud usage · 7c12a3de",createdAt:new Date(Date.now()-3*86_400_000).toISOString()},
+  {id:"aaaaaaaa-0000-4000-8000-000000000003",kind:"usage",amountMicros:-2_620_000,balanceAfterMicros:12_450_000,description:"Cloud usage · 31fb82c0",createdAt:new Date(Date.now()-86_400_000).toISOString()},
+];
+const walletRates={currency:"usd",minimumComputeSeconds:60,hostedRunnerMicrosPerMinute:5_000,managedBrowserMicrosPerMinute:10_000,networkEgressMicrosPerGib:200_000,artifactStorageMicrosPerGibMonth:50_000};
 
 function json(response,status,data){response.writeHead(status,{"content-type":"application/json","cache-control":"no-store"});response.end(JSON.stringify(data));}
 function usageSummary(){
@@ -39,6 +46,12 @@ createServer((request,response)=>{
     if(method==="GET"&&path==="/v1/account/profile")return json(response,200,profile);
     if(method==="GET"&&path==="/v1/account/organisations")return json(response,200,{items:[organisation]});
     if(method==="GET"&&path==="/v1/account/commerce")return json(response,200,{subscriptions:[{id:"sub_dev",ownerType:"personal",ownerId:accountId,planId:"team",planName:"Team",status:"active",currentPeriodEndsAt:later,cancelAtPeriodEnd:false}],licences:[{id:"lic_dev",ownerType:"personal",ownerId:accountId,planId:"team",status:"active",seatAllowance:5,seatsAssigned:2,devices:3,offlineGraceUntil:later}]});
+    if(method==="GET"&&path==="/v1/account/wallet")return json(response,200,{currency:"usd",balanceMicros:walletBalanceMicros,status:walletBalanceMicros<=0?"empty":walletBalanceMicros<1_000_000?"low":"funded",rates:walletRates,recentEntries:walletEntries});
+    if(method==="POST"&&path==="/v1/account/wallet/top-ups"){
+      const amountCents=Number(input.amountCents);if(!Number.isInteger(amountCents)||amountCents<500||amountCents>50_000)return json(response,400,{error:{code:"topup_amount_invalid",message:"Choose a top-up between $5 and $500."}});
+      const amountMicros=amountCents*10_000;walletBalanceMicros+=amountMicros;walletEntries=[{id:randomUUID(),kind:"top_up",amountMicros,balanceAfterMicros:walletBalanceMicros,description:`Cloud credit top-up · $${(amountCents/100).toFixed(2)}`,createdAt:new Date().toISOString()},...walletEntries];
+      return json(response,200,{checkout:{checkoutId:`cs_local_${randomBytes(8).toString("hex")}`,url:"http://localhost:3000/billing?topup=success",expiresAt:later}});
+    }
     if(method==="GET"&&path==="/v1/account/sessions")return json(response,200,{items:[{id:sessionId,deviceName:"Chrome on Windows",createdAt:now,lastSeenAt:now,expiresAt:later,current:true},{id:"66666666-6666-4666-8666-666666666666",deviceName:"Firefox on Linux",createdAt:now,lastSeenAt:now,expiresAt:later,current:false}]});
     if(method==="GET"&&path==="/v1/personal-access-tokens")return json(response,200,{items:tokens});
     if(method==="POST"&&path==="/v1/personal-access-tokens"){

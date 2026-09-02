@@ -1,3 +1,70 @@
+.billing-page .page-head > a { align-self: center; display: inline-flex; align-items: center; gap: 6px; }
+.billing-page .page-head > a svg { width: 13px; }
+
+.billing-notice { min-height: 54px; margin-bottom: 12px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); display: flex; align-items: center; gap: 10px; }
+.billing-notice > svg { width: 15px; color: var(--muted); }
+.billing-notice.success > svg { color: var(--green); }
+.billing-notice.error > svg { color: #e78d8d; }
+.billing-notice > div { display: grid; gap: 3px; }
+.billing-notice strong { font-size: 12px; }
+.billing-notice p { margin: 0; color: var(--muted); font-size: 10px; }
+
+.billing-overview-grid { display: block; }
+.wallet-card { width: 100%; min-height: 290px; padding: 22px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); display: flex; flex-direction: column; }
+.wallet-card > header { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 11px; font-weight: 600; }
+.wallet-balance { margin: 24px 0 8px; font-size: clamp(54px,8vw,86px); line-height: .95; letter-spacing: -.065em; font-variant-numeric: tabular-nums; }
+.wallet-card > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.wallet-card > small { margin-top: 9px; color: var(--dim); font-size: 10px; }
+.topup-form { margin-top: auto; padding-top: 28px; display: grid; grid-template-columns: minmax(220px,300px) 180px; align-items: end; gap: 10px; }
+.topup-form label { display: grid; gap: 8px; color: var(--muted); font-size: 10px; }
+.money-input { height: 48px; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); display: flex; align-items: center; }
+.money-input:focus-within { border-color: var(--line-strong); }
+.money-input b { padding-left: 14px; color: var(--dim); font: 14px ui-monospace,SFMono-Regular,Consolas,monospace; }
+.money-input input { width: 100%; height: 100%; padding: 0 14px 0 6px; border: 0; outline: 0; background: transparent; color: var(--text); font: 16px ui-monospace,SFMono-Regular,Consolas,monospace; }
+.topup-form .portal-primary { height: 48px; padding-inline: 22px; font-size: 11px; }
+
+.billing-section-head { margin: 34px 0 12px; }
+.billing-section-head h2 { margin: 0 0 5px; font-size: 19px; letter-spacing: -.025em; }
+.billing-section-head p { margin: 0; color: var(--muted); font-size: 11px; }
+.rate-section-head { display: flex; align-items: end; justify-content: space-between; gap: 32px; }
+.rate-section-head h2 { margin-bottom: 6px; font-size: 21px; letter-spacing: -.025em; }
+.rate-section-head p { font-size: 10px; }
+.rate-card-list { border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
+.rate-card-list > header,.rate-card-list article { display: grid; grid-template-columns: minmax(250px,.75fr) minmax(330px,1.25fr) minmax(150px,.55fr); align-items: center; column-gap: 24px; }
+.rate-card-list > header { min-height: 44px; padding: 0 18px; border-bottom: 1px solid var(--line); background: color-mix(in srgb,var(--raised) 50%,transparent); color: var(--dim); font-size: 10px; font-weight: 650; letter-spacing: .07em; }
+.rate-card-list article { min-height: 82px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.rate-card-list article:last-child { border-bottom: 0; }
+.rate-resource { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.rate-resource > span { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); display: grid; place-items: center; flex: none; }
+.rate-resource > span svg { width: 15px; color: var(--muted); }
+.rate-resource > div { min-width: 0; display: grid; gap: 4px; }
+.rate-resource strong { font-size: 12px; }
+.rate-resource small { color: var(--dim); font-size: 10px; }
+.rate-card-list article > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.rate-price { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 4px; }
+.rate-price b { color: var(--text); font: 18px ui-monospace,SFMono-Regular,Consolas,monospace; font-variant-numeric: tabular-nums; }
+.rate-price > span { color: var(--muted); font: 10px ui-monospace,SFMono-Regular,Consolas,monospace; }
+.rate-price small { grid-column: 1 / -1; margin-top: 5px; color: var(--dim); font: 10px ui-monospace,SFMono-Regular,Consolas,monospace; }
+
+.billing-history-grid > .billing-section-head { margin-bottom: 10px; }
+.wallet-history { border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
+.wallet-history article { min-height: 58px; padding: 10px 13px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.wallet-history article:last-child { border-bottom: 0; }
+.wallet-entry-icon { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); display: grid; place-items: center; }
+.wallet-entry-icon svg { width: 12px; }
+.wallet-entry-icon.credit { color: var(--green); }
+.wallet-entry-icon.debit { color: var(--muted); }
+.wallet-history article > div { display: grid; gap: 4px; }
+.wallet-history article > div strong { font-size: 11px; }
+.wallet-history article > div small { color: var(--dim); font-size: 10px; }
+.wallet-history article > span:last-child { font: 16px ui-monospace,SFMono-Regular,Consolas,monospace; font-variant-numeric: tabular-nums; }
+.wallet-history article > span:last-child.credit { color: var(--green); }
+.wallet-history article > span:last-child.debit { color: var(--muted); }
+.wallet-empty { min-height: 150px; padding: 24px; display: grid; place-items: center; align-content: center; gap: 7px; text-align: center; }
+.wallet-empty svg { width: 18px; color: var(--dim); }
+.wallet-empty strong { font-size: 12px; }
+.wallet-empty p { margin: 0; color: var(--muted); font-size: 10px; }
+
 .current-plan-card {
   min-height: 82px;
   padding: 15px;
@@ -10,13 +77,13 @@
   gap: 12px;
 }
 .current-plan-card > div { display: grid; gap: 3px; }
-.current-plan-card small, .plan-section-head small { color: var(--dim); font-size: 8px; font-weight: 600; letter-spacing: .07em; }
-.current-plan-card strong { font-size: 15px; letter-spacing: -.02em; }
-.current-plan-card p { margin: 0; color: var(--muted); font-size: 9px; }
+.current-plan-card small { color: var(--dim); font-size: 10px; font-weight: 600; letter-spacing: .07em; }
+.current-plan-card strong { font-size: 18px; letter-spacing: -.02em; }
+.current-plan-card p { margin: 0; color: var(--muted); font-size: 11px; }
 
 .plan-section-head { margin: 30px 0 10px; display: flex; align-items: end; justify-content: space-between; gap: 20px; }
-.plan-section-head h2 { margin: 6px 0 0; font-size: 15px; letter-spacing: -.015em; }
-.plan-section-head > a { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 9px; }
+.plan-section-head h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
+.plan-section-head > a { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: 10px; }
 .plan-section-head > a:hover { color: var(--text); }
 
 .plan-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -30,13 +97,13 @@
   flex-direction: column;
 }
 .plan-card-grid article.selected { border-color: var(--line-strong); box-shadow: inset 2px 0 var(--accent); }
-.plan-card-grid header { min-height: 20px; display: flex; align-items: center; justify-content: space-between; color: var(--dim); font-size: 8px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+.plan-card-grid header { min-height: 20px; display: flex; align-items: center; justify-content: space-between; color: var(--dim); font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .plan-card-grid header small { padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--raised); color: var(--muted); letter-spacing: 0; text-transform: none; }
 .plan-card-grid h2 { margin: 17px 0 6px; font-size: 17px; letter-spacing: -.025em; }
-.plan-card-grid article > p { min-height: 44px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.plan-card-grid article > p { min-height: 44px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .plan-price { margin: 16px 0; font-size: 15px; }
 .plan-card-grid ul { margin: 0 0 20px; padding: 14px 0 0; border-top: 1px solid var(--line); list-style: none; display: grid; gap: 9px; }
-.plan-card-grid li { color: var(--muted); display: flex; align-items: flex-start; gap: 7px; font-size: 9px; line-height: 1.4; }
+.plan-card-grid li { color: var(--muted); display: flex; align-items: flex-start; gap: 7px; font-size: 11px; line-height: 1.4; }
 .plan-card-grid li svg { width: 12px; height: 12px; color: var(--green); flex: none; }
 .plan-card-grid form, .plan-card-grid article > .portal-primary, .plan-card-grid article > .portal-secondary { width: 100%; margin-top: auto; }
 .plan-card-grid form .portal-primary, .plan-card-grid article > .portal-primary, .plan-card-grid article > .portal-secondary { width: 100%; }
@@ -44,15 +111,25 @@
 .billing-empty { min-height: 220px; padding: 36px; border: 1px dashed var(--line-strong); border-radius: 8px; display: grid; place-items: center; text-align: center; }
 .billing-empty > svg { color: var(--accent); }
 .billing-empty h2 { margin: 12px 0 5px; font-size: 15px; }
-.billing-empty p { max-width: 520px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
-.billing-footnote { margin: 18px 0 0; color: var(--dim); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 8px; }
+.billing-empty p { max-width: 520px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.billing-footnote { margin: 18px 0 0; color: var(--dim); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 10px; }
 .billing-footnote svg { width: 12px; }
 
 @media (max-width: 980px) {
+  .wallet-card { min-height: 280px; }
+  .rate-card-list > header,.rate-card-list article { grid-template-columns: minmax(220px,1fr) minmax(190px,.9fr) minmax(130px,.55fr); column-gap: 16px; }
   .plan-card-grid { grid-template-columns: 1fr; }
   .plan-card-grid article { min-height: auto; }
 }
 @media (max-width: 600px) {
+  .billing-page .page-head > a { display: none; }
+  .wallet-card { padding: 17px; }
+  .topup-form { grid-template-columns: 1fr; }
+  .rate-section-head { align-items: start; flex-direction: column; gap: 16px; }
+  .rate-card-list > header { display: none; }
+  .rate-card-list article { min-height: 0; padding: 16px; grid-template-columns: 1fr auto; gap: 12px 18px; }
+  .rate-card-list article > p { grid-column: 1 / -1; grid-row: 2; padding-left: 48px; }
+  .rate-price { justify-self: end; text-align: right; }
   .current-plan-card { grid-template-columns: auto 1fr; }
   .current-plan-card > .health-badge { grid-column: 2; justify-self: start; }
 }

@@ -137,6 +137,69 @@ export async function revokePersonalTokenAction(formData: FormData) {
   revalidatePath("/security");
 }
 
+export interface AccountMaintenanceState {
+  error: string | null;
+  message: string | null;
+}
+
+export async function revokeOtherSessionsAction(
+  _state: AccountMaintenanceState,
+  _formData: FormData,
+): Promise<AccountMaintenanceState> {
+  try {
+    const api = await client();
+    const sessions = (await api.listAccountSessions()).data.items.filter(
+      (session) => !session.current,
+    );
+    await Promise.all(
+      sessions.map((session) => api.revokeAccountSession(session.id)),
+    );
+    revalidatePath("/security");
+    revalidatePath("/settings");
+    return {
+      error: null,
+      message: sessions.length
+        ? `${sessions.length} other ${sessions.length === 1 ? "session" : "sessions"} signed out.`
+        : "No other signed-in devices were found.",
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Other sessions could not be signed out.",
+      message: null,
+    };
+  }
+}
+
+export async function revokeAllPersonalTokensAction(
+  _state: AccountMaintenanceState,
+  _formData: FormData,
+): Promise<AccountMaintenanceState> {
+  try {
+    const api = await client();
+    const tokens = (await api.listPersonalAccessTokens()).data.items.filter(
+      (token) => !token.revokedAt,
+    );
+    await Promise.all(
+      tokens.map((token) =>
+        api.revokePersonalAccessToken(token.id, "Revoked from account danger zone"),
+      ),
+    );
+    revalidatePath("/security");
+    revalidatePath("/settings");
+    return {
+      error: null,
+      message: tokens.length
+        ? `${tokens.length} API ${tokens.length === 1 ? "key" : "keys"} revoked.`
+        : "No active API keys were found.",
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "API keys could not be revoked.",
+      message: null,
+    };
+  }
+}
+
 export interface RunnerPairingActionState {
   token: string | null;
   prefix: string | null;

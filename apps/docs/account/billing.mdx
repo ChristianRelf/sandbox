@@ -1,0 +1,44 @@
+---
+title: "Billing and cloud credit"
+description: "Add prepaid credit, understand the live rate card, and review settled cloud usage."
+icon: "wallet-cards"
+---
+
+Managed cloud resources use prepaid cloud credit. Add an amount between **$5 and $500** on **Plan & billing**; checkout is handled by the configured payment provider and card details do not pass through sndbox servers.
+
+No subscription is required to add cloud credit. A subscription or plan can still provide separate entitlements or included usage.
+
+## Live rate card
+
+The Billing page renders the rates returned for the account. The current rate card is:
+
+| Resource | Metered quantity | Rate |
+| --- | --- | ---: |
+| Hosted runner | Active managed compute, 1-minute minimum | **$0.005/minute** ($0.30/hour) |
+| Managed browser | Active isolated browser time, 1-minute minimum | **$0.01/minute** ($0.60/hour) |
+| Network egress | Outbound data transferred | **$0.20/GiB** |
+| Artifact storage | Retained data over time | **$0.05/GiB-month** |
+
+Use the rate card shown in the account for a purchase decision. Product configuration is authoritative, so reviewed rates can change without a desktop-app release.
+
+## What draws from the balance
+
+- Managed hosted runner time.
+- Managed browser worker time.
+- Network egress from managed infrastructure.
+- Retained artifact storage.
+
+Local desktop runs and self-hosted Linux runners stay unmetered. Credentials and API tokens are also not metered.
+
+## Balance and history
+
+The balance card estimates remaining runner and browser time at the current rates. It is a runway estimate, not a reservation: network, storage, and concurrent managed activity can change the actual duration.
+
+**Credit history** records top-ups, refunds, adjustments, and settled cloud usage. Usage deductions are based on matched reconciled ledger evidence. A pending or uncertain event is not presented as settled usage.
+
+<Note>
+  sndbox bills managed infrastructure, not workflow count. A workflow that waits without holding an active managed resource does not automatically incur compute for its entire wall-clock lifetime.
+</Note>
+
+See [Usage](/account/usage) for the meter units and 30-day graph.
+

@@ -1,0 +1,59 @@
+---
+title: "Security and account settings"
+description: "Manage sessions, personal API keys, exports, sign-out, bulk revocation, and account deletion."
+icon: "shield-check"
+---
+
+Use **Security & API** for active access and **Account settings** for identity, export, sign-out, and account lifecycle controls.
+
+## Signed-in devices
+
+The device list marks the current browser session and shows when every session was last seen. Revoke any session you do not recognise. Revocation ends that session without affecting the current browser or personal API keys.
+
+## Create a personal API key
+
+Select **New API key**, then provide:
+
+1. a descriptive key name;
+2. the one workspace the key can access;
+3. the minimum required permissions; and
+4. an expiry of 7, 30, or 90 days.
+
+| Permission | Allows |
+| --- | --- |
+| **View workflows** | Read workflow metadata and status. |
+| **Run workflows** | Start runs in the selected workspace. |
+| **View run summaries** | Inspect outcomes without detailed payloads. |
+
+The key is displayed once after creation. Copy it directly into the tool's secret store and do not place it in source code, screenshots, issue reports, or command output. Revoking a key takes effect immediately.
+
+For bearer-token request syntax, see [API authentication](/developers/authentication).
+
+## Account settings
+
+The identity panel shows the display name, verified email, account ID, and current session ID returned by the identity provider. sndbox does not store a separate account password.
+
+The action panel provides direct access to:
+
+- Security & API;
+- a machine-readable account export; and
+- sign-out for the current browser only.
+
+Account exports omit plaintext credentials, token hashes, protected-variable ciphertext, device keys, and raw webhook payloads. See [Privacy and retention](/cloud/privacy-and-retention) for the complete export schema and retention table.
+
+## Danger Zone
+
+The Danger Zone contains actions that remove access immediately:
+
+| Action | Effect |
+| --- | --- |
+| **Sign out other devices** | Revokes every account session except the browser currently in use. |
+| **Revoke all API keys** | Revokes every active personal API key. |
+| **Delete account** | Deletes or pseudonymizes personal account data according to retention and ownership rules. |
+
+Account deletion requires typing `DELETE` and can require fresh passkey or multi-factor authentication. It is refused while the account owns an organisation or is the sole human owner of an active service account. Required workspace audit and financial evidence can remain for their published retention periods.
+
+<Warning>
+  Export any required account data and transfer organisation ownership before deleting the account. Deletion is not a substitute for revoking a single compromised session or API key.
+</Warning>
+

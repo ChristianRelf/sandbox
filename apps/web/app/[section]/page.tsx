@@ -35,7 +35,6 @@ import {
   Server,
   ShieldCheck,
   Trash2,
-  UserRound,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -61,6 +60,7 @@ import { PersonalTokenIssuer } from "../SecurityControls";
 import { AccountDangerZone } from "../AccountDangerZone";
 import { SubmitButton } from "../SubmitButton";
 import { RunnerPairing } from "../RunnerPairing";
+import "./workspace.css";
 
 export const dynamic = "force-dynamic";
 type Params = Promise<{ section: string }>;
@@ -118,14 +118,13 @@ export default async function Page({
   return (
     <main className="portal-page">
       <PageHead
-        eyebrow="ACCOUNT"
         title={page.title}
         description={page.description}
       />
       {section === "downloads" ? (
         <section className="resource-launch-card">
           <span className="settings-card-icon"><Download /></span>
-          <div><small>RELEASE CENTRE</small><h2>Get the right sndbox build</h2><p>The public download centre checks the live release manifest, then shows only published artifacts with their checksum and provenance.</p></div>
+          <div><h2>Get the right sndbox build</h2><p>The public download centre checks the live release manifest, then shows only published artifacts with their checksum and provenance.</p></div>
           <a className="portal-primary" href="https://sndbox.app/downloads">Open downloads <ArrowRight /></a>
         </section>
       ) : <section className="section-list">
@@ -133,7 +132,6 @@ export default async function Page({
           <h2>
             {section === "releases" ? "Current release" : "Release controls"}
           </h2>
-          <span>Verified product metadata</span>
         </header>
         {page.items.map((item) => (
           <article key={item}>
@@ -188,7 +186,7 @@ async function OperationsPage({
 
   return (
     <main className="portal-page operations-page">
-      <PageHead eyebrow="WORKSPACE" title="Runner operations" description="Pair and manage Linux runners for this workspace." />
+      <PageHead title="Runner operations" description="Pair and manage Linux runners for this workspace." />
       {workspace ? (
         <>
           <section className="workspace-switcher operations-switcher">
@@ -198,7 +196,7 @@ async function OperationsPage({
             </form>
           </section>
           <section className="operations-setup">
-            <div><small>SELF-HOSTED EXECUTION</small><h2>Add a Linux runner</h2><p>Create a one-time, workspace-scoped pairing token and finish setup on the Linux host.</p></div>
+            <div><h2>Add a Linux runner</h2><p>Create a one-time, workspace-scoped pairing token and finish setup on the Linux host.</p></div>
             <RunnerPairing organisations={organisations} selectedWorkspaceId={workspace.id} />
           </section>
           <section className="operations-grid operations-metrics">
@@ -207,7 +205,7 @@ async function OperationsPage({
             <Metric icon={<Server />} label="Runner pools" value={pools.length} />
             <Metric icon={<Cloud />} label="Environments" value={environments.length} />
           </section>
-          <section className="fleet-section-head"><div><small>FLEET</small><h2>Paired runners</h2></div><span>{runners.length} runner{runners.length === 1 ? "" : "s"}</span></section>
+          <section className="fleet-section-head"><div><h2>Paired runners</h2></div><span>{runners.length} runner{runners.length === 1 ? "" : "s"}</span></section>
           <section className="runner-fleet">
             {runners.map((runner) => {
               const nextStatus = runner.status === "online" || runner.status === "busy" ? "draining" : ["paused", "draining", "maintenance"].includes(runner.status) ? "offline" : null;
@@ -230,7 +228,7 @@ async function OperationsPage({
           <section className="operations-guidance"><ShieldCheck /><div><strong>Device verification</strong><p>Runner keys are generated locally. Verify the printed fingerprint before starting the service.</p></div><a href="https://docs.sndbox.app/execution/self-hosted-runner">Setup guide <ArrowRight /></a></section>
         </>
       ) : (
-        <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><small>WORKSPACE REQUIRED</small><h2>Create a workspace first</h2><p>Every runner belongs to a workspace so permissions, environments and audit history stay scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>
+        <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><h2>Create a workspace first</h2><p>Every runner belongs to a workspace so permissions, environments and audit history stay scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>
       )}
     </main>
   );
@@ -287,29 +285,11 @@ async function OrganisationsPage({
   const sso = value<{ items: SsoConnection[] }>(enterprise[1])?.items ?? [];
   const scim = value<{ items: ScimToken[] }>(enterprise[2])?.items ?? [];
   return (
-    <main className="portal-page">
+    <main className="portal-page workspace-page">
       <PageHead
-        eyebrow="TEAM OPERATIONS"
-        title="Organisations"
-        description="Manage real workspace membership, reviews, runners and deployments."
+        title="Workspaces"
+        description="Manage access, reviews and runtime state for each place your team works."
       />
-      <section className="workspace-switcher">
-        <form method="get">
-          <label>
-            Workspace
-            <select name="workspaceId" defaultValue={workspaceId}>
-              {organisations.flatMap((org) =>
-                org.workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
-                    {org.name} / {workspace.name} · {workspace.role}
-                  </option>
-                )),
-              )}
-            </select>
-          </label>
-          <button className="portal-primary">Open workspace</button>
-        </form>
-      </section>
       {!workspaceId ? (
         <section className="live-panel">
           <header>
@@ -343,22 +323,29 @@ async function OrganisationsPage({
         </section>
       ) : (
         <>
-          <section className="operations-grid">
-            <Metric icon={<Users />} label="Members" value={members.length} />
-            <Metric icon={<Server />} label="Runners" value={runners.length} />
-            <Metric
-              icon={<ShieldCheck />}
-              label="Pending reviews"
-              value={
-                approvals.filter((item) => item.status === "pending").length
-              }
-            />
-            <Metric
-              icon={<Cloud />}
-              label="Deployments"
-              value={deployments.length}
-            />
+          <section className="workspace-hero-card">
+            <header>
+              <div className="workspace-identity">
+                <span className="settings-card-icon"><Building2 /></span>
+                <div><small>{organisation?.name ?? "Organisation"}</small><h2>{selected.name}</h2><p>{selected.role} access</p></div>
+              </div>
+              <nav aria-label="Workspace shortcuts">
+                <Link href={`/operations?workspaceId=${workspaceId}`}>Operations <ArrowRight /></Link>
+                <Link href={`/usage?workspaceId=${workspaceId}`}>Usage <ArrowRight /></Link>
+              </nav>
+            </header>
+            <form method="get" className="workspace-picker">
+              <label><span>Workspace</span><select name="workspaceId" defaultValue={workspaceId}>{organisations.flatMap((org) => org.workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{org.name} / {workspace.name} · {workspace.role}</option>))}</select></label>
+              <button className="portal-secondary">Switch workspace</button>
+            </form>
+            <section className="workspace-metrics" aria-label="Workspace summary">
+              <Metric icon={<Users />} label="Members" value={members.length} />
+              <Metric icon={<Server />} label="Runners" value={runners.length} />
+              <Metric icon={<ShieldCheck />} label="Pending reviews" value={approvals.filter((item) => item.status === "pending").length} />
+              <Metric icon={<Cloud />} label="Deployments" value={deployments.length} />
+            </section>
           </section>
+          <section className="workspace-primary-grid">
           <section className="live-panel">
             <header>
               <div>
@@ -479,7 +466,8 @@ async function OrganisationsPage({
               )}
             </div>
           </section>
-          <section className="two-panel-grid">
+          </section>
+          <section className="two-panel-grid workspace-resource-grid">
             <DataPanel
               icon={<Server />}
               title="Runner pools"
@@ -513,23 +501,19 @@ async function OrganisationsPage({
             />
           </section>
           {organisation && (
-            <section className="enterprise-admin">
-              <header>
-                <p>ENTERPRISE IDENTITY</p>
-                <h2>Roles, SSO and SCIM</h2>
-                <span>
-                  Owner-only controls; mutations require a fresh passkey or
-                  multi-factor session where appropriate.
-                </span>
-              </header>
-              <div className="two-panel-grid">
-                <section className="live-panel">
+            <details className="workspace-enterprise">
+              <summary>
+                <div><h2>Roles, SSO and SCIM</h2><p>Owner-only controls protected by a fresh passkey or multi-factor session.</p></div>
+                <span aria-hidden="true"><ArrowRight /></span>
+              </summary>
+              <div className="workspace-enterprise-body"><div className="enterprise-control-stack">
+                <section className="live-panel enterprise-control enterprise-roles">
                   <header>
                     <div>
                       <Users />
                       <span>
                         <strong>Organisation roles</strong>
-                        <small>{roles.length} roles configured</small>
+                        <small>{roles.length} configured · reusable permission sets</small>
                       </span>
                     </div>
                   </header>
@@ -546,6 +530,7 @@ async function OrganisationsPage({
                         <span className="status-pill">{role.key}</span>
                       </article>
                     ))}
+                    {!roles.length && <EmptyRow text="No custom roles configured." />}
                   </div>
                   <form
                     action={createRoleAction}
@@ -607,13 +592,13 @@ async function OrganisationsPage({
                     <SubmitButton pendingLabel="Creating…">Create role</SubmitButton>
                   </form>
                 </section>
-                <section className="live-panel">
+                <section className="live-panel enterprise-control enterprise-sso">
                   <header>
                     <div>
                       <KeyRound />
                       <span>
                         <strong>SSO connections</strong>
-                        <small>OIDC or SAML configuration metadata</small>
+                        <small>Connect an OIDC or SAML identity provider</small>
                       </span>
                     </div>
                   </header>
@@ -678,13 +663,13 @@ async function OrganisationsPage({
                     <SubmitButton pendingLabel="Adding…">Add disabled connection</SubmitButton>
                   </form>
                 </section>
-                <section className="live-panel">
+                <section className="live-panel enterprise-control enterprise-scim">
                   <header>
                     <div>
                       <KeyRound />
                       <span>
                         <strong>SCIM credentials</strong>
-                        <small>Secret material is displayed once</small>
+                        <small>Credentials for automated user provisioning</small>
                       </span>
                     </div>
                   </header>
@@ -732,8 +717,8 @@ async function OrganisationsPage({
                   ]}
                   empty=""
                 />
-              </div>
-            </section>
+              </div></div>
+            </details>
           )}
         </>
       )}
@@ -755,20 +740,17 @@ async function SecurityPage({
   return (
     <main className="portal-page">
       <PageHead
-        eyebrow="ACCOUNT SECURITY"
         title="Security & API"
         description="Review signed-in devices and manage personal API keys."
       />
       <section className="security-identity-card">
         <div>
           <span className="settings-card-icon"><ShieldCheck /></span>
-          <span><small>SIGNED IN AS</small>
-          <strong>{profile.displayName}</strong>
+          <span><strong>{profile.displayName}</strong>
           <small>{profile.email}</small></span>
         </div>
-        <span className="health-badge"><CheckCircle2 /> Protected</span>
       </section>
-      <section className="security-section-head"><div><small>ACCESS</small><h2>Signed-in devices</h2><p>End any session you do not recognise. Your current session is marked below.</p></div></section>
+      <section className="security-section-head"><div><h2>Signed-in devices</h2><p>End any session you do not recognise. Your current session is marked below.</p></div></section>
       <section className="live-panel security-list-card">
         <div className="live-list">
           {sessions.map((session) => (
@@ -777,7 +759,7 @@ async function SecurityPage({
           {!sessions.length && <EmptyRow text="No active sessions were returned." />}
         </div>
       </section>
-      <section className="security-section-head token-heading"><div><small>DEVELOPER ACCESS</small><h2>Personal API keys</h2><p>Use the smallest scope and shortest expiry that will do the job.</p></div><PersonalTokenIssuer organisations={organisations} /></section>
+      <section className="security-section-head token-heading"><div><h2>Personal API keys</h2><p>Use the smallest scope and shortest expiry that will do the job.</p></div><PersonalTokenIssuer organisations={organisations} /></section>
       <section className="live-panel security-list-card">
         <div className="live-list">
           {tokens.map((token) => (
@@ -805,7 +787,6 @@ async function UsagePage({
   return (
     <main className="portal-page usage-page">
       <PageHead
-        eyebrow="WORKSPACE"
         title="Usage"
         description="Verified hosted infrastructure usage, separate from unmetered local execution."
       />
@@ -823,7 +804,7 @@ async function UsagePage({
           <Metric icon={<Database />} label="Artifact storage" value={formatStorageTime(meterQuantity(usage,"artifact_storage_byte_seconds"))} />
         </section>
         <section className="usage-chart-panel">
-          <header><div><small>METERED COMPUTE</small><h2>Hosted compute</h2><p>Runner and managed-browser time recorded each day.</p></div><span>Last 30 days</span></header>
+          <header><div><h2>Hosted compute</h2><p>Runner and managed-browser time recorded each day.</p></div><span>Last 30 days</span></header>
           <UsageChart usage={usage} />
           {!usage && <p className="usage-report-state">The usage reporting endpoint is unavailable in this local preview.</p>}
         </section>
@@ -837,7 +818,7 @@ async function UsagePage({
           </div>
         </section>
         <p className="support-fallback">Only matched, reconciled ledger events appear here. Local desktop and self-hosted runner execution are not sent to the hosted usage meter.</p>
-      </> : <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><small>WORKSPACE REQUIRED</small><h2>Create a workspace first</h2><p>Usage is reported per workspace so hosted execution and billing evidence remain scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>}
+      </> : <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><h2>Create a workspace first</h2><p>Usage is reported per workspace so hosted execution and billing evidence remain scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>}
     </main>
   );
 }
@@ -895,7 +876,6 @@ async function CommercePage({
   return (
     <main className="portal-page">
       <PageHead
-        eyebrow="COMMERCE"
         title={section === "licences" ? "Licences" : "Purchases"}
         description="Product subscriptions and licence grants from the commerce service."
       />
@@ -904,7 +884,6 @@ async function CommercePage({
           <h2>
             {section === "licences" ? "Active licences" : "Subscriptions"}
           </h2>
-          <span>Live account data</span>
         </header>
         {items.map((item) => (
           <article key={item.id}>
@@ -936,32 +915,38 @@ async function SettingsPage({
   return (
     <main className="portal-page">
       <PageHead
-        eyebrow="ACCOUNT"
         title="Account settings"
         description="Your identity, privacy controls and account lifecycle."
       />
-      <section className="settings-stack">
-        <article className="settings-profile-card">
-          <span className="profile-avatar">{profile.displayName.slice(0, 2).toUpperCase()}</span>
-          <div><small>PERSONAL ACCOUNT</small><h2>{profile.displayName}</h2><p>{profile.email}</p></div>
-          <span className="health-badge"><CheckCircle2 /> Verified</span>
-        </article>
-        <div className="settings-card-grid">
-          <section className="settings-card">
-            <span className="settings-card-icon"><UserRound /></span>
-            <div><strong>Identity</strong><p>Your name and email come from your identity provider. sndbox never stores a separate account password.</p><dl><div><dt>Account ID</dt><dd><code>{profile.accountId}</code></dd></div><div><dt>Session ID</dt><dd><code>{profile.sessionId}</code></dd></div></dl></div>
-          </section>
-          <section className="settings-card">
-            <span className="settings-card-icon"><MonitorSmartphone /></span>
-            <div><strong>Sessions & API access</strong><p>Review signed-in devices, revoke old sessions and manage API keys.</p><Link href="/security">Open security <ArrowRight /></Link></div>
-          </section>
-          <section className="settings-card">
-            <span className="settings-card-icon"><Download /></span>
-            <div><strong>Download your data</strong><p>Export a machine-readable copy of your account and workspace membership data.</p><a href="/api/account/export">Export account data <ArrowRight /></a></div>
-          </section>
-          <section className="settings-card">
-            <span className="settings-card-icon"><LogOut /></span>
-            <div><strong>Sign out</strong><p>End this browser session. Other signed-in devices will stay connected.</p><form action="/auth/sign-out" method="post"><button className="portal-secondary">Sign out of this device</button></form></div>
+      <section className="settings-layout">
+        <div className="settings-overview">
+          <article className="settings-identity-panel">
+            <header>
+              <span className="profile-avatar">{profile.displayName.slice(0, 2).toUpperCase()}</span>
+              <div><h2>{profile.displayName}</h2><p>{profile.email}</p></div>
+            </header>
+            <p>Your profile is managed by your identity provider. sndbox does not store a separate account password.</p>
+            <dl>
+              <div><dt>Account ID</dt><dd><code>{profile.accountId}</code></dd></div>
+              <div><dt>Current session</dt><dd><code>{profile.sessionId}</code></dd></div>
+            </dl>
+          </article>
+          <section className="settings-actions-panel">
+            <article>
+              <span className="settings-card-icon"><MonitorSmartphone /></span>
+              <div><strong>Security & API</strong><p>Manage signed-in devices and personal API keys.</p></div>
+              <Link className="portal-secondary" href="/security">Manage <ArrowRight /></Link>
+            </article>
+            <article>
+              <span className="settings-card-icon"><Download /></span>
+              <div><strong>Export account data</strong><p>Download your account and workspace membership data.</p></div>
+              <a className="portal-secondary" href="/api/account/export">Export <ArrowRight /></a>
+            </article>
+            <article>
+              <span className="settings-card-icon"><LogOut /></span>
+              <div><strong>Sign out this device</strong><p>Other signed-in devices will stay connected.</p></div>
+              <form action="/auth/sign-out" method="post"><button className="portal-secondary">Sign out</button></form>
+            </article>
           </section>
         </div>
         <AccountDangerZone />
@@ -991,7 +976,6 @@ async function SupportPage({
   return (
     <main className="portal-page">
       <PageHead
-        eyebrow="SUPPORT"
         title="Support access"
         description="Temporary diagnostic access is explicit, scoped, auditable and revocable."
       />
@@ -1042,14 +1026,14 @@ function PageHead({
   title,
   description,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description: string;
 }) {
   return (
     <header className="page-head">
       <div>
-        <p>{eyebrow}</p>
+        {eyebrow && <p>{eyebrow}</p>}
         <h1>{title}</h1>
         <span>{description}</span>
       </div>
@@ -1166,7 +1150,6 @@ function DataPanel({
           {icon}
           <span>
             <strong>{title}</strong>
-            <small>Live workspace state</small>
           </span>
         </div>
       </header>

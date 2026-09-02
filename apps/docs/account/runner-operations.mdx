@@ -1,0 +1,43 @@
+---
+title: "Runner operations"
+description: "Pair and operate self-hosted Linux x86-64 and ARM64 runners from the account area."
+icon: "server"
+---
+
+Use **Operations** to manage the self-hosted Linux runners attached to one workspace. The summary shows available runners, active work, runner pools, and environments for the selected workspace.
+
+## Add a Linux runner
+
+<Steps>
+  <Step title="Choose the workspace">
+    Confirm the organisation and workspace at the top of Operations. Pairing credentials are workspace-scoped.
+  </Step>
+  <Step title="Create a pairing token">
+    Select **Add Linux runner**, enter the runner details, and create the short-lived token.
+  </Step>
+  <Step title="Run the supplied command">
+    Use the command on the intended Linux x86-64 or ARM64 host. Do not store the token in a config file, image, service unit, or shell history.
+  </Step>
+  <Step title="Verify the device">
+    The runner generates its device key locally. Compare the printed fingerprint before trusting the new host.
+  </Step>
+</Steps>
+
+See [Self-hosted runner](/execution/self-hosted-runner) for installation, configuration, and hardening.
+
+## Read runner state
+
+Each runner row shows its operating system, architecture, application version, tags, last heartbeat, current workload, and lifecycle state.
+
+| Action | Effect |
+| --- | --- |
+| **Drain** | Stops new claims while bounded in-flight work completes. |
+| **Resume** | Allows an eligible drained runner to claim work again. |
+| **Revoke** | Invalidates the device credential and prevents new claims. |
+
+Revocation is different from taking a host offline. An offline runner may reconnect with its existing device credential; a revoked runner must be paired again.
+
+## Billing boundary
+
+Self-hosted runner execution is unmetered. A runner can still call external services that charge independently, but its compute time is not deducted from the sndbox cloud balance. Managed hosted runners and managed browser workers are covered by [Usage](/account/usage) and [Billing](/account/billing).
+

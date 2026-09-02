@@ -107,7 +107,6 @@ export function PortalMobileNavigation() {
         <>
           <button className="portal-menu-backdrop" type="button" aria-label="Close navigation" onClick={() => setOpen(false)} />
           <aside id="portal-mobile-panel" className="portal-mobile-panel" role="dialog" aria-modal="true" aria-label="Account navigation">
-            <header><strong>Account</strong><span>Your sndbox workspace and account.</span></header>
             <NavigationLinks onNavigate={() => setOpen(false)} />
             <form action="/auth/sign-out" method="post" className="mobile-signout">
               <button type="submit"><KeyRound aria-hidden="true" /> Sign out</button>

@@ -24,6 +24,7 @@ import type { ProductCommerceAdministration } from "./product_commerce.js";
 import { validateDeployment } from "./deployment.js";
 import type { PostgresExecutionCoordinator } from "./execution_coordinator.js";
 import type { BugReportSink } from "./bug_reports.js";
+import type { PrepaidBillingAdministration } from "./prepaid.js";
 
 const organisationInput = z.object({ name: z.string().trim().min(2).max(100), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(63) });
 const invitationInput = z.object({
@@ -97,6 +98,7 @@ const sharedConnectionInput = z.object({
 const sharedConnectionDeploymentInput = z.object({ runnerId: z.string().uuid(), status: z.enum(["authorization_required", "available", "unavailable"]), localCredentialLabel: z.string().trim().min(1).max(120).nullable().default(null) }).strict();
 const checkoutInput = z.object({ ownerType: z.enum(["personal", "workspace"]), ownerId: z.string().uuid(), planId: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(100) }).strict();
 const productCheckoutInput = z.object({ ownerType:z.enum(["personal","organisation"]),ownerId:z.string().uuid(),planId:z.string().regex(/^[a-z][a-z0-9_-]{1,49}$/) }).strict();
+const prepaidTopUpInput = z.object({ amountCents:z.number().int().min(500).max(50_000) }).strict();
 const webhookEndpointInput = z.object({ workflowId: z.string().uuid(), allowedMethods: z.array(z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"])).min(1).max(5), schema: z.record(z.string(), z.unknown()).nullable().default(null), maximumRequestBytes: z.number().int().min(1).max(1_048_576).default(262_144), rateLimitPerMinute: z.number().int().min(1).max(1_000).default(60), retentionSeconds: z.number().int().min(60).max(604_800).default(86_400), runnerPolicy: z.record(z.string(), z.unknown()).default({}), offlineExpirySeconds: z.number().int().min(60).max(604_800).default(3_600), redactedFields: z.array(z.string().regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/)).max(100).default([]) }).strict();
 const pluginRatingInput = z.object({ versionUsed: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/).max(50), stars: z.number().int().min(1).max(5), review: z.string().trim().max(5_000).default("") }).strict();
 const developerResponseInput = z.object({ response: z.string().trim().min(1).max(5_000) }).strict();
@@ -177,6 +179,7 @@ export interface ApiDependencies {
   usageLedger?: Pick<PostgresUsageLedger,"record">;
   usageReader?: Pick<PostgresUsageLedger,"workspaceSummary">;
   usageProducerAuthenticator?: UsageProducerAuthenticator;
+  prepaidBilling?: PrepaidBillingAdministration;
   executionCoordinator?: Pick<PostgresExecutionCoordinator,"enqueue"|"resolvePublicRunDeployment"|"getPublicRun">;
   bugReports?: BugReportSink;
   webhookBaseUrl?: string;
@@ -322,6 +325,7 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     dependencies.usageProducerAuthenticator.verify({producerId,timestamp,signature,body:request.body});
     const input=usageEventInput.parse(request.body);
     const result=await dependencies.usageLedger.record(input);
+    await dependencies.prepaidBilling?.settleExecutionUsage(input.executionId);
     return {usageEventId:result.eventId,created:result.created};
   });
 
@@ -346,6 +350,21 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     requireHumanPrincipal(session);
     if (!dependencies.productCommerce) throw new DomainError("product_commerce_unavailable", "Product subscriptions are not configured.", 503);
     return dependencies.productCommerce.accountSummary(session);
+  });
+
+  app.get("/v1/account/wallet", async request => {
+    const session=await authenticate(request,dependencies.sessions);
+    requireHumanPrincipal(session);
+    if(!dependencies.prepaidBilling)throw new DomainError("prepaid_billing_unavailable","Cloud credit is not configured.",503);
+    return dependencies.prepaidBilling.accountSummary(session);
+  });
+
+  app.post("/v1/account/wallet/top-ups", async request => {
+    const session=await authenticate(request,dependencies.sessions);
+    requireHumanPrincipal(session);requireFreshRequest(request);
+    if(!dependencies.prepaidBilling||!dependencies.billing)throw new DomainError("prepaid_billing_unavailable","Cloud credit checkout is not configured.",503);
+    const input=prepaidTopUpInput.parse(request.body);
+    return{checkout:await dependencies.prepaidBilling.createTopUpCheckout(session,input.amountCents,dependencies.billing,dependencies.webBaseUrl)};
   });
 
   app.post("/v1/product-checkout", async request => {
@@ -1003,6 +1022,10 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
     const context=await dependencies.executionCoordinator.resolvePublicRunDeployment(workflowId,input.deploymentId);
     if(!context||context.workspaceId!==input.workspaceId)throw new DomainError("deployment_not_found","An active deployment was not found for this workflow in the selected workspace.",404);
     await authorizer.require(session,{workspaceId:context.workspaceId,environmentId:context.environmentId,permission:"workflows.run",resourceType:"workflow_deployment",resourceId:context.deploymentId});
+    if(context.targetType==="managed_cloud_runner"||context.targetType==="managed_browser_worker"){
+      if(!dependencies.prepaidBilling)throw new DomainError("prepaid_billing_unavailable","Managed execution billing is not configured.",503);
+      await dependencies.prepaidBilling.assertWorkspaceFunded(context.workspaceId,context.targetType);
+    }
     const idempotencyKey=request.headers["idempotency-key"];
     if(typeof idempotencyKey!=="string"||!/^[A-Za-z0-9._:-]{16,200}$/.test(idempotencyKey))throw new DomainError("idempotency_key_required","Idempotency-Key with 16 to 200 safe ASCII characters is required to start a run.",400);
     const queuedAt=new Date(),queued=await dependencies.executionCoordinator.enqueue({executionId:randomUUID(),workspaceId:context.workspaceId,environmentId:context.environmentId,deploymentId:context.deploymentId,workflowId:context.workflowId,workflowRevisionId:context.workflowRevisionId,triggerType:"api",triggerReference:input.triggerReference,queueEventId:null,idempotencyKey,permissionSnapshotId:context.permissionSnapshotId,pluginVersions:context.pluginVersions,connectionReferences:context.connectionReferences,requirements:context.requirements,encryptedPayloadReference:input.encryptedPayloadReference,correlationId:request.id,queuedAt,timeoutAt:new Date(queuedAt.getTime()+input.timeoutSeconds*1000),runnerPoolId:context.runnerPoolId},true);
@@ -1318,8 +1341,9 @@ export async function createServer(dependencies: ApiDependencies): Promise<Fasti
       try { event = dependencies.billing.parseWebhook(request.body as Buffer, signature); }
       catch { throw new DomainError("billing_signature_invalid", "Billing webhook signature is invalid.", 400); }
       if (event) {
-        const productEvent = await dependencies.productCommerce?.applyBillingEvent(event) ?? false;
-        if (!productEvent) await dependencies.repository.applyBillingEvent(event);
+        const prepaidEvent = await dependencies.prepaidBilling?.applyBillingEvent(event) ?? false;
+        const productEvent = prepaidEvent ? false : await dependencies.productCommerce?.applyBillingEvent(event) ?? false;
+        if (!prepaidEvent&&!productEvent) await dependencies.repository.applyBillingEvent(event);
       }
       return { received: true };
     });

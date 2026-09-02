@@ -98,6 +98,11 @@ export interface ProductAccountSummary {
   licences:Array<{id:string;ownerType:"personal"|"organisation";ownerId:string;planId:string;status:"active"|"past_due"|"expired"|"revoked";seatAllowance:number|null;seatsAssigned:number;devices:number;offlineGraceUntil:string}>;
 }
 export interface ProductCheckoutInput { ownerType:"personal"|"organisation";ownerId:string;planId:string }
+export interface PrepaidWalletSummary {
+  currency:"usd";balanceMicros:number;status:"funded"|"low"|"empty";
+  rates:{currency:"usd";minimumComputeSeconds:number;hostedRunnerMicrosPerMinute:number;managedBrowserMicrosPerMinute:number;networkEgressMicrosPerGib:number;artifactStorageMicrosPerGibMonth:number};
+  recentEntries:Array<{id:string;kind:"top_up"|"usage"|"refund"|"adjustment";amountMicros:number;balanceAfterMicros:number;description:string;createdAt:string}>;
+}
 
 export type BuiltInRole="owner"|"administrator"|"developer"|"operator"|"viewer";
 export interface AccountWorkspace { id:string;organisationId:string;name:string;slug:string;role:BuiltInRole;createdAt:string }
@@ -198,6 +203,14 @@ export class SandboxApiClient {
 
   createProductCheckout<T = {checkout:{checkoutId:string;url:string;expiresAt:string}}>(input:ProductCheckoutInput,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({method:"POST",path:"/v1/product-checkout",body:input,parse});
+  }
+
+  getAccountWallet<T = PrepaidWalletSummary>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/wallet",parse});
+  }
+
+  createWalletTopUp<T = {checkout:{checkoutId:string;url:string;expiresAt:string}}>(amountCents:number,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:"/v1/account/wallet/top-ups",body:{amountCents},parse});
   }
 
   listAccountOrganisations<T = {items:AccountOrganisation[]}>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {

@@ -594,6 +594,147 @@
         }
       }
     },
+    "/v1/account/wallet": {
+      "get": {
+        "operationId": "get_v1_account_wallet",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetV1AccountWalletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/account/wallet/top-ups": {
+      "post": {
+        "operationId": "post_v1_account_wallet_top_ups",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostV1AccountWalletTopUpsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostV1AccountWalletTopUpsInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/billing/stripe/webhook": {
       "post": {
         "operationId": "post_v1_billing_stripe_webhook",
@@ -11133,6 +11274,30 @@
           }
         ],
         "description": "Successful response for GET /v1/account/commerce."
+      },
+      "GetV1AccountWalletResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for GET /v1/account/wallet."
+      },
+      "PostV1AccountWalletTopUpsInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Request body for POST /v1/account/wallet/top-ups."
+      },
+      "PostV1AccountWalletTopUpsResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ApiObject"
+          }
+        ],
+        "description": "Successful response for POST /v1/account/wallet/top-ups."
       },
       "PostV1ProductCheckoutInput": {
         "allOf": [

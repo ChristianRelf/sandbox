@@ -127,6 +127,17 @@
             ]
           },
           {
+            "group": "Account area",
+            "pages": [
+              "account/overview",
+              "account/workspaces-and-access",
+              "account/runner-operations",
+              "account/usage",
+              "account/billing",
+              "account/security-and-settings"
+            ]
+          },
+          {
             "group": "Cloud and teams",
             "pages": [
               "cloud/overview",

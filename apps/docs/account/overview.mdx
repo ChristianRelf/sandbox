@@ -1,0 +1,41 @@
+---
+title: "Account area overview"
+description: "Use the signed-in account area to manage workspaces, runners, usage, billing, security, and account controls."
+icon: "circle-user-round"
+---
+
+The account area is the control surface for resources that belong to a signed-in person or workspace. It does not replace the desktop editor, and signing in does not make local workflows billable.
+
+## What each page is for
+
+| Page | Use it to |
+| --- | --- |
+| **Overview** | Check cloud credit, the current plan, workspace counts, and shortcuts to common account tasks. |
+| **Workspaces** | Switch workspace, manage members, review publication requests, inspect runner pools and deployments, and open organisation controls. |
+| **Operations** | Pair, monitor, drain, resume, or revoke self-hosted Linux runners. |
+| **Usage** | Review the last 30 days of reconciled hosted compute, browser, network, and storage usage for one workspace. |
+| **Plan & billing** | Add prepaid cloud credit, read the live rate card, and review settled credit activity. |
+| **Security & API** | Review signed-in devices and create or revoke personal API keys. |
+| **Account settings** | Inspect identity details, export account data, sign out, or use destructive account controls. |
+
+The resource links provide downloads, release notes, and support access without mixing those tasks into account administration.
+
+## Workspace context
+
+Operations and usage are scoped to a selected workspace. Switching the workspace changes the runners, deployments, usage ledger, and permissions shown on those pages; it does not move resources between workspaces.
+
+Workspace roles are enforced by the control plane. A hidden button or an account-page route is never the authorization boundary. See [Workspaces and access](/account/workspaces-and-access) and [Teams and roles](/cloud/teams-and-roles).
+
+## Local execution remains separate
+
+Local desktop execution and self-hosted runner execution are not sent to the hosted usage meter. Managed hosted runners, managed browser workers, network egress, and retained artifacts are the metered resources.
+
+<CardGroup cols={2}>
+  <Card title="Understand usage" icon="chart-column" href="/account/usage">
+    See the meters, units, daily graph, and reconciliation rules.
+  </Card>
+  <Card title="Understand billing" icon="wallet-cards" href="/account/billing">
+    See prepaid credit, minimum charges, and the live rate card.
+  </Card>
+</CardGroup>
+
