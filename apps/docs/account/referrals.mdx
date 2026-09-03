@@ -1,0 +1,29 @@
+---
+title: "Referral program"
+description: "Share sndbox and earn cloud credit when a new account makes a qualifying top-up."
+---
+
+Every signed-in account has a personal referral link under **Account → Referrals**. A new account can claim one referral during its first seven days.
+
+## Rewards
+
+When the referred account adds at least $10 of cloud credit, sndbox adds $5 of cloud credit to both the referred account and the referrer. Referral credit pays for hosted runners, managed browsers, network egress, and artifact storage. Local and self-hosted execution remains unmetered.
+
+The referral page shows authoritative invited, pending, rewarded, and earned totals. It deliberately does not reveal the referred account's email or profile details.
+
+## Qualification and refunds
+
+A claim remains pending until a qualifying cloud-credit payment succeeds. Reward entries and the payment settlement are committed in one database transaction, so a partially applied reward cannot become visible.
+
+If a refund reduces the qualifying purchase below $10, both $5 rewards are reversed. The reversal stays visible in cloud-credit history and referral history.
+
+## Fair use
+
+- An account cannot refer itself.
+- Each new account can claim only one referral.
+- Referral chains cannot contain cycles.
+- Claims close seven days after account creation.
+- A referrer can receive at most 50 successful rewards in a rolling year.
+- Referral codes do not expose an account ID or email address.
+
+Referral attribution is carried through sign-in in an HTTP-only, same-site cookie and is removed after the claim attempt. Claims and payment events are idempotent.

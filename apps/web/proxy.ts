@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const publicRoute=request.nextUrl.pathname==="/sign-in"||request.nextUrl.pathname.startsWith("/auth/");
+  const publicRoute=request.nextUrl.pathname==="/sign-in"||request.nextUrl.pathname.startsWith("/auth/")||request.nextUrl.pathname.startsWith("/r/");
   if(!publicRoute&&!request.cookies.has("sandbox_session")){
     const destination=request.nextUrl.clone();destination.pathname="/sign-in";destination.search=new URLSearchParams({returnTo:`${request.nextUrl.pathname}${request.nextUrl.search}`}).toString();return NextResponse.redirect(destination);
   }

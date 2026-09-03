@@ -16,6 +16,7 @@ import type { ServiceAccountAccessReviewAdministration } from "./access_reviews.
 import { ReadinessService, ServiceMetrics } from "./reliability.js";
 import type { SupportAccessAdministration,SupportAccessRequest } from "./support_access.js";
 import type { PrivacyAdministration,WorkspaceRetentionPolicy } from "./privacy.js";
+import type { ReferralAdministration,ReferralSummary } from "./referrals.js";
 
 const session: AuthenticatedSession = {
   accountId: "11111111-1111-4111-8111-111111111111",
@@ -69,6 +70,19 @@ function dependencies(permissions: string[]) {
 }
 
 describe("control-plane API", () => {
+  it("exposes and claims referrals only through an authenticated human account",async()=>{
+    const now=new Date().toISOString();
+    const summary:ReferralSummary={code:"abcdef123456",shareUrl:"https://app.sandbox.test/r/abcdef123456",policy:{claimWindowDays:7,qualifyingTopUpCents:1_000,rewardMicros:5_000_000,maximumRewardsPerRollingYear:50},stats:{invited:1,pending:1,rewarded:0,earnedMicros:0},claim:null,referrals:[{id:"33333333-3333-4333-8333-333333333333",status:"pending",claimedAt:now,rewardedAt:null,reversedAt:null}]};
+    const referrals:ReferralAdministration={accountSummary:vi.fn(async()=>summary),claim:vi.fn(async()=>({claimed:true as const,status:"pending" as const}))};
+    const deps={...dependencies([]),referrals},server=await createServer(deps),headers={authorization:"Bearer token","x-sandbox-request-time":new Date().toISOString()};
+    const listed=await server.inject({method:"GET",url:"/v1/account/referrals",headers});
+    expect(listed.statusCode,listed.body).toBe(200);expect(listed.json()).toEqual(summary);expect(referrals.accountSummary).toHaveBeenCalledWith(session,"https://app.sandbox.test");
+    const claimed=await server.inject({method:"POST",url:"/v1/account/referrals/claim",headers,payload:{code:"ABCDEF123456"}});
+    expect(claimed.statusCode,claimed.body).toBe(200);expect(claimed.json()).toEqual({claimed:true,status:"pending"});expect(referrals.claim).toHaveBeenCalledWith(session,"abcdef123456");
+    const invalid=await server.inject({method:"POST",url:"/v1/account/referrals/claim",headers,payload:{code:"../unsafe"}});
+    expect(invalid.statusCode).toBe(400);expect(referrals.claim).toHaveBeenCalledTimes(1);
+    await server.close();
+  });
   it("accepts only signed events from a trusted usage producer",async()=>{
     const secret=Buffer.alloc(32,8),record=vi.fn(async(input:UsageEventInput)=>({eventId:input.eventId,created:true}));
     const deps={...dependencies([]),usageLedger:{record},usageProducerAuthenticator:new HmacUsageProducerAuthenticator(new Map([["hosted-runner",secret]]))};

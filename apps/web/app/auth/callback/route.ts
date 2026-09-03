@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { safeReturnTo, sessionCookie } from "../../../lib/auth";
+import { referralCookie, safeReturnTo, sessionCookie } from "../../../lib/auth";
 import { publicAppOrigin } from "../../../lib/public-origin";
 
 export async function GET(request:NextRequest) {
@@ -17,9 +18,21 @@ export async function GET(request:NextRequest) {
     console.warn("Account session rejected by the control plane",{status:profile.status,reason,message:typeof failure?.error?.message==="string"?failure.error.message:undefined,correlationId:typeof failure?.correlationId==="string"?failure.correlationId:profile.headers.get("x-correlation-id")??undefined});
     return NextResponse.json({error:"account_session_rejected",reason},{status:401});
   }
+  const referralCode=request.cookies.get(referralCookie)?.value;
+  let referralClaimFailed=false;
+  if(referralCode){
+    const claim=await fetch(`${required("CONTROL_PLANE_URL").replace(/\/$/,"")}/v1/account/referrals/claim`,{method:"POST",headers:{authorization:`Bearer ${token.access_token}`,accept:"application/json","content-type":"application/json","x-sandbox-request-time":new Date().toISOString(),"idempotency-key":`referral-${createHash("sha256").update(referralCode).digest("hex").slice(0,32)}`},body:JSON.stringify({code:referralCode}),cache:"no-store"});
+    if(!claim.ok){
+      referralClaimFailed=true;
+      const failure=await claim.json().catch(()=>null) as {error?:{code?:unknown};correlationId?:unknown}|null;
+      console.warn("Referral claim was not accepted",{status:claim.status,reason:typeof failure?.error?.code==="string"?failure.error.code:"upstream_rejected",correlationId:typeof failure?.correlationId==="string"?failure.correlationId:claim.headers.get("x-correlation-id")??undefined});
+    }
+  }
   const destination=new URL(safeReturnTo(request.cookies.get("sandbox_oidc_return")?.value),publicAppOrigin(required("OIDC_REDIRECT_URI")));
+  if(referralClaimFailed&&destination.pathname==="/referrals")destination.searchParams.set("referral","not_eligible");
   const response=NextResponse.redirect(destination);
   response.cookies.set(sessionCookie,token.access_token,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",path:"/",maxAge:typeof token.expires_in==="number"?Math.min(Math.max(token.expires_in,60),28_800):3_600,priority:"high"});
+  response.cookies.set(referralCookie,"",{path:"/",maxAge:0});
   for(const name of ["sandbox_oidc_state","sandbox_oidc_verifier","sandbox_oidc_return"])response.cookies.set(name,"",{path:"/auth",maxAge:0});
   return response;
 }

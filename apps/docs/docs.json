@@ -135,6 +135,7 @@
               "account/runner-operations",
               "account/usage",
               "account/billing",
+              "account/referrals",
               "account/security-and-settings"
             ]
           },

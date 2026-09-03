@@ -103,6 +103,13 @@ export interface PrepaidWalletSummary {
   rates:{currency:"usd";minimumComputeSeconds:number;hostedRunnerMicrosPerMinute:number;managedBrowserMicrosPerMinute:number;networkEgressMicrosPerGib:number;artifactStorageMicrosPerGibMonth:number};
   recentEntries:Array<{id:string;kind:"top_up"|"usage"|"refund"|"adjustment";amountMicros:number;balanceAfterMicros:number;description:string;createdAt:string}>;
 }
+export interface ReferralSummary {
+  code:string;shareUrl:string;
+  policy:{claimWindowDays:number;qualifyingTopUpCents:number;rewardMicros:number;maximumRewardsPerRollingYear:number};
+  stats:{invited:number;pending:number;rewarded:number;earnedMicros:number};
+  claim:{status:"pending"|"rewarded"|"reversed"|"ineligible";claimedAt:string;rewardedAt:string|null;reversedAt:string|null}|null;
+  referrals:Array<{id:string;status:"pending"|"rewarded"|"reversed"|"ineligible";claimedAt:string;rewardedAt:string|null;reversedAt:string|null}>;
+}
 
 export type BuiltInRole="owner"|"administrator"|"developer"|"operator"|"viewer";
 export interface AccountWorkspace { id:string;organisationId:string;name:string;slug:string;role:BuiltInRole;createdAt:string }
@@ -211,6 +218,14 @@ export class SandboxApiClient {
 
   createWalletTopUp<T = {checkout:{checkoutId:string;url:string;expiresAt:string}}>(amountCents:number,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
     return this.request({method:"POST",path:"/v1/account/wallet/top-ups",body:{amountCents},parse});
+  }
+
+  getAccountReferrals<T = ReferralSummary>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({path:"/v1/account/referrals",parse});
+  }
+
+  claimReferral<T = {claimed:true;status:"pending"}>(code:string,parse?: (value:unknown)=>T):Promise<ApiResult<T>> {
+    return this.request({method:"POST",path:"/v1/account/referrals/claim",body:{code},parse});
   }
 
   listAccountOrganisations<T = {items:AccountOrganisation[]}>(parse?: (value:unknown)=>T):Promise<ApiResult<T>> {

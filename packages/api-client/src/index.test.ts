@@ -53,8 +53,13 @@ describe("SandboxApiClient v1 compatibility",()=>{
     const client=new SandboxApiClient({baseUrl:"https://api.sandbox.test",fetch});
     await client.listAccountOrganisations();
     await client.listSyncedWorkflows("workspace id");
+    await client.getAccountReferrals();
+    await client.claimReferral("abcdef123456");
     expect(String(fetch.mock.calls[0][0])).toBe("https://api.sandbox.test/v1/account/organisations");
     expect(String(fetch.mock.calls[1][0])).toBe("https://api.sandbox.test/v1/workspaces/workspace%20id/sync/workflows");
+    expect(String(fetch.mock.calls[2][0])).toBe("https://api.sandbox.test/v1/account/referrals");
+    expect(String(fetch.mock.calls[3][0])).toBe("https://api.sandbox.test/v1/account/referrals/claim");
+    expect(fetch.mock.calls[3][1]?.body).toBe(JSON.stringify({code:"abcdef123456"}));
   });
 
   it("exposes deployment creation and lifecycle transitions",async()=>{

@@ -22,6 +22,7 @@ let walletEntries=[
   {id:"aaaaaaaa-0000-4000-8000-000000000003",kind:"usage",amountMicros:-2_620_000,balanceAfterMicros:12_450_000,description:"Cloud usage · 31fb82c0",createdAt:new Date(Date.now()-86_400_000).toISOString()},
 ];
 const walletRates={currency:"usd",minimumComputeSeconds:60,hostedRunnerMicrosPerMinute:5_000,managedBrowserMicrosPerMinute:10_000,networkEgressMicrosPerGib:200_000,artifactStorageMicrosPerGibMonth:50_000};
+const referralSummary={code:"4f9a9d7b3c6e2a10",shareUrl:"http://localhost:3000/r/4f9a9d7b3c6e2a10",policy:{claimWindowDays:7,qualifyingTopUpCents:1_000,rewardMicros:5_000_000,maximumRewardsPerRollingYear:50},stats:{invited:3,pending:1,rewarded:2,earnedMicros:10_000_000},claim:null,referrals:[{id:"aaaaaaaa-0000-4000-8000-000000000011",status:"rewarded",claimedAt:new Date(Date.now()-12*86_400_000).toISOString(),rewardedAt:new Date(Date.now()-11*86_400_000).toISOString(),reversedAt:null},{id:"aaaaaaaa-0000-4000-8000-000000000012",status:"pending",claimedAt:new Date(Date.now()-2*86_400_000).toISOString(),rewardedAt:null,reversedAt:null},{id:"aaaaaaaa-0000-4000-8000-000000000013",status:"rewarded",claimedAt:new Date(Date.now()-24*86_400_000).toISOString(),rewardedAt:new Date(Date.now()-23*86_400_000).toISOString(),reversedAt:null}]};
 
 function json(response,status,data){response.writeHead(status,{"content-type":"application/json","cache-control":"no-store"});response.end(JSON.stringify(data));}
 function usageSummary(){
@@ -47,6 +48,8 @@ createServer((request,response)=>{
     if(method==="GET"&&path==="/v1/account/organisations")return json(response,200,{items:[organisation]});
     if(method==="GET"&&path==="/v1/account/commerce")return json(response,200,{subscriptions:[{id:"sub_dev",ownerType:"personal",ownerId:accountId,planId:"team",planName:"Team",status:"active",currentPeriodEndsAt:later,cancelAtPeriodEnd:false}],licences:[{id:"lic_dev",ownerType:"personal",ownerId:accountId,planId:"team",status:"active",seatAllowance:5,seatsAssigned:2,devices:3,offlineGraceUntil:later}]});
     if(method==="GET"&&path==="/v1/account/wallet")return json(response,200,{currency:"usd",balanceMicros:walletBalanceMicros,status:walletBalanceMicros<=0?"empty":walletBalanceMicros<1_000_000?"low":"funded",rates:walletRates,recentEntries:walletEntries});
+    if(method==="GET"&&path==="/v1/account/referrals")return json(response,200,referralSummary);
+    if(method==="POST"&&path==="/v1/account/referrals/claim")return json(response,200,{claimed:true,status:"pending"});
     if(method==="POST"&&path==="/v1/account/wallet/top-ups"){
       const amountCents=Number(input.amountCents);if(!Number.isInteger(amountCents)||amountCents<500||amountCents>50_000)return json(response,400,{error:{code:"topup_amount_invalid",message:"Choose a top-up between $5 and $500."}});
       const amountMicros=amountCents*10_000;walletBalanceMicros+=amountMicros;walletEntries=[{id:randomUUID(),kind:"top_up",amountMicros,balanceAfterMicros:walletBalanceMicros,description:`Cloud credit top-up · $${(amountCents/100).toFixed(2)}`,createdAt:new Date().toISOString()},...walletEntries];

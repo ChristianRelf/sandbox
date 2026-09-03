@@ -8,6 +8,7 @@ import {
   CreditCard,
   Download,
   Gauge,
+  Gift,
   KeyRound,
   LifeBuoy,
   Menu,
@@ -33,6 +34,7 @@ const navigationGroups = [
     label: "Account",
     links: [
       ["/billing", "Plan & billing", CreditCard],
+      ["/referrals", "Referrals", Gift],
       ["/security", "Security & API", ShieldCheck],
       ["/settings", "Account settings", Settings],
     ],

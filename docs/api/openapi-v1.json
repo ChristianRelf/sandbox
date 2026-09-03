@@ -445,6 +445,147 @@
         ]
       }
     },
+    "/v1/account/referrals": {
+      "get": {
+        "operationId": "get_v1_account_referrals",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "not-applicable",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/account/referrals/claim": {
+      "post": {
+        "operationId": "post_v1_account_referrals_claim",
+        "tags": [
+          "account"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CorrelationId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "x-sandbox-stability": "stable",
+        "x-sandbox-idempotency": "supported",
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "x-correlation-id": {
+                "$ref": "#/components/headers/CorrelationId"
+              },
+              "idempotency-replayed": {
+                "$ref": "#/components/headers/IdempotencyReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralClaimResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimInput"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/sessions": {
       "get": {
         "operationId": "get_v1_account_sessions",
@@ -11053,6 +11194,181 @@
         },
         "additionalProperties": false
       },
+      "ReferralClaimInput": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{12,24}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferralClaimResponse": {
+        "type": "object",
+        "required": [
+          "claimed",
+          "status"
+        ],
+        "properties": {
+          "claimed": {
+            "const": true
+          },
+          "status": {
+            "const": "pending"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferralSummary": {
+        "type": "object",
+        "required": [
+          "code",
+          "shareUrl",
+          "policy",
+          "stats",
+          "claim",
+          "referrals"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{12,24}$"
+          },
+          "shareUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "policy": {
+            "type": "object",
+            "required": [
+              "claimWindowDays",
+              "qualifyingTopUpCents",
+              "rewardMicros",
+              "maximumRewardsPerRollingYear"
+            ],
+            "properties": {
+              "claimWindowDays": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "qualifyingTopUpCents": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "rewardMicros": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maximumRewardsPerRollingYear": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "stats": {
+            "type": "object",
+            "required": [
+              "invited",
+              "pending",
+              "rewarded",
+              "earnedMicros"
+            ],
+            "properties": {
+              "invited": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "pending": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rewarded": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "earnedMicros": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "claim": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReferralRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "referrals": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ReferralRecord"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferralRecord": {
+        "type": "object",
+        "required": [
+          "status",
+          "claimedAt",
+          "rewardedAt",
+          "reversedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "rewarded",
+              "reversed",
+              "ineligible"
+            ]
+          },
+          "claimedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rewardedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reversedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "AccountExport": {
         "type": "object",
         "required": [
@@ -11066,7 +11382,8 @@
           "invitations",
           "credentials",
           "personalWorkflows",
-          "auditEvents"
+          "auditEvents",
+          "referrals"
         ],
         "properties": {
           "exportVersion": {
@@ -11121,6 +11438,12 @@
             }
           },
           "auditEvents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiObject"
+            }
+          },
+          "referrals": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ApiObject"

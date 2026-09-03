@@ -19,7 +19,7 @@ export const DATA_CLASSIFICATION={
   execution_detail:{classification:"customer_content",examples:["event metadata","checkpoints","payload references"],retention:"Workspace executionDetailDays; summary row retained without detail."},
   webhook_payload:{classification:"customer_content",examples:["encrypted webhook delivery body"],retention:"Earlier of endpoint expiry and workspace webhookDeliveryDays."},
   operational_evidence:{classification:"security_record",examples:["audit events","incident and support timelines"],retention:"Workspace auditEventDays or documented platform schedule."},
-  billing_record:{classification:"financial_record",examples:["usage ledger","invoice reconciliation"],retention:"Statutory/contractual schedule; excluded from customer-configurable purge."}
+  billing_record:{classification:"financial_record",examples:["usage ledger","invoice reconciliation","referral rewards"],retention:"Statutory/contractual schedule; excluded from customer-configurable purge."}
 } as const;
 
 interface PolicyRow {execution_detail_days:number;queue_event_days:number;webhook_delivery_days:number;runner_command_days:number;audit_event_days:number;changed_by:string|null;changed_at:Date|null}
@@ -34,16 +34,17 @@ export class PostgresPrivacyService implements PrivacyAdministration {
   async exportAccount(actor:AuthenticatedSession):Promise<Record<string,unknown>>{return this.transaction("privacy_service",async client=>{
     const account=await client.query(`SELECT id,primary_email,email_verified,display_name,created_at,deleted_at FROM accounts WHERE id=$1`,[actor.accountId]);
     if(!account.rowCount)throw new DomainError("account_not_found","Account was not found.",404);
-    const [memberships,workspaceMemberships,sessions,invitations,tokens,workflows,audit]=await Promise.all([
+    const [memberships,workspaceMemberships,sessions,invitations,tokens,workflows,audit,referrals]=await Promise.all([
       client.query(`SELECT organisation_id,role_id,status,joined_at,removed_at FROM memberships WHERE account_id=$1 ORDER BY joined_at`,[actor.accountId]),
       client.query(`SELECT workspace_id,role_id,created_at FROM workspace_memberships WHERE account_id=$1 ORDER BY created_at`,[actor.accountId]),
       client.query(`SELECT id,device_name,created_at,last_seen_at,expires_at,revoked_at FROM account_sessions WHERE account_id=$1 ORDER BY created_at`,[actor.accountId]),
       client.query(`SELECT id,organisation_id,email,status,expires_at,accepted_at,revoked_at,created_at FROM invitations WHERE invited_by=$1 OR accepted_by=$1 ORDER BY created_at`,[actor.accountId]),
       client.query(`SELECT id,token_kind,token_prefix,name,organisation_id,scopes,workspace_restrictions,environment_restrictions,created_at,expires_at,last_used_at,revoked_at FROM access_tokens WHERE owner_account_id=$1 ORDER BY created_at`,[actor.accountId]),
       client.query(`SELECT id,name,created_at,deleted_at,current_published_revision_id,current_draft_revision_id FROM synced_workflows WHERE owner_type='personal' AND owner_id=$1 ORDER BY created_at`,[actor.accountId]),
-      client.query(`SELECT id,occurred_at,workspace_id,action,resource_type,resource_id,before_summary,after_summary,correlation_id FROM audit_events WHERE actor_account_id=$1 ORDER BY occurred_at,id`,[actor.accountId])
+      client.query(`SELECT id,occurred_at,workspace_id,action,resource_type,resource_id,before_summary,after_summary,correlation_id FROM audit_events WHERE actor_account_id=$1 ORDER BY occurred_at,id`,[actor.accountId]),
+      client.query(`SELECT referral.id,CASE WHEN referral.referrer_account_id=$1 THEN 'referrer' ELSE 'referred' END relationship,referral.status,referral.claimed_at,referral.qualified_at,referral.rewarded_at,referral.reversed_at,reward.amount_microusd,reward.created_at reward_created_at,reward.reversed_at reward_reversed_at FROM account_referrals referral LEFT JOIN referral_rewards reward ON reward.referral_id=referral.id AND reward.beneficiary_account_id=$1 WHERE referral.referrer_account_id=$1 OR referral.referred_account_id=$1 ORDER BY referral.claimed_at,referral.id`,[actor.accountId])
     ]);
-    return{exportVersion:1,exportedAt:new Date().toISOString(),classification:DATA_CLASSIFICATION,account:account.rows[0],memberships:memberships.rows,workspaceMemberships:workspaceMemberships.rows,sessions:sessions.rows,invitations:invitations.rows,credentials:tokens.rows,personalWorkflows:workflows.rows,auditEvents:audit.rows};
+    return{exportVersion:1,exportedAt:new Date().toISOString(),classification:DATA_CLASSIFICATION,account:account.rows[0],memberships:memberships.rows,workspaceMemberships:workspaceMemberships.rows,sessions:sessions.rows,invitations:invitations.rows,credentials:tokens.rows,personalWorkflows:workflows.rows,auditEvents:audit.rows,referrals:referrals.rows};
   });}
 
   async deleteAccount(actor:AuthenticatedSession,correlationId:string):Promise<{requestId:string;completedAt:string;summary:Record<string,number>}>{return this.transaction("privacy_service",async client=>{

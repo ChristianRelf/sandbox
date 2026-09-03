@@ -36,6 +36,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
           <small>sndbox account</small>
           <h1>Sign in to continue.</h1>
           <p>Use the identity provider configured for your sndbox account.</p>
+          {values.referral==="invited"&&<p className="signin-referral">You were invited to sndbox. Create or sign in to an eligible new account, then add at least $10 cloud credit so you and your referrer each receive $5 credit.</p>}
+          {values.referral==="invalid"&&<p className="signin-referral error" role="alert">That referral link is not valid. You can still sign in normally.</p>}
           {configured ? (
             <a className="portal-primary" href={`/auth/start?returnTo=${encodeURIComponent(safe)}`}>
               <KeyRound aria-hidden="true" size={14} />Continue securely

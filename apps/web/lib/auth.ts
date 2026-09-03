@@ -3,6 +3,7 @@ import { SandboxApiClient } from "@sandbox/api-client";
 import { cookies } from "next/headers";
 
 export const sessionCookie="sandbox_session";
+export const referralCookie="sandbox_referral";
 
 export async function authenticatedClient():Promise<SandboxApiClient|null> {
   const token=(await cookies()).get(sessionCookie)?.value;

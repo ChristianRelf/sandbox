@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import type { BillingEvent, BillingProvider } from "./billing.js";
 import type { AuthenticatedSession } from "./types.js";
 import { DomainError } from "./types.js";
+import type { ReferralSettlement } from "./referrals.js";
 
 const MICROS_PER_CENT = 10_000n;
 const BYTES_PER_GIB = 1_073_741_824n;
@@ -40,7 +41,7 @@ export interface PrepaidBillingAdministration {
 }
 
 export class PostgresPrepaidBilling implements PrepaidBillingAdministration {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool,private readonly referrals?:ReferralSettlement) {}
 
   async accountSummary(actor: AuthenticatedSession): Promise<PrepaidWalletSummary> {
     await this.pool.query(`INSERT INTO prepaid_wallets(account_id) VALUES($1) ON CONFLICT(account_id) DO NOTHING`, [actor.accountId]);
@@ -94,6 +95,7 @@ export class PostgresPrepaidBilling implements PrepaidBillingAdministration {
     if (event.kind === "checkout_completed") {
       if (event.metadata.billingKind !== "prepaid_topup") return false;
       if (event.paymentStatus !== "paid" || !event.paymentId) throw new DomainError("topup_payment_incomplete", "Cloud credit is added only after payment completes.", 409);
+      const paymentId=event.paymentId;
       return this.transaction(async client => {
         const checkout = await client.query<{account_id:string;amount_cents:number;currency:string;status:string}>(
           `SELECT account_id,amount_cents,currency,status FROM prepaid_topup_sessions WHERE id=$1 FOR UPDATE`, [event.checkoutId]
@@ -111,8 +113,9 @@ export class PostgresPrepaidBilling implements PrepaidBillingAdministration {
           `INSERT INTO prepaid_wallet_entries(wallet_id,kind,amount_microusd,balance_after_microusd,description,idempotency_key,billing_event_id) VALUES($1,'top_up',$2,$3,$4,$5,$6)`,
           [wallet.rows[0].id,credit.toString(),balance.toString(),`Cloud credit top-up · $${(row.amount_cents/100).toFixed(2)}`,`topup:${event.checkoutId}`,event.eventId]
         );
-        await client.query(`UPDATE prepaid_topup_sessions SET status='completed',payment_ref=$1,completed_at=now() WHERE id=$2`, [event.paymentId,event.checkoutId]);
+        await client.query(`UPDATE prepaid_topup_sessions SET status='completed',payment_ref=$1,completed_at=now() WHERE id=$2`, [paymentId,event.checkoutId]);
         if (event.customerId) await client.query(`UPDATE accounts SET billing_customer_ref=COALESCE(billing_customer_ref,$1) WHERE id=$2`, [event.customerId,row.account_id]);
+        await this.referrals?.qualifyTopUp(client,row.account_id,row.amount_cents,paymentId);
         return true;
       });
     }
@@ -142,6 +145,7 @@ export class PostgresPrepaidBilling implements PrepaidBillingAdministration {
         [wallet.rows[0].id,(-delta).toString(),balance.toString(),"Cloud credit refund",`refund:${row.id}:${targetRefund}`,event.eventId]
       );
       await client.query(`UPDATE prepaid_topup_sessions SET refunded_microusd=$1,status=CASE WHEN $1 >= amount_cents::bigint*10000 THEN 'refunded' ELSE status END WHERE id=$2`, [targetRefund.toString(),row.id]);
+      await this.referrals?.reverseTopUp(client,event.paymentId,row.amount_cents-Number(targetRefund/MICROS_PER_CENT));
       return true;
     });
   }
