@@ -8,6 +8,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+# Jobs opt into only the token permissions they need.
+permissions: {}
+
 jobs:
   verify-release:
     runs-on: ubuntu-latest
