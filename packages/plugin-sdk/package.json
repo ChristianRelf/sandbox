@@ -23,7 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "commander": "^14.0.0",
+    "commander": "^15.0.0",
     "fflate": "^0.8.2",
     "zod": "^4.1.5"
   },
