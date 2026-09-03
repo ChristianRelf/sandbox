@@ -1,0 +1,83 @@
+name: Bug report
+description: Report a reproducible problem in sndbox
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Search existing issues first. For a security vulnerability, stop and use the private security advisory link in the issue chooser.
+  - type: input
+    id: version
+    attributes:
+      label: sndbox version
+      description: Use the version shown in the app or the exact commit SHA.
+      placeholder: 0.7.7-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Windows desktop app
+        - Workflow engine
+        - Browser sidecar
+        - Hosted or self-hosted runner
+        - Control plane or account app
+        - Marketing site or documentation
+        - Plugin SDK or plugin runtime
+        - Release or deployment tooling
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, architecture, Node/Rust version, and relevant browser version.
+      placeholder: Windows 11 24H2, x64, Node 20.19, Rust stable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest repeatable example using synthetic data.
+      placeholder: |
+        1. Create ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted diagnostics
+      description: Remove tokens, webhook URLs, personal data, private workflow contents, and sensitive paths. Drag files here if needed.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched for an existing issue and can reproduce this on a supported version.
+          required: true
+        - label: This report contains no credentials, personal data, or other sensitive information.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I agree to follow the project Code of Conduct.
+          required: true

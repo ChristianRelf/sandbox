@@ -4,6 +4,13 @@ sndbox is a local-first visual desktop automation platform. The v0.7 beta aligns
 
 Public site: [sndbox.app](https://sndbox.app) · Account: [app.sndbox.app](https://app.sndbox.app) · Documentation: [docs.sndbox.app](https://docs.sndbox.app) · Community: [Discord](https://discord.gg/sndbox)
 
+## Contributing, support, and security
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing or submitting a change.
+- Use [SUPPORT.md](SUPPORT.md) to choose the right public or private support channel.
+- Report vulnerabilities privately according to [SECURITY.md](SECURITY.md); never open a public security issue.
+- Community participation is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and project decisions are described in [GOVERNANCE.md](GOVERNANCE.md).
+
 ## Beta distribution
 
 - Windows testers install the explicitly unsigned NSIS `.exe` from the invite-only GitHub prerelease, verify its SHA-256 checksum and provenance, and expect an unknown-publisher SmartScreen warning.

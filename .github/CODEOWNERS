@@ -1,0 +1,11 @@
+# The repository currently has one maintainer. Add area-specific owners as the
+# maintainer team grows; GitHub requires approval from an eligible code owner.
+* @ChristianRelf
+
+# Security and repository-control changes always require owner review.
+/SECURITY.md @ChristianRelf
+/.github/ @ChristianRelf
+/src-tauri/ @ChristianRelf
+/services/ @ChristianRelf
+/agents/ @ChristianRelf
+/deploy/ @ChristianRelf

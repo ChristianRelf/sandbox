@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/sndboxhq/sandbox/security/advisories/new
+    about: Report suspected vulnerabilities privately. Do not open a public issue.
+  - name: Documentation and community support
+    url: https://discord.gg/sndbox
+    about: Ask setup and usage questions in the sndbox community.
+  - name: Private account support
+    url: https://app.sndbox.app/support
+    about: Get help with accounts, billing, or private diagnostic information.
