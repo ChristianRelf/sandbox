@@ -854,7 +854,7 @@ pub(crate) mod tests {
         );
         assert!(
             manifest
-                .validate(&Version::parse("0.7.6-beta.1").unwrap(), true)
+                .validate(&Version::parse("0.7.7-beta.1").unwrap(), true)
                 .valid
         );
 

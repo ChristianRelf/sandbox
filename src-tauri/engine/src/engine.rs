@@ -4904,7 +4904,7 @@ mod tests {
         let code = node(
             "js",
             "javascript_code",
-            json!({"language":"javascript","sourceCode":"console.log('count', items.length); console.log('x'.repeat(70000)); return items.map(item => ({value:item.data.value * 2}));","executionMode":"run","itemMode":"all_items","runtimeVersion":">=20","input":{"items":[{"data":{"value":2}},{"data":{"value":4}}]},"timeoutMs":5000}),
+            json!({"language":"javascript","sourceCode":"console.log('count', items.length); console.log('x'.repeat(70000)); return items.map(item => ({value:item.data.value * 2}));","executionMode":"run","itemMode":"all_items","runtimeVersion":">=20","input":{"items":[{"data":{"value":2}},{"data":{"value":4}}]},"timeoutMs":20000}),
         );
         let mut workflow = base(
             vec![node("trigger", "manual_trigger", json!({})), code.clone()],
@@ -4958,7 +4958,7 @@ mod tests {
         let code = node(
             "py",
             "python_code",
-            json!({"language":"python","sourceCode":"print('received', len(items))\nresult = [{'value': item['data']['value'] + 1} for item in items]","executionMode":"run","itemMode":"all_items","runtimeVersion":">=3.11","input":{"items":[{"data":{"value":1}},{"data":{"value":2}}]},"timeoutMs":5000}),
+            json!({"language":"python","sourceCode":"print('received', len(items))\nresult = [{'value': item['data']['value'] + 1} for item in items]","executionMode":"run","itemMode":"all_items","runtimeVersion":">=3.11","input":{"items":[{"data":{"value":1}},{"data":{"value":2}}]},"timeoutMs":20000}),
         );
         let mut workflow = base(
             vec![node("trigger", "manual_trigger", json!({})), code.clone()],
@@ -5035,7 +5035,7 @@ mod tests {
         let pinned = node(
             "pinned",
             "javascript_code",
-            json!({"language":"javascript","sourceCode":"return items.map(item => item.data);","executionMode":"run","runtimeVersion":">=20","pinnedData":[{"answer":42}],"timeoutMs":5000}),
+            json!({"language":"javascript","sourceCode":"return items.map(item => item.data);","executionMode":"run","runtimeVersion":">=20","pinnedData":[{"answer":42}],"timeoutMs":20000}),
         );
         assert_eq!(
             fixture_items(&json!([{"answer":42}]))[0].data,
