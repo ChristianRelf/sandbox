@@ -17,6 +17,7 @@ import { api } from "../api";
 import { useToast } from "./ui/Toast";
 import type { ExecutionRecord, NodeExecution, Workflow } from "../types";
 import { Status } from "./Status";
+import "./collection-evidence.css";
 
 interface ExecutionInspectorProps {
   run: ExecutionRecord;
@@ -208,6 +209,7 @@ function NodeExecutionDetail({
   onEditNode?: (nodeId: string) => void;
   onReviewPermissions?: (request: PermissionReviewRequest) => void;
 }) {
+  const itemPreviewCount=execution.collection?.sampleItems?.length??execution.outputItems?.length??0;
   return (
     <div className="node-execution-detail">
       <header>
@@ -273,11 +275,24 @@ function NodeExecutionDetail({
           onEditNode={onEditNode}
         />
       )}
+      {execution.collection && (
+        <section className="collection-evidence" aria-label="Collection execution evidence">
+          <div><small>Received</small><b>{execution.collection.inputItemCount}</b></div>
+          <div><small>Produced</small><b>{execution.collection.outputItemCount}</b></div>
+          <div><small>Removed / rejected</small><b>{execution.collection.rejectedItemCount}</b></div>
+          {(execution.collection.iterationCount>0||execution.collection.batchCount>0)&&<div><small>Iterations / batches</small><b>{execution.collection.iterationCount} / {execution.collection.batchCount}</b></div>}
+          <p>Ordering: {execution.collection.orderingPolicy||"not specified"}</p>
+          {Object.keys(execution.collection.branchCounts??{}).length>0&&<p>Branches: {Object.entries(execution.collection.branchCounts??{}).map(([branch,count])=>`${branch} ${count}`).join(" · ")}</p>}
+          {execution.collection.waitingForInputs?.length?<p>Waiting for: {execution.collection.waitingForInputs.join(", ")}</p>:null}
+          {execution.collection.stopReason&&<p>Stopped: {execution.collection.stopReason}</p>}
+          {execution.collection.previewTruncated&&<p className="diagnostic-warning"><AlertTriangle size={14}/>This is a bounded preview; authoritative counts and runtime data are preserved.</p>}
+        </section>
+      )}
       <Tabs.Root defaultValue="output">
         <Tabs.List className="detail-tabs">
           <Tabs.Trigger value="input">Input</Tabs.Trigger>
           <Tabs.Trigger value="output">Output</Tabs.Trigger>
-          {(execution.inputItems?.length||execution.outputItems?.length) ? <Tabs.Trigger value="items">Items <em>{execution.outputItems?.length??0}</em></Tabs.Trigger> : null}
+          {(execution.inputItems?.length||itemPreviewCount) ? <Tabs.Trigger value="items">Items <em>{itemPreviewCount}</em></Tabs.Trigger> : null}
           {execution.runtime && <Tabs.Trigger value="runtime">Runtime</Tabs.Trigger>}
           {(execution.lineage?.length||execution.capabilityUsage?.length) ? <Tabs.Trigger value="lineage">Lineage</Tabs.Trigger> : null}
           <Tabs.Trigger value="logs">
@@ -291,7 +306,7 @@ function NodeExecutionDetail({
           <CodeBlock value={execution.output} onCopy={onCopy} />
         </Tabs.Content>
         <Tabs.Content value="items">
-          <CodeBlock value={{inputItems:execution.inputItems??[],outputItems:execution.outputItems??[]}} onCopy={onCopy} />
+          <ItemExplorer execution={execution} onCopy={onCopy}/>
         </Tabs.Content>
         <Tabs.Content value="runtime">
           <CodeBlock value={{...execution.runtime,testDataSource:execution.testDataSource??"live execution",warnings:execution.warnings??[]}} onCopy={onCopy} />
@@ -316,6 +331,21 @@ function NodeExecutionDetail({
       </Tabs.Root>
     </div>
   );
+}
+
+function ItemExplorer({execution,onCopy}:{execution:NodeExecution;onCopy:(value:unknown)=>void}){
+  const [search,setSearch]=useState("");
+  const [status,setStatus]=useState("all");
+  const [selected,setSelected]=useState<string>();
+  const samples=execution.collection?.sampleItems??[];
+  const items=samples.length?samples:(execution.outputItems??[]);
+  const filtered=items.filter(item=>(status==="all"||(item.status??"successful")===status)&&(!search||JSON.stringify(item).toLowerCase().includes(search.toLowerCase())));
+  const current=filtered.find(item=>(item.itemId??`${item.sourceNodeId}:${item.currentPosition}`)===selected)??filtered[0];
+  const before=current?.parentItemId?execution.inputItems?.find(item=>item.itemId===current.parentItemId||item.itemId===current.originItemId):execution.inputItems?.find(item=>item.itemId===current?.originItemId);
+  return <div className="item-explorer">
+    <div className="item-filter"><input aria-label="Search execution items" placeholder="Search items" value={search} onChange={event=>setSearch(event.target.value)}/><select aria-label="Filter item state" value={status} onChange={event=>setStatus(event.target.value)}><option value="all">All states</option>{["successful","failed","filtered","removed","unmatched","retried","skipped"].map(value=><option key={value}>{value}</option>)}</select><span>{filtered.length} shown{execution.collection?.previewTruncated?" (preview)":""}</span></div>
+    <div className="item-results"><div className="item-list">{filtered.map((item,index)=>{const id=item.itemId??`${item.sourceNodeId??"item"}:${item.currentPosition??index}`;return <button key={id} className={current===item?"selected":""} onClick={()=>setSelected(id)}><b>{id}</b><small>{item.status??"successful"}{item.branch?` · ${item.branch}`:""}{item.loopIteration!=null?` · iteration ${item.loopIteration}`:""}</small></button>})}</div>{current?<div className="item-trace"><p><b>Lineage</b> {current.originItemId??current.itemId??"unassigned"}{current.parentItemId?` ← ${current.parentItemId}`:""}</p><CodeBlock value={{before:before?.data??null,after:current.data,branchHistory:current.branchHistory??[],correlations:current.correlations??{},attempt:current.executionAttempt??1}} onCopy={onCopy}/></div>:<p>No preview items match this filter.</p>}</div>
+  </div>;
 }
 
 function BrowserDiagnosticDetail({

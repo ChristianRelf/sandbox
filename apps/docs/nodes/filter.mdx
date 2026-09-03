@@ -1,0 +1,120 @@
+---
+title: "Filter"
+description: "Keep or remove collection items using strict rules. Exact configuration, ports, placement, and execution behavior."
+icon: "git-branch"
+---
+
+**Node type:** `filter` · **Version:** `1` · **Category:** Logic
+
+Keep or remove collection items using strict rules. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Keep or remove records from an explicit workflow collection.
+- Inspect rejected items without turning a collection decision into workflow-level branching.
+
+## Example: Keep active API records
+
+Split an API result array, then retain only records whose active field is the boolean true.
+
+
+```json title="Example settings"
+{
+  "mode": "keep_matches",
+  "combinator": "all",
+  "rules": [
+    {
+      "id": "rule_active",
+      "field": "active",
+      "operator": "equals",
+      "value": true
+    }
+  ],
+  "exposeRejected": true
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. HTTP Request → Split Out → Filter.
+2. Use the Rejected output only when removed records need downstream handling.
+3. Inspect retained and rejected counts in execution history.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `mode` | string | `"keep_matches"` | Keep matching items or remove matching items. Values: `keep_matches`, `remove_matches`. |
+| `combinator` | string | `"all"` | Require all rules or any rule. Values: `all`, `any`. |
+| `rules` | array | `[{"id":"rule_1","field":"","operator":"equals","value":""}]` | Ordered strict rule definitions with stable IDs. |
+| `exposeRejected` | boolean | `true` | Expose removed items through the Rejected branch. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "filter",
+  "version": 1,
+  "configuration": {
+    "mode": "keep_matches",
+    "combinator": "all",
+    "rules": [
+      {
+        "id": "rule_1",
+        "field": "",
+        "operator": "equals",
+        "value": ""
+      }
+    ],
+    "exposeRejected": true
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array` | Yes | Items |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `array` | No | Retained |
+| `rejected` | `array` | No | Rejected |
+
+## Execution behavior
+
+- Rules use strict types: number 200 does not equal string 200.
+- Missing, null, empty strings, empty arrays, empty objects, and filtered items remain distinct.
+- The editor catalogue declares `output` (array), `rejected` (array) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Use Condition for one workflow-level true/false decision.
+- Invalid regular expressions fail validation and runtime evaluation.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Collections and items](/workflows/collections-and-items)
+- [Condition](/nodes/condition)

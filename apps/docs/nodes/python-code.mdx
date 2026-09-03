@@ -1,12 +1,12 @@
 ---
-title: "Code / Source (legacy)"
-description: "Author a source block or migrate it to a dedicated Code node. Exact configuration, ports, placement, and execution behavior."
+title: "Python Code"
+description: "Transform workflow items in a restricted Python runtime. Exact configuration, ports, placement, and execution behavior."
 icon: "braces"
 ---
 
-**Node type:** `code` · **Version:** `1` · **Category:** Data
+**Node type:** `python_code` · **Version:** `1` · **Category:** Data
 
-Author a source block or migrate it to a dedicated Code node. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
+Transform workflow items in a restricted Python runtime. sndbox classifies this node as side-effecting, so tests or automatic runs can require additional confirmation and permission review.
 
 ## When to use this node
 
@@ -39,22 +39,16 @@ This shows the important settings, not a complete exported node. Local paths mus
 
 | Field | Type | Default | What it controls |
 | --- | --- | --- | --- |
-| `language` | string | `"javascript"` | Language used for highlighting, diagnostics, AI-assisted authoring, and optional execution. Values: `python`, `html`, `javascript`, `css`. |
-| `sourceCode` | string | `"// Transform data or provide browser-side JavaScript\n"` | Complete source stored in the workflow. Open Edit code for the full editor and live Problems panel. |
-| `executionMode` | string | `"source"` | Return the source unchanged, or execute supported script languages and wait for their result. Values: `source`, `run`. |
+| `language` | string | `"python"` | Language used for highlighting, diagnostics, AI-assisted authoring, and optional execution. |
+| `sourceCode` | string | `"# Set result to JSON data or an array of items.\nresult = [dict(item.get('data') or {}, processed=True) for item in items]\n"` | Complete source stored in the workflow. Open Edit code for the full editor and live Problems panel. |
+| `executionMode` | string | `"run"` | Return the source unchanged, or execute supported script languages and wait for their result. |
 | `itemMode` | string | `"all_items"` | Configuration value for Item Mode. |
-| `runtimeVersion` | string | `">=20"` | Configuration value for Runtime Version. |
+| `runtimeVersion` | string | `">=3.11"` | Configuration value for Runtime Version. |
 | `helperLanguageVersion` | number | `1` | Configuration value for Helper Language Version. |
 | `dependencies` | array | `[]` | Configuration value for Dependencies. |
 | `timeoutMs` | number | `30000` | Maximum time for this operation in milliseconds. |
 
-<Note>Edit code opens a dedicated editor for Python, HTML, JavaScript, and CSS with syntax highlighting, live syntax and basic type diagnostics, line and column locations, and AI-assisted code writing.</Note>
 
-<Note>Source mode returns the complete file through `code` without executing it. HTML and CSS always use source mode.</Note>
-
-<Note>Run mode is available for Python and JavaScript, requires command-execution approval, invokes the installed `python` or `node` executable, and waits for completion. Mapped input is available as JSON in `SNDBOX_INPUT`.</Note>
-
-<Note>Source is limited to 2 MB, timeout is clamped to 100–120000 milliseconds, and captured standard output and error are each limited to 64 KiB.</Note>
 
 ## Workflow JSON
 
@@ -62,14 +56,14 @@ The editor stores this node with the following implemented default configuration
 
 ```json title="Default node configuration"
 {
-  "type": "code",
+  "type": "python_code",
   "version": 1,
   "configuration": {
-    "language": "javascript",
-    "sourceCode": "// Transform data or provide browser-side JavaScript\n",
-    "executionMode": "source",
+    "language": "python",
+    "sourceCode": "# Set result to JSON data or an array of items.\nresult = [dict(item.get('data') or {}, processed=True) for item in items]\n",
+    "executionMode": "run",
     "itemMode": "all_items",
-    "runtimeVersion": ">=20",
+    "runtimeVersion": ">=3.11",
     "helperLanguageVersion": 1,
     "dependencies": [],
     "timeoutMs": 30000
@@ -83,20 +77,20 @@ Values may be entered literally or mapped from an earlier compatible output when
 
 | Port | Type | Required | Description |
 | --- | --- | --- | --- |
-| `input` | `any` | No | Input |
+| `input` | `any` | No | Input items |
 
 ## Outputs
 
 | Port | Type | Required | Description |
 | --- | --- | --- | --- |
-| `code` | `string` | No | Source code |
+| `items` | `array` | No | Output items |
 | `result` | `any` | No | Result |
 
 ## Execution behavior
 
 - Source mode returns the file without executing it; HTML and CSS always use source mode.
 - Run mode invokes the installed node or python executable and requires command-execution approval.
-- The editor catalogue declares `code` (string), `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+- The editor catalogue declares `items` (array), `result` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
 
 ## Common issues
 
@@ -107,8 +101,6 @@ Values may be entered literally or mapped from an earlier compatible output when
 ## Where it can run
 
 - Desktop local runner
-- Paired self-hosted runner
-- Hosted runner
 
 ## Test and inspect
 

@@ -23,8 +23,15 @@ interface NodeExecution {
   skipReason?: string;
   branchFollowed?: string;
   browserDiagnostics?: BrowserDiagnostics;
+  inputItems: WorkflowItem[];
+  outputItems: WorkflowItem[];
+  collection?: CollectionEvidence;
 }
 ```
+
+Collection evidence records authoritative input/output/rejected counts, named branch counts, iteration and batch counts, ordering policy, stop reason, warnings, and bounded item samples. The inspector can search and filter samples and trace an item through its origin, parent, source node, positions, branch history, loop iteration, attempt, and correlation IDs.
+
+The history preview is separate from runtime data. When a collection exceeds the configured preview count, `previewTruncated` is true while the authoritative count remains visible; downstream nodes still receive the complete runtime result.
 
 ## Redaction
 
@@ -36,4 +43,4 @@ The control plane appends a checkpoint after each completed node with execution/
 
 ## Retention
 
-Local evidence stays in the desktop database until the user removes it. Workspace execution detail follows the configured privacy and retention policy; outcome summary and audit evidence have separate handling rules.
+Local evidence stays in the desktop database until the user removes it. Removing an execution also removes its loop-iteration checkpoints. Workspace execution detail follows the configured privacy and retention policy; outcome summary and audit evidence have separate handling rules.

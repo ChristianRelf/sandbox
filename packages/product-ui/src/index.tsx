@@ -25,10 +25,12 @@ export type ProductWorkflowNodeProps = {
   inputCount: number;
   inputPorts?: Array<{ id: string; label: string }>;
   outputLabels: string[];
+  outputPorts?: Array<{ id: string; label: string }>;
   onAdd?: (sourceId: string) => void;
   standalone?: boolean;
   connectionRole?: "input" | "output" | "both";
   dimmed?: boolean;
+  itemCount?: number;
 };
 
 export function ProductWorkflowNode({
@@ -45,10 +47,12 @@ export function ProductWorkflowNode({
   inputCount,
   inputPorts,
   outputLabels,
+  outputPorts,
   onAdd,
   standalone = false,
   connectionRole,
   dimmed = false,
+  itemCount,
 }: ProductWorkflowNodeProps) {
   return (
     <div
@@ -112,7 +116,13 @@ export function ProductWorkflowNode({
         <span aria-hidden="true">→</span>
         <span>{outputLabels.slice(0, 2).join(", ") || "done"}</span>
       </div>
-      {!standalone && condition ? (
+      {itemCount != null && <span className="node-item-count" aria-label={`${itemCount} output items`}>{itemCount} item{itemCount===1?"":"s"}</span>}
+      {!standalone && outputPorts?.length ? (
+        <>
+          {outputPorts.map((port,index)=><Handle key={port.id} type="source" position={Position.Right} id={port.id} className="node-handle branch" style={{top:`${31+index*19}%`}} aria-label={`${port.label} output`}/>)}
+          {outputPorts.map((port,index)=><span key={`${port.id}-label`} className="branch-label" style={{top:`${31+index*19}%`}} aria-hidden="true">{port.label}</span>)}
+        </>
+      ) : !standalone && condition ? (
         <>
           <Handle type="source" position={Position.Right} id="true" className="node-handle branch true" style={{ top: "42%" }} />
           <Handle type="source" position={Position.Right} id="false" className="node-handle branch false" style={{ top: "76%" }} />

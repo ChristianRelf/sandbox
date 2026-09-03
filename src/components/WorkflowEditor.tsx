@@ -94,8 +94,13 @@ function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handle
   const handleSize = 9;
   const centeredHandleOffset = (workflowNodeDimensions.height - handleSize) / 2;
 
-  if (node.type === "web_builder") {
-    WEB_BUILDER_INPUT_PORTS.forEach((port, index) => {
+  const configuredInputPorts = node.type === "web_builder"
+    ? WEB_BUILDER_INPUT_PORTS.map(port=>({id:port.id}))
+    : node.type === "merge"
+      ? ((node.configuration.inputPorts as Array<{id:string}>|undefined)??[])
+      : [];
+  if (configuredInputPorts.length) {
+    configuredInputPorts.forEach((port, index) => {
       handles.push({
         id: port.id,
         type: "target",
@@ -118,7 +123,10 @@ function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handle
     });
   }
 
-  if (node.type === "condition") {
+  const dynamicOutputs = workflowOutputHandles(node);
+  if (dynamicOutputs.length) {
+    dynamicOutputs.forEach((id,index)=>handles.push({id,type:"source",position:Position.Right,x:workflowNodeDimensions.width-handleSize/2,y:workflowNodeDimensions.height*(0.31+index*0.19)-handleSize/2,width:handleSize,height:handleSize}));
+  } else if (node.type === "condition") {
     handles.push(
       {
         id: "true",
@@ -152,6 +160,14 @@ function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handle
   }
 
   return handles;
+}
+
+function workflowOutputHandles(node:WorkflowNode):string[]{
+  if(node.type==="switch")return [...(((node.configuration.cases as Array<{id:string}>|undefined)??[]).map(item=>item.id)),String(node.configuration.fallbackBranchId??"fallback")];
+  if(node.type==="filter"||node.type==="split_out")return ["output","rejected"];
+  if(node.type==="loop_over_items")return ["loop","done"];
+  if(node.type==="remove_duplicates")return ["output","duplicates"];
+  return [];
 }
 
 export function WorkflowEditor() {
@@ -837,6 +853,7 @@ export function WorkflowEditor() {
             node,
             status,
             warning,
+            itemCount: execution?.collection?.outputItemCount,
             askAiIssue,
             showAskAiOnInteraction: showAskAiOnNodeInteraction,
             showAskAiOnIssues: showAskAiOnNodeIssues,
@@ -1561,6 +1578,13 @@ function PermissionReview({
     definitionFor(node.type).externalEffect === "external_write" ||
     definitionFor(node.type).externalEffect === "destructive_or_high_impact"
   );
+  const collectionRiskNotes=workflow.nodes.flatMap(node=>{
+    if(node.type==="loop_over_items")return [`${node.name}: up to ${Number(node.configuration.maxIterations??10000)} batches, ${Number(node.configuration.concurrency??1)} active at once; downstream actions may run once per item.`];
+    if(node.type==="switch"&&node.configuration.mode==="all_matches")return [`${node.name}: one item may be copied to several branches.`];
+    if(node.type==="merge"&&node.configuration.mode==="cartesian")return [`${node.name}: may multiply inputs up to ${Number(node.configuration.maxResults??25000)} result items.`];
+    if(node.type==="remove_duplicates"&&node.configuration.scope==="workflow_state")return [`${node.name}: uses staged workflow state, committed only after complete success.`];
+    return [];
+  });
   const requestedNode = request?.nodeId
     ? workflow.nodes.find((node) => node.id === request.nodeId)
     : undefined;
@@ -1785,6 +1809,7 @@ function PermissionReview({
               </label>
             </>
           )}
+          {collectionRiskNotes.length>0&&<><label>Collection amplification and state</label>{collectionRiskNotes.map(note=><div className="command-review" key={note}><AlertTriangle size={15}/><div><b>{note}</b><code>Review runner limits, repeated trusted-path access, ordering, and idempotency before publishing.</code></div></div>)}</>}
           {commandNodes.length > 0 && (
             <>
               <label>Command execution</label>

@@ -26,6 +26,8 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
   const source = workflow.nodes.find(node => node.id === sourceId);
   const targets = workflow.nodes.filter(node => node.id !== sourceId && !isTrigger(node.type));
   const target = workflow.nodes.find(node => node.id === targetId);
+  const sourcePorts=accessibleSourcePorts(source);
+  const targetPorts=accessibleTargetPorts(target);
 
   useEffect(() => {
     if (!workflow.nodes.some(node => node.id === sourceId)) setSourceId(workflow.nodes[0]?.id ?? "");
@@ -36,12 +38,12 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
   }, [targetId, targets]);
 
   useEffect(() => {
-    setSourceHandle(source?.type === "condition" ? "true" : "output");
-  }, [source?.type, sourceId]);
+    setSourceHandle(accessibleSourcePorts(source)[0]?.id??"output");
+  }, [source?.type, source?.configuration, sourceId]);
 
   useEffect(() => {
-    setTargetHandle(webBuilderPortForTarget(target));
-  }, [target?.id, target?.type]);
+    setTargetHandle(accessibleTargetPorts(target)[0]?.id??webBuilderPortForTarget(target));
+  }, [target?.id, target?.type, target?.configuration]);
 
   const move = (nodeId: string, dx: number, dy: number, direction: string) => {
     const node = workflow.nodes.find(candidate => candidate.id === nodeId);
@@ -64,7 +66,7 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
       onChange(workflow, `That connection is not compatible or the ${targetHandle} input is already connected.`);
       return;
     }
-    onChange(next, `Connected ${source.name} to ${target.name}${target.type === "web_builder" ? ` at its ${targetHandle} input` : source.type === "condition" ? ` on the ${sourceHandle} branch` : ""}.`);
+    onChange(next, `Connected ${source.name} to ${target.name}${targetPorts.length ? ` at its ${targetHandle} input` : sourcePorts.length>1 ? ` on the ${sourceHandle} branch` : ""}.`);
   };
 
   const validConnection = Boolean(source && target && isValidWorkflowConnection(workflow, {
@@ -94,9 +96,9 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
       <h3 id="accessible-connect-title">Add connection</h3>
       <div className="accessible-connection-form">
         <label htmlFor="accessible-source">From</label><CustomSelect id="accessible-source" value={sourceId} onChange={event => setSourceId(event.target.value)}>{workflow.nodes.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</CustomSelect>
-        {source?.type === "condition" && <><label htmlFor="accessible-branch">Branch</label><CustomSelect id="accessible-branch" value={sourceHandle} onChange={event => setSourceHandle(event.target.value)}><option value="true">True</option><option value="false">False</option></CustomSelect></>}
+        {sourcePorts.length>1 && <><label htmlFor="accessible-branch">Branch</label><CustomSelect id="accessible-branch" value={sourceHandle} onChange={event => setSourceHandle(event.target.value)}>{sourcePorts.map(port=><option value={port.id} key={port.id}>{port.label}</option>)}</CustomSelect></>}
         <label htmlFor="accessible-target">To</label><CustomSelect id="accessible-target" value={targetId} onChange={event => setTargetId(event.target.value)} disabled={!targets.length}>{targets.map(node => <option value={node.id} key={node.id}>{node.name}</option>)}</CustomSelect>
-        {target?.type === "web_builder" && <><label htmlFor="accessible-target-input">Input</label><CustomSelect id="accessible-target-input" value={targetHandle} onChange={event => setTargetHandle(event.target.value)}>{WEB_BUILDER_INPUT_PORTS.map(port => <option value={port.id} key={port.id}>{port.label}</option>)}</CustomSelect></>}
+        {targetPorts.length>0 && <><label htmlFor="accessible-target-input">Input</label><CustomSelect id="accessible-target-input" value={targetHandle} onChange={event => setTargetHandle(event.target.value)}>{targetPorts.map(port => <option value={port.id} key={port.id}>{port.label}</option>)}</CustomSelect></>}
         <button className="button primary" disabled={!validConnection} onClick={connect}>Add connection</button>
       </div>
     </section>
@@ -111,3 +113,15 @@ export function AccessibleWorkflowEditor({ workflow, selectedNodeId, onChange, o
     </section>
   </aside>;
 }
+
+function accessibleSourcePorts(node:Workflow["nodes"][number]|undefined):Array<{id:string;label:string}>{
+  if(!node)return[{id:"output",label:"Output"}];
+  if(node.type==="condition")return[{id:"true",label:"True"},{id:"false",label:"False"}];
+  if(node.type==="switch")return[...(((node.configuration.cases as Array<{id:string;name:string}>|undefined)??[]).map(item=>({id:item.id,label:item.name}))),{id:String(node.configuration.fallbackBranchId??"fallback"),label:String(node.configuration.fallbackName??"Fallback")}];
+  if(node.type==="filter")return[{id:"output",label:"Retained"},{id:"rejected",label:"Rejected"}];
+  if(node.type==="split_out")return[{id:"output",label:"Items"},{id:"rejected",label:"Rejected"}];
+  if(node.type==="loop_over_items")return[{id:"loop",label:"Loop"},{id:"done",label:"Done"}];
+  if(node.type==="remove_duplicates")return[{id:"output",label:"Unique"},{id:"duplicates",label:"Duplicates"}];
+  return[{id:"output",label:"Output"}];
+}
+function accessibleTargetPorts(node:Workflow["nodes"][number]|undefined):Array<{id:string;label:string}>{if(node?.type==="web_builder")return WEB_BUILDER_INPUT_PORTS.map(port=>({id:port.id,label:port.label}));if(node?.type==="merge")return((node.configuration.inputPorts as Array<{id:string;name:string}>|undefined)??[]).map(port=>({id:port.id,label:port.name}));return[]}

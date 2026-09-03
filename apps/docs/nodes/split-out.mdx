@@ -1,0 +1,115 @@
+---
+title: "Split Out"
+description: "Expand an explicit array field into workflow items. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `split_out` · **Version:** `1` · **Category:** Data
+
+Expand an explicit array field into workflow items. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Turn an explicit array field into workflow items.
+- Retain selected parent context and original array positions.
+
+## Example: Split API results
+
+Expand response.body.results under item while keeping safe parent fields.
+
+
+```json title="Example settings"
+{
+  "fieldPath": "response.body.results",
+  "destinationField": "item",
+  "keepParentFields": true,
+  "keepOriginalArray": false,
+  "includeIndex": true,
+  "emptyArrayPolicy": "emit_no_items",
+  "invalidInputPolicy": "fail"
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Map or connect the response collection.
+2. Choose the exact array path.
+3. Test empty, missing and non-array fixtures separately.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `fieldPath` | string | `""` | Explicit array path; empty selects a top-level array item. |
+| `destinationField` | string | `"item"` | Property receiving each split element. |
+| `keepParentFields` | boolean | `true` | Copy parent fields into child items. |
+| `keepOriginalArray` | boolean | `false` | Retain the source array after splitting. |
+| `includeIndex` | boolean | `true` | Include the source array index. |
+| `emptyArrayPolicy` | string | `"emit_no_items"` | Behavior for an empty selected array. Values: `emit_no_items`, `keep_parent`, `fail`. |
+| `invalidInputPolicy` | string | `"fail"` | Behavior for missing or non-array values. Values: `fail`, `emit_no_items`, `rejected`. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "split_out",
+  "version": 1,
+  "configuration": {
+    "fieldPath": "",
+    "destinationField": "item",
+    "keepParentFields": true,
+    "keepOriginalArray": false,
+    "includeIndex": true,
+    "emptyArrayPolicy": "emit_no_items",
+    "invalidInputPolicy": "fail"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array` | Yes | Items |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `array` | No | Items |
+| `rejected` | `array` | No | Rejected |
+
+## Execution behavior
+
+- Objects and strings are never treated as arrays.
+- Each child retains its parent and origin identity plus array position.
+- The editor catalogue declares `output` (array), `rejected` (array) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- An empty path means the input item itself must be an array.
+- Choose explicit failure, no-output or Rejected behavior for invalid inputs.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Collections and items](/workflows/collections-and-items)
+- [Filter](/nodes/filter)

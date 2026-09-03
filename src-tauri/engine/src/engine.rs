@@ -1,17 +1,21 @@
 use crate::{
+    expressions::{
+        resolve_value as resolve_expression_value, ExpressionContext, EXPRESSION_LANGUAGE_VERSION,
+    },
     permissions::{require_domain, require_path},
     redaction::{bounded_log, redact_value},
-    expressions::{resolve_value as resolve_expression_value, ExpressionContext, EXPRESSION_LANGUAGE_VERSION},
     references::resolve_value,
     validation::{topological_order, validate, ValidationSeverity},
-    DataLineage, Database, EngineError, ExecutionRecord, ExecutionStatus, InputBinding, NodeExecution,
-    NodeStatus, PendingApproval, RuntimeMetadata, Workflow, WorkflowItem, WorkflowNode,
+    CollectionEvidence, DataLineage, Database, EngineError, ExecutionError, ExecutionRecord,
+    ExecutionStatus, InputBinding, NodeExecution, NodeStatus, PendingApproval, RuntimeMetadata,
+    Workflow, WorkflowItem, WorkflowNode,
 };
 use async_trait::async_trait;
 use chrono::Utc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -24,7 +28,7 @@ use tokio::{
     net::TcpListener,
     process::Command,
     sync::{broadcast, Mutex},
-    task::JoinHandle,
+    task::{JoinHandle, JoinSet},
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -213,7 +217,30 @@ impl Engine {
                     skip_reason: None,
                     branch_followed: None,
                     browser_diagnostics: None,
-                    input_items: vec![], output_items: vec![], warnings: vec![], lineage: vec![], runtime: None, test_data_source: None, capability_usage: vec![],
+                    input_items: vec![],
+                    output_items: vec![],
+                    warnings: vec![],
+                    lineage: vec![],
+                    runtime: None,
+                    test_data_source: None,
+                    capability_usage: vec![],
+                    collection: (node.node_type == "merge").then(|| CollectionEvidence {
+                        waiting_for_inputs: node
+                            .configuration
+                            .get("inputPorts")
+                            .and_then(Value::as_array)
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|port| {
+                                port.get("name")
+                                    .or_else(|| port.get("id"))
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string)
+                            })
+                            .collect(),
+                        ordering_policy: "configured_input_port_order".into(),
+                        ..Default::default()
+                    }),
                 })
                 .collect(),
             error: None,
@@ -227,12 +254,22 @@ impl Engine {
             .edges
             .iter()
             .map(|edge| {
-                let condition = workflow
+                let routed = workflow
                     .nodes
                     .iter()
                     .find(|n| n.id == edge.source_node_id)
-                    .is_some_and(|n| n.node_type == "condition");
-                (edge.id.clone(), !condition)
+                    .is_some_and(|n| {
+                        matches!(
+                            n.node_type.as_str(),
+                            "condition"
+                                | "filter"
+                                | "switch"
+                                | "split_out"
+                                | "loop_over_items"
+                                | "remove_duplicates"
+                        )
+                    });
+                (edge.id.clone(), !routed)
             })
             .collect();
 
@@ -247,6 +284,11 @@ impl Engine {
                 .iter()
                 .position(|execution| execution.node_id == node.id)
                 .unwrap();
+            // Loop body nodes are executed by their owning Loop Over Items
+            // node. Their aggregate execution record is already terminal.
+            if record.node_executions[idx].status != NodeStatus::Waiting {
+                continue;
+            }
             if cancellation.is_cancelled() {
                 mark_node(
                     &mut record.node_executions[idx],
@@ -273,10 +315,39 @@ impl Engine {
                 .filter(|edge| *active_edges.get(&edge.id).unwrap_or(&false))
                 .collect();
             if node.id != workflow.trigger_node_id && active_incoming.is_empty() {
+                let branches = incoming
+                    .iter()
+                    .filter_map(|edge| {
+                        workflow
+                            .nodes
+                            .iter()
+                            .find(|source| source.id == edge.source_node_id)
+                            .filter(|source| {
+                                matches!(
+                                    source.node_type.as_str(),
+                                    "condition"
+                                        | "filter"
+                                        | "switch"
+                                        | "split_out"
+                                        | "loop_over_items"
+                                        | "remove_duplicates"
+                                )
+                            })
+                            .map(|source| format!("{}:{}", source.name, edge.source_handle))
+                    })
+                    .collect::<Vec<_>>();
+                let reason = if branches.is_empty() {
+                    "The node was not reached because its branch was not followed.".into()
+                } else {
+                    format!(
+                        "The node was skipped because no item followed {}.",
+                        branches.join(", ")
+                    )
+                };
                 mark_node(
                     &mut record.node_executions[idx],
                     NodeStatus::Skipped,
-                    "The node was not reached because its branch was not followed.",
+                    &reason,
                 );
                 continue;
             }
@@ -289,12 +360,45 @@ impl Engine {
                     .map(|execution| (edge.source_node_id.as_str(), execution.status))
             });
             if let Some((dependency, status)) = failed_dependency {
-                mark_node(
-                    &mut record.node_executions[idx],
-                    NodeStatus::Skipped,
-                    &format!("Dependency '{dependency}' finished with status {status:?}."),
-                );
-                continue;
+                let merge_policy = if node.node_type == "merge" {
+                    let key = if matches!(status, NodeStatus::Skipped) {
+                        "skippedInputPolicy"
+                    } else {
+                        "failedInputPolicy"
+                    };
+                    node.configuration
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or("fail")
+                } else {
+                    "fail"
+                };
+                if node.node_type != "merge" || merge_policy == "fail" {
+                    let message =
+                        format!("Dependency '{dependency}' finished with status {status:?}.");
+                    if node.node_type == "merge" {
+                        record.node_executions[idx].status = NodeStatus::Failed;
+                        record.node_executions[idx].completed_at = Some(Utc::now());
+                        record.node_executions[idx].error = Some(ExecutionError {
+                            code: "collection_merge_input_failed".into(),
+                            message,
+                            detail: Some("Merge is configured to fail when an input branch does not succeed.".into()),
+                            suggestion: Some("Handle the branch failure or set the matching Merge input policy to treat it as empty.".into()),
+                            line: None,
+                            column: None,
+                        });
+                    } else {
+                        mark_node(
+                            &mut record.node_executions[idx],
+                            NodeStatus::Skipped,
+                            &message,
+                        );
+                    }
+                    continue;
+                }
+                record.node_executions[idx].logs.push(format!(
+                    "Merge treated input from '{dependency}' ({status:?}) as empty according to {merge_policy}."
+                ));
             }
             let dependencies: Map<String, Value> = active_incoming
                 .iter()
@@ -304,9 +408,23 @@ impl Engine {
                         .map(|value| (edge.source_node_id.clone(), value.clone()))
                 })
                 .collect();
-            record.node_executions[idx].input =
-                redact_value(&json!({"dependencies": dependencies, "trigger": trigger}));
-            record.node_executions[idx].input_items = canonical_input_items(workflow, node, &outputs);
+            record.node_executions[idx].input = redact_value(&bounded_history_value(
+                &json!({"dependencies": dependencies, "trigger": trigger}),
+                workflow
+                    .settings
+                    .collection_limits
+                    .max_history_item_previews,
+            ));
+            record.node_executions[idx].input_items =
+                canonical_input_items(workflow, node, &outputs)
+                    .into_iter()
+                    .take(
+                        workflow
+                            .settings
+                            .collection_limits
+                            .max_history_item_previews,
+                    )
+                    .collect();
             record.node_executions[idx].status = NodeStatus::Running;
             record.node_executions[idx].started_at = Some(Utc::now());
             let _ = self.events.send(EngineEvent::NodeStarted {
@@ -336,6 +454,36 @@ impl Engine {
                     match result { Ok(value) => value, Err(_) => Err(EngineError::Node(format!("{} exceeded its {}-second timeout.", node.name, timeout_ms as f64 / 1000.0))) }
                 }
             };
+            let (execution, loop_summaries) = match execution {
+                Ok(result) if node.node_type == "loop_over_items" => {
+                    match self
+                        .run_loop_body(
+                            workflow,
+                            node,
+                            &record.id,
+                            &trigger,
+                            &outputs,
+                            &pending_state,
+                            result,
+                            cancellation.clone(),
+                        )
+                        .await
+                    {
+                        Ok(outcome) => (Ok(outcome.result), outcome.summaries),
+                        Err((error, summaries)) => (Err(error), summaries),
+                    }
+                }
+                other => (other, vec![]),
+            };
+            for summary in loop_summaries {
+                if let Some(target) = record
+                    .node_executions
+                    .iter_mut()
+                    .find(|entry| entry.node_id == summary.node_id)
+                {
+                    *target = summary;
+                }
+            }
             let completed = Utc::now();
             let node_record = &mut record.node_executions[idx];
             node_record.completed_at = Some(completed);
@@ -343,15 +491,39 @@ impl Engine {
             match execution {
                 Ok(result) => {
                     node_record.status = NodeStatus::Successful;
-                    node_record.output = redact_value(&result.output);
+                    node_record.output = redact_value(&bounded_history_value(
+                        &result.output,
+                        workflow
+                            .settings
+                            .collection_limits
+                            .max_history_item_previews,
+                    ));
                     node_record.logs = result.logs.into_iter().map(bounded_log).take(100).collect();
                     node_record.retry_count = result.retry_count;
                     node_record.browser_diagnostics = result.browser_diagnostics;
-                    node_record.output_items = result.output_items;
+                    let authoritative_output_count = result
+                        .collection
+                        .as_ref()
+                        .map(|e| e.output_item_count)
+                        .unwrap_or(result.output_items.len());
+                    let history_limit = workflow
+                        .settings
+                        .collection_limits
+                        .max_history_item_previews;
+                    node_record.output_items = result
+                        .output_items
+                        .iter()
+                        .take(history_limit)
+                        .cloned()
+                        .collect();
                     node_record.warnings = result.warnings;
                     node_record.lineage = result.lineage;
                     node_record.runtime = result.runtime;
                     node_record.capability_usage = result.capability_usage;
+                    node_record.collection = result.collection;
+                    if authoritative_output_count > node_record.output_items.len() {
+                        node_record.warnings.push(format!("Execution history shows {} of {authoritative_output_count} output items; runtime data was not truncated.", node_record.output_items.len()));
+                    }
                     if let Some(branch) = result.branch {
                         node_record.branch_followed = Some(branch.clone());
                         for edge in workflow
@@ -360,6 +532,25 @@ impl Engine {
                             .filter(|edge| edge.source_node_id == node.id)
                         {
                             active_edges.insert(edge.id.clone(), edge.source_handle == branch);
+                        }
+                    }
+                    if !result.branch_outputs.is_empty() {
+                        for edge in workflow
+                            .edges
+                            .iter()
+                            .filter(|edge| edge.source_node_id == node.id)
+                        {
+                            let branch_items = result.branch_outputs.get(&edge.source_handle);
+                            let target_is_merge = workflow
+                                .nodes
+                                .iter()
+                                .find(|candidate| candidate.id == edge.target_node_id)
+                                .is_some_and(|candidate| candidate.node_type == "merge");
+                            active_edges.insert(
+                                edge.id.clone(),
+                                branch_items
+                                    .is_some_and(|items| !items.is_empty() || target_is_merge),
+                            );
                         }
                     }
                     for (key, value) in result.state_updates {
@@ -555,7 +746,14 @@ impl Engine {
                 skip_reason: None,
                 branch_followed: None,
                 browser_diagnostics: None,
-                input_items: canonical_input_items(workflow, node, &outputs), output_items: vec![], warnings: vec![], lineage: binding_lineage(node), runtime: None, test_data_source: Some(format!("execution:{}", previous.id)), capability_usage: vec![],
+                input_items: canonical_input_items(workflow, node, &outputs),
+                output_items: vec![],
+                warnings: vec![],
+                lineage: binding_lineage(node),
+                runtime: None,
+                test_data_source: Some(format!("execution:{}", previous.id)),
+                capability_usage: vec![],
+                collection: None,
             }],
             error: None,
             skip_reason: None,
@@ -596,17 +794,34 @@ impl Engine {
         match execution {
             Ok(result) => {
                 node_record.status = NodeStatus::Successful;
-                node_record.output = redact_value(&result.output);
+                node_record.output = redact_value(&bounded_history_value(
+                    &result.output,
+                    workflow
+                        .settings
+                        .collection_limits
+                        .max_history_item_previews,
+                ));
                 node_record
                     .logs
                     .extend(result.logs.into_iter().map(bounded_log).take(99));
                 node_record.branch_followed = result.branch;
                 node_record.browser_diagnostics = result.browser_diagnostics;
-                node_record.output_items = result.output_items;
+                node_record.output_items = result
+                    .output_items
+                    .iter()
+                    .take(
+                        workflow
+                            .settings
+                            .collection_limits
+                            .max_history_item_previews,
+                    )
+                    .cloned()
+                    .collect();
                 node_record.warnings = result.warnings;
                 node_record.lineage.extend(result.lineage);
                 node_record.runtime = result.runtime;
                 node_record.capability_usage = result.capability_usage;
+                node_record.collection = result.collection;
                 if !result.state_updates.is_empty() {
                     self.db.set_workflow_states(
                         &workflow.id,
@@ -668,7 +883,12 @@ impl Engine {
             .find(|node| node.id == node_id)
             .cloned()
             .ok_or_else(|| EngineError::Node("The selected node no longer exists.".into()))?;
-        if node_has_side_effect(&node.node_type) && !allow_side_effects {
+        let loop_body_side_effect = node.node_type == "loop_over_items"
+            && loop_body_order(&workflow, &node.id)
+                .iter()
+                .filter_map(|id| workflow.nodes.iter().find(|candidate| candidate.id == *id))
+                .any(|candidate| node_has_side_effect(&candidate.node_type));
+        if (node_has_side_effect(&node.node_type) || loop_body_side_effect) && !allow_side_effects {
             return Err(EngineError::Permission(
                 "Testing this node can change external state. Confirm side effects before running the test.".into(),
             ));
@@ -688,9 +908,19 @@ impl Engine {
             .transpose()?
             .flatten();
         if previous.is_none() {
-            if let Some(pinned) = node.configuration.get("pinnedData").cloned().filter(|value| !value.is_null()) {
+            if let Some(pinned) = node
+                .configuration
+                .get("pinnedData")
+                .cloned()
+                .filter(|value| !value.is_null())
+            {
                 if let Some(configuration) = node.configuration.as_object_mut() {
-                    configuration.insert("input".into(), json!({"items": fixture_items(&pinned)}));
+                    if node.node_type == "merge" && pinned.is_object() {
+                        configuration.insert("namedTestInputs".into(), pinned);
+                    } else {
+                        configuration
+                            .insert("input".into(), json!({"items": fixture_items(&pinned)}));
+                    }
                 }
             }
         }
@@ -716,7 +946,10 @@ impl Engine {
         if previous.is_none() {
             for candidate in &workflow.nodes {
                 if let Some(pinned) = candidate.configuration.get("pinnedData") {
-                    outputs.insert(candidate.id.clone(), json!({"items": fixture_items(pinned)}));
+                    outputs.insert(
+                        candidate.id.clone(),
+                        json!({"items": fixture_items(pinned)}),
+                    );
                 }
             }
         }
@@ -752,7 +985,16 @@ impl Engine {
                 skip_reason: None,
                 branch_followed: None,
                 browser_diagnostics: None,
-                input_items: canonical_input_items(&workflow, &node, &outputs), output_items: vec![], warnings: vec![], lineage: binding_lineage(&node), runtime: None, test_data_source: previous_execution_id.map(|id| format!("execution:{id}")).or_else(||(!outputs.is_empty()).then_some("pinned_data".into())), capability_usage: vec![],
+                input_items: canonical_input_items(&workflow, &node, &outputs),
+                output_items: vec![],
+                warnings: vec![],
+                lineage: binding_lineage(&node),
+                runtime: None,
+                test_data_source: previous_execution_id
+                    .map(|id| format!("execution:{id}"))
+                    .or_else(|| (!outputs.is_empty()).then_some("pinned_data".into())),
+                capability_usage: vec![],
+                collection: None,
             }],
             error: None,
             skip_reason: None,
@@ -769,9 +1011,39 @@ impl Engine {
                 &trigger,
                 &outputs,
                 &pending_state,
-                cancellation,
+                cancellation.clone(),
             )
             .await;
+        let mut test_summaries = Vec::new();
+        let result = if node.node_type == "loop_over_items" {
+            match result {
+                Ok(prepared) => match self
+                    .run_loop_body(
+                        &workflow,
+                        &node,
+                        &record.id,
+                        &trigger,
+                        &outputs,
+                        &pending_state,
+                        prepared,
+                        cancellation.clone(),
+                    )
+                    .await
+                {
+                    Ok(outcome) => {
+                        test_summaries = outcome.summaries;
+                        Ok(outcome.result)
+                    }
+                    Err((error, summaries)) => {
+                        test_summaries = summaries;
+                        Err(error)
+                    }
+                },
+                failure => failure,
+            }
+        } else {
+            result
+        };
         let completed = Utc::now();
         let node_record = &mut record.node_executions[0];
         node_record.completed_at = Some(completed);
@@ -779,17 +1051,33 @@ impl Engine {
         match result {
             Ok(result) => {
                 node_record.status = NodeStatus::Successful;
-                node_record.output = redact_value(&result.output);
+                node_record.output = redact_value(&bounded_history_value(
+                    &result.output,
+                    workflow
+                        .settings
+                        .collection_limits
+                        .max_history_item_previews,
+                ));
                 node_record
                     .logs
                     .extend(result.logs.into_iter().map(bounded_log));
                 node_record.branch_followed = result.branch;
                 node_record.browser_diagnostics = result.browser_diagnostics;
-                node_record.output_items = result.output_items;
+                node_record.output_items = result
+                    .output_items
+                    .into_iter()
+                    .take(
+                        workflow
+                            .settings
+                            .collection_limits
+                            .max_history_item_previews,
+                    )
+                    .collect();
                 node_record.warnings = result.warnings;
                 node_record.lineage.extend(result.lineage);
                 node_record.runtime = result.runtime;
                 node_record.capability_usage = result.capability_usage;
+                node_record.collection = result.collection;
                 if !result.state_updates.is_empty() {
                     node_record.logs.push(
                         "Workflow state changes were previewed but not committed by this node test."
@@ -816,6 +1104,7 @@ impl Engine {
         }
         record.completed_at = Some(completed);
         record.duration_ms = Some((completed - started).num_milliseconds().max(0) as u64);
+        record.node_executions.extend(test_summaries);
         self.publish(&record)?;
         Ok(record)
     }
@@ -840,16 +1129,62 @@ impl Engine {
     ) -> Result<NodeResult, EngineError> {
         let mut resolved_node = resolve_node_bindings(node, trigger, outputs)?;
         let input_items = canonical_input_items(workflow, &resolved_node, outputs);
-        let input = input_items.first().map(|item| item.data.clone()).unwrap_or(Value::Null);
-        let item_values = input_items.iter().map(|item| item.data.clone()).collect::<Vec<_>>();
+        let input = input_items
+            .first()
+            .map(|item| item.data.clone())
+            .unwrap_or(Value::Null);
+        let item_values = input_items
+            .iter()
+            .map(|item| item.data.clone())
+            .collect::<Vec<_>>();
         let workflow_meta = json!({"id":workflow.id,"name":workflow.name,"description":workflow.description,"schemaVersion":workflow.schema_version});
         let execution_meta = json!({"id":execution_id,"startedAt":Utc::now(),"attempt":1});
         let mut environment = Map::new();
         for name in &workflow.settings.permissions.approved_environment_variables {
-            if let Ok(value) = std::env::var(name) { environment.insert(name.clone(), Value::String(value)); }
+            if let Ok(value) = std::env::var(name) {
+                environment.insert(name.clone(), Value::String(value));
+            }
         }
-        let context = ExpressionContext { input: &input, items: &item_values, trigger, outputs, workflow: &workflow_meta, execution: &execution_meta, environment: &environment };
-        resolved_node.configuration = resolve_configuration_expressions(&resolved_node.configuration, &context)?;
+        let context = ExpressionContext {
+            input: &input,
+            items: &item_values,
+            trigger,
+            outputs,
+            workflow: &workflow_meta,
+            execution: &execution_meta,
+            environment: &environment,
+        };
+        resolved_node.configuration =
+            resolve_configuration_expressions(&resolved_node.configuration, &context)?;
+        if resolved_node.node_type == "merge" {
+            let mut successful = workflow
+                .edges
+                .iter()
+                .filter(|edge| {
+                    edge.target_node_id == resolved_node.id
+                        && outputs.contains_key(&edge.source_node_id)
+                })
+                .map(|edge| {
+                    edge.target_port
+                        .as_deref()
+                        .unwrap_or(&edge.target_handle)
+                        .to_string()
+                })
+                .collect::<Vec<_>>();
+            successful.extend(
+                resolved_node
+                    .configuration
+                    .get("namedTestInputs")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flat_map(|inputs| inputs.keys().cloned()),
+            );
+            successful.sort();
+            successful.dedup();
+            if let Some(configuration) = resolved_node.configuration.as_object_mut() {
+                configuration.insert("successfulInputPorts".into(), json!(successful));
+            }
+        }
         let node = &resolved_node;
         match node.node_type.as_str() {
             "manual_trigger"
@@ -866,6 +1201,38 @@ impl Engine {
                 json!({"executionTime":Utc::now(),"workflowId":workflow.id,"triggerType":node.node_type,"event":trigger}),
             )),
             "condition" => execute_condition(node, trigger, outputs),
+            "filter" | "switch" | "split_out" | "loop_over_items" | "aggregate"
+            | "remove_duplicates" | "merge" => {
+                let named_inputs = canonical_named_inputs(workflow, node, outputs);
+                let stored = if node.node_type == "remove_duplicates"
+                    && node.configuration.get("scope").and_then(Value::as_str)
+                        == Some("workflow_state")
+                {
+                    self.db
+                        .get_workflow_state(&workflow.id, &format!("__stage2_dedupe:{}", node.id))?
+                } else {
+                    None
+                };
+                let collection = crate::collection::execute_collection_node(
+                    &node.node_type,
+                    &node.id,
+                    &node.configuration,
+                    input_items,
+                    named_inputs,
+                    &workflow.settings.collection_limits,
+                    stored,
+                )?;
+                let mut result = NodeResult::new(collection.output);
+                result.output_items = collection.output_items;
+                result.branch_outputs = collection.branch_outputs;
+                result.collection = Some(collection.evidence);
+                result.logs = collection.logs;
+                result.warnings = collection.warnings;
+                if let Some(update) = collection.state_update {
+                    result.state_updates.push(update);
+                }
+                Ok(result)
+            }
             "set_data" => Ok(NodeResult::new(resolve_value(
                 node.configuration.get("values").unwrap_or(&json!({})),
                 trigger,
@@ -917,7 +1284,19 @@ impl Engine {
             }
             "run_command" => execute_command(node, workflow, trigger, outputs, cancellation).await,
             "ai_prompt" => self.execute_ai_prompt(node, cancellation).await,
-            "code" | "javascript_code" | "python_code" => execute_code(node, workflow, execution_id, &input, &input_items, trigger, outputs, cancellation).await,
+            "code" | "javascript_code" | "python_code" => {
+                execute_code(
+                    node,
+                    workflow,
+                    execution_id,
+                    &input,
+                    &input_items,
+                    trigger,
+                    outputs,
+                    cancellation,
+                )
+                .await
+            }
             "web_builder" => {
                 self.execute_web_builder(node, workflow, trigger, outputs)
                     .await
@@ -955,6 +1334,419 @@ impl Engine {
             other => Err(EngineError::Node(format!(
                 "Node type '{other}' is not supported by this runner."
             ))),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn run_loop_body(
+        &self,
+        workflow: &Workflow,
+        loop_node: &WorkflowNode,
+        execution_id: &str,
+        trigger: &Value,
+        base_outputs: &HashMap<String, Value>,
+        pending_state: &HashMap<String, Value>,
+        mut loop_result: NodeResult,
+        cancellation: CancellationToken,
+    ) -> Result<LoopBodyOutcome, (EngineError, Vec<NodeExecution>)> {
+        let body_order = loop_body_order(workflow, &loop_node.id);
+        if body_order.is_empty() {
+            return Err((
+                EngineError::Node("Loop Over Items requires a connected Loop body.".into()),
+                vec![],
+            ));
+        }
+        let batch_size = loop_node
+            .configuration
+            .get("batchSize")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
+            .max(1) as usize;
+        let concurrency = loop_node
+            .configuration
+            .get("concurrency")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
+            .max(1) as usize;
+        let retry_limit = loop_node
+            .configuration
+            .get("iterationRetryCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            .min(10) as u32;
+        let timeout = loop_node
+            .configuration
+            .get("perItemTimeoutMs")
+            .and_then(Value::as_u64)
+            .unwrap_or(workflow.settings.default_node_timeout_ms)
+            .clamp(100, 600_000);
+        let continue_failures = loop_node
+            .configuration
+            .get("failurePolicy")
+            .and_then(Value::as_str)
+            == Some("continue_handled");
+        let batches = loop_result
+            .output_items
+            .chunks(batch_size)
+            .enumerate()
+            .map(|(index, items)| (index, items.to_vec()))
+            .collect::<Vec<_>>();
+        let mut outcomes = Vec::with_capacity(batches.len());
+        if concurrency == 1 {
+            let mut iteration_state = pending_state.clone();
+            for (index, batch) in batches {
+                let outcome = self
+                    .execute_loop_iteration(
+                        workflow.clone(),
+                        body_order.clone(),
+                        loop_node.id.clone(),
+                        execution_id.into(),
+                        index,
+                        batch,
+                        trigger.clone(),
+                        base_outputs.clone(),
+                        iteration_state.clone(),
+                        retry_limit,
+                        timeout,
+                        cancellation.clone(),
+                    )
+                    .await;
+                if outcome.error.is_none() {
+                    for result in outcome.node_results.values() {
+                        for (key, value) in &result.state_updates {
+                            iteration_state.insert(key.clone(), value.clone());
+                        }
+                    }
+                }
+                let failed = outcome.error.is_some();
+                outcomes.push(outcome);
+                if failed && !continue_failures {
+                    break;
+                }
+            }
+        } else {
+            let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
+            let mut tasks = JoinSet::new();
+            for (index, batch) in batches {
+                let engine = self.clone();
+                let permit = semaphore.clone();
+                let workflow = workflow.clone();
+                let order = body_order.clone();
+                let loop_id = loop_node.id.clone();
+                let execution_id = execution_id.to_string();
+                let trigger = trigger.clone();
+                let outputs = base_outputs.clone();
+                let state = pending_state.clone();
+                let cancellation = cancellation.clone();
+                tasks.spawn(async move {
+                    let _permit = permit.acquire_owned().await.expect("loop semaphore open");
+                    engine
+                        .execute_loop_iteration(
+                            workflow,
+                            order,
+                            loop_id,
+                            execution_id,
+                            index,
+                            batch,
+                            trigger,
+                            outputs,
+                            state,
+                            retry_limit,
+                            timeout,
+                            cancellation,
+                        )
+                        .await
+                });
+            }
+            while let Some(joined) = tasks.join_next().await {
+                match joined {
+                    Ok(outcome) => outcomes.push(outcome),
+                    Err(error) => {
+                        return Err((
+                            EngineError::Node(format!("Loop iteration task failed: {error}")),
+                            vec![],
+                        ))
+                    }
+                }
+            }
+            outcomes.sort_by_key(|outcome| outcome.index);
+        }
+        let summaries =
+            loop_iteration_summaries(workflow, &body_order, &outcomes, continue_failures);
+        if outcomes
+            .iter()
+            .any(|outcome| matches!(outcome.error, Some(EngineError::Cancelled)))
+        {
+            return Err((EngineError::Cancelled, summaries));
+        }
+        if !continue_failures {
+            if let Some(failed) = outcomes.iter().find(|outcome| outcome.error.is_some()) {
+                return Err((
+                    EngineError::Node(format!(
+                        "Loop stopped at iteration {}: {}",
+                        failed.index,
+                        failed
+                            .error
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| "item failed".into())
+                    )),
+                    summaries,
+                ));
+            }
+        }
+        let mut successful = vec![];
+        let mut failed = vec![];
+        for outcome in &outcomes {
+            if outcome.error.is_some() {
+                for mut item in outcome.batch.clone() {
+                    item.status = "failed".into();
+                    failed.push(item);
+                }
+            } else {
+                successful.extend(outcome.terminal_items.clone());
+            }
+            for result in outcome.node_results.values() {
+                loop_result
+                    .state_updates
+                    .extend(result.state_updates.clone());
+            }
+        }
+        let mut done = successful.clone();
+        if continue_failures {
+            done.extend(failed.clone());
+        }
+        for (position, item) in done.iter_mut().enumerate() {
+            item.current_position = Some(position);
+            item.branch = Some("done".into());
+            item.branch_history.push("done".into());
+        }
+        let loop_items = loop_result
+            .branch_outputs
+            .get("loop")
+            .cloned()
+            .unwrap_or_else(|| loop_result.output_items.clone());
+        loop_result.output_items = done.clone();
+        loop_result
+            .branch_outputs
+            .insert("loop".into(), loop_items.clone());
+        loop_result
+            .branch_outputs
+            .insert("done".into(), done.clone());
+        loop_result.output = json!({"items":done,"successfulResults":successful,"failedResults":failed,"branches":{"loop":{"items":loop_items},"done":{"items":done}}});
+        if let Some(evidence) = loop_result.collection.as_mut() {
+            evidence.output_item_count = done.len();
+            evidence.rejected_item_count = failed.len();
+            evidence.iteration_count = outcomes.len();
+            evidence.batch_count = outcomes.len();
+            evidence.branch_counts.insert("done".into(), done.len());
+            evidence.ordering_policy = if concurrency == 1 {
+                "stable_iteration_order"
+            } else {
+                "stable iteration index; completion may differ"
+            }
+            .into();
+            evidence.stop_reason = Some(
+                if failed.is_empty() {
+                    "collection_exhausted"
+                } else {
+                    "completed_with_handled_failures"
+                }
+                .into(),
+            );
+            evidence.sample_items = done
+                .iter()
+                .take(
+                    workflow
+                        .settings
+                        .collection_limits
+                        .max_history_item_previews,
+                )
+                .cloned()
+                .collect();
+            evidence.preview_truncated = done.len()
+                > workflow
+                    .settings
+                    .collection_limits
+                    .max_history_item_previews;
+        }
+        loop_result.logs.push(format!(
+            "Loop completed {} iteration(s): {} successful result(s), {} handled failure(s).",
+            outcomes.len(),
+            successful.len(),
+            failed.len()
+        ));
+        if concurrency > 1 {
+            loop_result.warnings.push("Concurrent loop iterations can complete side effects out of order. Iteration IDs and retry attempts remain stable.".into());
+        }
+        Ok(LoopBodyOutcome {
+            result: loop_result,
+            summaries,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_loop_iteration(
+        &self,
+        workflow: Workflow,
+        body_order: Vec<String>,
+        loop_id: String,
+        execution_id: String,
+        index: usize,
+        original_batch: Vec<WorkflowItem>,
+        trigger: Value,
+        base_outputs: HashMap<String, Value>,
+        pending_state: HashMap<String, Value>,
+        retry_limit: u32,
+        per_item_timeout_ms: u64,
+        cancellation: CancellationToken,
+    ) -> LoopIterationOutcome {
+        let body: HashSet<&str> = body_order.iter().map(String::as_str).collect();
+        let batch_hash = format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(&original_batch).unwrap_or_default())
+        );
+        let mut attempt = 0u32;
+        loop {
+            let mut batch = original_batch.clone();
+            for item in &mut batch {
+                item.loop_iteration = Some(index);
+                item.execution_attempt = attempt + 1;
+                item.correlations
+                    .insert("iterationId".into(), format!("{loop_id}:{index:08}"));
+            }
+            if let Err(error) = self.db.save_loop_iteration_checkpoint(
+                &execution_id,
+                &loop_id,
+                &format!("{index:08}"),
+                attempt + 1,
+                "active",
+                &batch_hash,
+                &json!({"inputItemCount":batch.len(),"attempt":attempt+1}),
+            ) {
+                return LoopIterationOutcome {
+                    index,
+                    batch,
+                    node_results: Default::default(),
+                    terminal_items: vec![],
+                    error: Some(error),
+                    attempts: attempt + 1,
+                };
+            }
+            let mut outputs = base_outputs.clone();
+            outputs.insert(
+                loop_id.clone(),
+                json!({"items":batch,"branches":{"loop":{"items":batch}}}),
+            );
+            let mut active: HashMap<String, bool> = workflow
+                .edges
+                .iter()
+                .filter(|edge| {
+                    body.contains(edge.target_node_id.as_str())
+                        && (edge.source_node_id == loop_id
+                            || body.contains(edge.source_node_id.as_str()))
+                })
+                .map(|edge| {
+                    (
+                        edge.id.clone(),
+                        edge.source_node_id == loop_id && edge.source_handle == "loop",
+                    )
+                })
+                .collect();
+            let mut node_results = std::collections::BTreeMap::new();
+            let mut error = None;
+            for node_id in &body_order {
+                if cancellation.is_cancelled() {
+                    error = Some(EngineError::Cancelled);
+                    break;
+                }
+                let node = workflow
+                    .nodes
+                    .iter()
+                    .find(|node| node.id == *node_id)
+                    .expect("validated loop body node");
+                let reached = workflow.edges.iter().any(|edge| {
+                    edge.target_node_id == node.id
+                        && (edge.source_node_id == loop_id
+                            || body.contains(edge.source_node_id.as_str()))
+                        && *active.get(&edge.id).unwrap_or(&false)
+                });
+                if !reached {
+                    continue;
+                }
+                let execution = tokio::select! {
+                    _ = cancellation.cancelled() => Err(EngineError::Cancelled),
+                    value = tokio::time::timeout(Duration::from_millis(per_item_timeout_ms), self.execute_node(node, &workflow, &execution_id, &trigger, &outputs, &pending_state, cancellation.clone())) => value.unwrap_or_else(|_|Err(EngineError::Node(format!("{} exceeded the loop per-item timeout.",node.name))))
+                };
+                match execution {
+                    Ok(result) => {
+                        for edge in workflow.edges.iter().filter(|edge| {
+                            edge.source_node_id == node.id
+                                && body.contains(edge.target_node_id.as_str())
+                        }) {
+                            let enabled = if let Some(branch) = &result.branch {
+                                edge.source_handle == *branch
+                            } else if !result.branch_outputs.is_empty() {
+                                result
+                                    .branch_outputs
+                                    .get(&edge.source_handle)
+                                    .is_some_and(|items| !items.is_empty())
+                            } else {
+                                true
+                            };
+                            active.insert(edge.id.clone(), enabled);
+                        }
+                        outputs.insert(node.id.clone(), result.output.clone());
+                        node_results.insert(node.id.clone(), result);
+                    }
+                    Err(failure) => {
+                        error = Some(failure);
+                        break;
+                    }
+                }
+            }
+            if error.is_some() && attempt < retry_limit && !cancellation.is_cancelled() {
+                attempt += 1;
+                continue;
+            }
+            let terminal_items = body_order
+                .iter()
+                .filter(|node_id| {
+                    !workflow.edges.iter().any(|edge| {
+                        edge.source_node_id.as_str() == node_id.as_str()
+                            && body.contains(edge.target_node_id.as_str())
+                    })
+                })
+                .filter_map(|node_id| outputs.get(node_id))
+                .flat_map(canonicalize_output)
+                .collect::<Vec<_>>();
+            let status = if error.is_none() {
+                "completed"
+            } else if cancellation.is_cancelled() {
+                "uncertain"
+            } else {
+                "failed"
+            };
+            let checkpoint = json!({"items":terminal_items,"error":error.as_ref().map(ToString::to_string),"attempt":attempt+1});
+            if let Err(checkpoint_error) = self.db.save_loop_iteration_checkpoint(
+                &execution_id,
+                &loop_id,
+                &format!("{index:08}"),
+                attempt + 1,
+                status,
+                &batch_hash,
+                &checkpoint,
+            ) {
+                error = Some(checkpoint_error);
+            }
+            return LoopIterationOutcome {
+                index,
+                batch,
+                node_results,
+                terminal_items,
+                error,
+                attempts: attempt + 1,
+            };
         }
     }
 
@@ -1442,6 +2234,184 @@ struct NodeResult {
     branch: Option<String>,
     browser_diagnostics: Option<crate::BrowserDiagnostics>,
     state_updates: Vec<(String, Value)>,
+    branch_outputs: std::collections::BTreeMap<String, Vec<WorkflowItem>>,
+    collection: Option<CollectionEvidence>,
+}
+
+struct LoopBodyOutcome {
+    result: NodeResult,
+    summaries: Vec<NodeExecution>,
+}
+
+struct LoopIterationOutcome {
+    index: usize,
+    batch: Vec<WorkflowItem>,
+    node_results: std::collections::BTreeMap<String, NodeResult>,
+    terminal_items: Vec<WorkflowItem>,
+    error: Option<EngineError>,
+    attempts: u32,
+}
+
+fn loop_body_order(workflow: &Workflow, loop_node_id: &str) -> Vec<String> {
+    let done_starts = workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.source_node_id == loop_node_id && edge.source_handle == "done")
+        .map(|edge| edge.target_node_id.clone())
+        .collect::<Vec<_>>();
+    let mut done_reachable: HashSet<String> = done_starts.iter().cloned().collect();
+    let mut pending = done_starts;
+    while let Some(source) = pending.pop() {
+        for edge in workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.source_node_id == source)
+        {
+            if done_reachable.insert(edge.target_node_id.clone()) {
+                pending.push(edge.target_node_id.clone());
+            }
+        }
+    }
+    let mut body = HashSet::new();
+    let mut pending = workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.source_node_id == loop_node_id && edge.source_handle == "loop")
+        .map(|edge| edge.target_node_id.clone())
+        .collect::<Vec<_>>();
+    while let Some(node_id) = pending.pop() {
+        if done_reachable.contains(&node_id) || !body.insert(node_id.clone()) {
+            continue;
+        }
+        for edge in workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.source_node_id == node_id)
+        {
+            pending.push(edge.target_node_id.clone());
+        }
+    }
+    topological_order(workflow)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|id| body.contains(id))
+        .collect()
+}
+
+fn loop_iteration_summaries(
+    workflow: &Workflow,
+    body_order: &[String],
+    outcomes: &[LoopIterationOutcome],
+    continue_failures: bool,
+) -> Vec<NodeExecution> {
+    let failed_node = outcomes.iter().find_map(|outcome| {
+        outcome.error.as_ref().and_then(|error| {
+            body_order
+                .iter()
+                .find(|id| !outcome.node_results.contains_key(*id))
+                .map(|id| (id.clone(), error.execution_error()))
+        })
+    });
+    body_order
+        .iter()
+        .map(|node_id| {
+            let node = workflow
+                .nodes
+                .iter()
+                .find(|node| node.id == *node_id)
+                .expect("loop body node");
+            let results = outcomes
+                .iter()
+                .filter_map(|outcome| outcome.node_results.get(node_id))
+                .collect::<Vec<_>>();
+            let total = results
+                .iter()
+                .map(|result| result.output_items.len())
+                .sum::<usize>();
+            let output_items = results
+                .iter()
+                .flat_map(|result| result.output_items.iter().cloned())
+                .take(
+                    workflow
+                        .settings
+                        .collection_limits
+                        .max_history_item_previews,
+                )
+                .collect::<Vec<_>>();
+            let handled = outcomes
+                .iter()
+                .filter(|outcome| outcome.error.is_some())
+                .count();
+            let is_failed =
+                !continue_failures && failed_node.as_ref().is_some_and(|(id, _)| id == node_id);
+            let status = if is_failed {
+                NodeStatus::Failed
+            } else if results.is_empty() {
+                NodeStatus::Skipped
+            } else {
+                NodeStatus::Successful
+            };
+            NodeExecution {
+                node_id: node.id.clone(),
+                status,
+                started_at: None,
+                completed_at: Some(Utc::now()),
+                duration_ms: None,
+                input: json!({"iterations":outcomes.len()}),
+                output: json!({"items":output_items}),
+                logs: results
+                    .iter()
+                    .flat_map(|result| result.logs.iter().cloned())
+                    .take(100)
+                    .collect(),
+                retry_count: outcomes
+                    .iter()
+                    .map(|outcome| outcome.attempts.saturating_sub(1))
+                    .max()
+                    .unwrap_or(0),
+                error: if is_failed {
+                    failed_node.as_ref().map(|(_, error)| error.clone())
+                } else {
+                    None
+                },
+                skip_reason: (status == NodeStatus::Skipped)
+                    .then_some("No loop iteration selected this body node.".into()),
+                branch_followed: None,
+                browser_diagnostics: None,
+                input_items: vec![],
+                output_items: output_items.clone(),
+                warnings: if handled > 0 && continue_failures {
+                    vec![format!(
+                        "{handled} iteration failure(s) were handled by Loop Over Items."
+                    )]
+                } else {
+                    vec![]
+                },
+                lineage: vec![],
+                runtime: None,
+                test_data_source: None,
+                capability_usage: vec![],
+                collection: Some(CollectionEvidence {
+                    input_item_count: outcomes.len(),
+                    output_item_count: total,
+                    rejected_item_count: handled,
+                    branch_counts: Default::default(),
+                    iteration_count: outcomes.len(),
+                    batch_count: outcomes.len(),
+                    sample_items: output_items,
+                    preview_truncated: total
+                        > workflow
+                            .settings
+                            .collection_limits
+                            .max_history_item_previews,
+                    runtime_data_truncated: false,
+                    ordering_policy: "iteration_index".into(),
+                    stop_reason: None,
+                    waiting_for_inputs: vec![],
+                }),
+            }
+        })
+        .collect()
 }
 impl NodeResult {
     fn new(output: Value) -> Self {
@@ -1457,17 +2427,34 @@ impl NodeResult {
             branch: None,
             browser_diagnostics: None,
             state_updates: vec![],
+            branch_outputs: Default::default(),
+            collection: None,
         }
     }
     fn log(mut self, message: impl Into<String>) -> Self {
         self.logs.push(message.into());
         self
     }
-    fn with_runtime(mut self, runtime: RuntimeMetadata) -> Self { self.runtime = Some(runtime); self }
-    fn with_logs(mut self, logs: Vec<String>) -> Self { self.logs.extend(logs); self }
-    fn with_capability(mut self, capability: impl Into<String>) -> Self { self.capability_usage.push(capability.into()); self }
-    fn with_retry_count(mut self, retry_count: u32) -> Self { self.retry_count = retry_count; self }
-    fn with_branch(mut self, branch: impl Into<String>) -> Self { self.branch = Some(branch.into()); self }
+    fn with_runtime(mut self, runtime: RuntimeMetadata) -> Self {
+        self.runtime = Some(runtime);
+        self
+    }
+    fn with_logs(mut self, logs: Vec<String>) -> Self {
+        self.logs.extend(logs);
+        self
+    }
+    fn with_capability(mut self, capability: impl Into<String>) -> Self {
+        self.capability_usage.push(capability.into());
+        self
+    }
+    fn with_retry_count(mut self, retry_count: u32) -> Self {
+        self.retry_count = retry_count;
+        self
+    }
+    fn with_branch(mut self, branch: impl Into<String>) -> Self {
+        self.branch = Some(branch.into());
+        self
+    }
     fn with_browser_diagnostics(mut self, diagnostics: Option<crate::BrowserDiagnostics>) -> Self {
         self.browser_diagnostics = diagnostics;
         self
@@ -1485,28 +2472,91 @@ fn canonicalize_output(output: &Value) -> Vec<WorkflowItem> {
     vec![WorkflowItem::json(output.clone())]
 }
 
+fn bounded_history_value(value: &Value, maximum_items: usize) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(
+            values
+                .iter()
+                .take(maximum_items)
+                .map(|value| bounded_history_value(value, maximum_items))
+                .collect(),
+        ),
+        Value::Object(object) => {
+            let mut bounded = Map::new();
+            for (key, value) in object {
+                if key == "items"
+                    && value
+                        .as_array()
+                        .is_some_and(|items| items.len() > maximum_items)
+                {
+                    let items = value.as_array().unwrap();
+                    bounded.insert(
+                        key.clone(),
+                        Value::Array(
+                            items
+                                .iter()
+                                .take(maximum_items)
+                                .map(|item| bounded_history_value(item, maximum_items))
+                                .collect(),
+                        ),
+                    );
+                    bounded.insert("previewTruncated".into(), Value::Bool(true));
+                    bounded.insert("authoritativeItemCount".into(), json!(items.len()));
+                } else {
+                    bounded.insert(key.clone(), bounded_history_value(value, maximum_items));
+                }
+            }
+            Value::Object(bounded)
+        }
+        other => other.clone(),
+    }
+}
+
 fn workflow_item_from_value(value: &Value) -> WorkflowItem {
-    let is_canonical=value.as_object().is_some_and(|object| {
-        object.contains_key("data") || object.contains_key("binary")
-            || object.contains_key("sourceNodeId") || object.contains_key("source_node_id")
-            || object.contains_key("sourceItemIndex") || object.contains_key("source_item_index")
+    let is_canonical = value.as_object().is_some_and(|object| {
+        object.contains_key("data")
+            || object.contains_key("binary")
+            || object.contains_key("sourceNodeId")
+            || object.contains_key("source_node_id")
+            || object.contains_key("sourceItemIndex")
+            || object.contains_key("source_item_index")
             || object.contains_key("branch")
     });
     if is_canonical {
-        serde_json::from_value::<WorkflowItem>(value.clone()).unwrap_or_else(|_| WorkflowItem::json(value.clone()))
+        serde_json::from_value::<WorkflowItem>(value.clone())
+            .unwrap_or_else(|_| WorkflowItem::json(value.clone()))
     } else {
         WorkflowItem::json(value.clone())
     }
 }
 
-fn resolve_configuration_expressions(configuration:&Value,context:&ExpressionContext<'_>)->Result<Value,EngineError>{
-    let Some(object)=configuration.as_object() else{return Err(EngineError::Validation("Node configuration must be a JSON object.".into()));};
-    let mut resolved=object.clone();
+fn resolve_configuration_expressions(
+    configuration: &Value,
+    context: &ExpressionContext<'_>,
+) -> Result<Value, EngineError> {
+    let Some(object) = configuration.as_object() else {
+        return Err(EngineError::Validation(
+            "Node configuration must be a JSON object.".into(),
+        ));
+    };
+    let mut resolved = object.clone();
     // Source, package metadata, fixtures, credential references and local
     // permission identifiers are data, never expression-bearing fields.
-    for (key,value) in object {
-        if matches!(key.as_str(),"sourceCode"|"dependencies"|"runtimeVersion"|"helperLanguageVersion"|"pinnedData"|"credentialId"|"connectionId"|"profileId") { continue; }
-        resolved.insert(key.clone(),resolve_expression_value(value,context)?);
+    for (key, value) in object {
+        if matches!(
+            key.as_str(),
+            "sourceCode"
+                | "dependencies"
+                | "runtimeVersion"
+                | "helperLanguageVersion"
+                | "pinnedData"
+                | "credentialId"
+                | "connectionId"
+                | "profileId"
+        ) {
+            continue;
+        }
+        resolved.insert(key.clone(), resolve_expression_value(value, context)?);
     }
     Ok(Value::Object(resolved))
 }
@@ -1518,17 +2568,33 @@ fn fixture_items(value: &Value) -> Vec<WorkflowItem> {
     }
 }
 
-fn canonical_input_items(workflow: &Workflow, node: &WorkflowNode, outputs: &HashMap<String, Value>) -> Vec<WorkflowItem> {
+fn canonical_input_items(
+    workflow: &Workflow,
+    node: &WorkflowNode,
+    outputs: &HashMap<String, Value>,
+) -> Vec<WorkflowItem> {
     if let Some(value) = node.configuration.get("input") {
-        return canonicalize_output(value);
+        let mut items = canonicalize_output(value);
+        for (index, item) in items.iter_mut().enumerate() {
+            ensure_item_identity(item, &node.id, index);
+        }
+        return items;
     }
     let mut items = Vec::new();
-    for edge in workflow.edges.iter().filter(|edge| edge.target_node_id == node.id) {
-        if let Some(output) = outputs.get(&edge.source_node_id) {
+    for edge in workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.target_node_id == node.id)
+    {
+        if let Some(output) = outputs
+            .get(&edge.source_node_id)
+            .and_then(|output| output_for_handle(output, &edge.source_handle))
+        {
             for (index, mut item) in canonicalize_output(output).into_iter().enumerate() {
                 item.source_node_id = Some(edge.source_node_id.clone());
                 item.source_item_index = Some(index);
                 item.branch = Some(edge.source_handle.clone());
+                ensure_item_identity(&mut item, &edge.source_node_id, index);
                 items.push(item);
             }
         }
@@ -1536,13 +2602,110 @@ fn canonical_input_items(workflow: &Workflow, node: &WorkflowNode, outputs: &Has
     items
 }
 
+fn ensure_item_identity(item: &mut WorkflowItem, source: &str, index: usize) {
+    if item.item_id.is_empty() {
+        item.item_id = format!("{source}:{index}");
+    }
+    if item.origin_item_id.is_none() {
+        item.origin_item_id = Some(item.item_id.clone());
+    }
+    item.original_position.get_or_insert(index);
+    item.current_position.get_or_insert(index);
+}
+
+fn canonical_named_inputs(
+    workflow: &Workflow,
+    node: &WorkflowNode,
+    outputs: &HashMap<String, Value>,
+) -> std::collections::BTreeMap<String, Vec<WorkflowItem>> {
+    let mut named = std::collections::BTreeMap::new();
+    if node.node_type == "merge" {
+        if let Some(test_inputs) = node
+            .configuration
+            .get("namedTestInputs")
+            .and_then(Value::as_object)
+        {
+            for (port, value) in test_inputs {
+                let mut items = fixture_items(value);
+                for (index, item) in items.iter_mut().enumerate() {
+                    ensure_item_identity(item, &format!("{}:{port}", node.id), index);
+                }
+                named.insert(port.clone(), items);
+            }
+        }
+    }
+    for edge in workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.target_node_id == node.id)
+    {
+        let port = edge
+            .target_port
+            .as_deref()
+            .unwrap_or(&edge.target_handle)
+            .to_string();
+        let target = named.entry(port).or_insert_with(Vec::new);
+        if let Some(output) = outputs
+            .get(&edge.source_node_id)
+            .and_then(|output| output_for_handle(output, &edge.source_handle))
+        {
+            for (index, mut item) in canonicalize_output(output).into_iter().enumerate() {
+                item.source_node_id = Some(edge.source_node_id.clone());
+                item.source_item_index = Some(index);
+                item.branch = Some(edge.source_handle.clone());
+                item.branch_history.push(edge.source_handle.clone());
+                ensure_item_identity(&mut item, &edge.source_node_id, index);
+                target.push(item);
+            }
+        }
+    }
+    // Configured Merge inputs remain visible even when an upstream branch is empty.
+    if node.node_type == "merge" {
+        if let Some(ports) = node
+            .configuration
+            .get("inputPorts")
+            .and_then(Value::as_array)
+        {
+            for port in ports
+                .iter()
+                .filter_map(|port| port.get("id").and_then(Value::as_str))
+            {
+                named.entry(port.to_string()).or_default();
+            }
+        }
+    }
+    named
+}
+
+fn output_for_handle<'a>(output: &'a Value, handle: &str) -> Option<&'a Value> {
+    output
+        .get("branches")
+        .and_then(|branches| branches.get(handle))
+        .or_else(|| (handle == "output").then_some(output))
+}
+
 fn binding_lineage(node: &WorkflowNode) -> Vec<DataLineage> {
-    node.input_bindings.iter().filter_map(|(field, binding)| match binding {
-        InputBinding::NodeOutput { node_id, path } => Some(DataLineage { source: format!("node:{node_id}"), path: path.clone(), target_field: field.clone() }),
-        InputBinding::Template { .. } => Some(DataLineage { source: "expression".into(), path: vec![], target_field: field.clone() }),
-        InputBinding::ProtectedVariable { name } => Some(DataLineage { source: format!("environment:{name}"), path: vec![], target_field: field.clone() }),
-        _ => None,
-    }).collect()
+    node.input_bindings
+        .iter()
+        .filter_map(|(field, binding)| match binding {
+            InputBinding::NodeOutput { node_id, path } => Some(DataLineage {
+                source: format!("node:{node_id}"),
+                path: path.clone(),
+                target_field: field.clone(),
+            }),
+            InputBinding::Template { .. } => Some(DataLineage {
+                source: "expression".into(),
+                path: vec![],
+                target_field: field.clone(),
+            }),
+            InputBinding::ProtectedVariable { name } => Some(DataLineage {
+                source: format!("environment:{name}"),
+                path: vec![],
+                target_field: field.clone(),
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 fn resolve_node_bindings(
@@ -1573,10 +2736,10 @@ fn resolve_node_bindings(
                     ))
                 })?
             }
-            InputBinding::Template { template } => {
-                Value::String(template.clone())
+            InputBinding::Template { template } => Value::String(template.clone()),
+            InputBinding::ProtectedVariable { name } => {
+                Value::String(format!("{{{{ env.{name} }}}}"))
             }
-            InputBinding::ProtectedVariable { name } => Value::String(format!("{{{{ env.{name} }}}}")),
             InputBinding::Connection { connection_id } => Value::String(connection_id.clone()),
         };
         configuration.insert(field.clone(), value);
@@ -1767,18 +2930,47 @@ async fn execute_code(
             "Executing a Code node requires command execution approval.".into(),
         ));
     }
-    let runtime_requirement = node.configuration.get("runtimeVersion").and_then(Value::as_str).unwrap_or(if language == "python" { ">=3.11" } else { ">=20" });
-    let execution_mode = node.configuration.get("itemMode").and_then(Value::as_str).unwrap_or("all_items");
-    if !matches!(execution_mode, "all_items" | "each_item") { return Err(EngineError::Validation("Code itemMode must be 'all_items' or 'each_item'.".into())); }
-    let dependencies = node.configuration.get("dependencies").and_then(Value::as_array).cloned().unwrap_or_default();
-    if !dependencies.is_empty() { return Err(EngineError::Permission("Code packages are not installed during execution. Managed runtimes currently provide only the documented built-in helper library.".into())); }
+    let runtime_requirement = node
+        .configuration
+        .get("runtimeVersion")
+        .and_then(Value::as_str)
+        .unwrap_or(if language == "python" {
+            ">=3.11"
+        } else {
+            ">=20"
+        });
+    let execution_mode = node
+        .configuration
+        .get("itemMode")
+        .and_then(Value::as_str)
+        .unwrap_or("all_items");
+    if !matches!(execution_mode, "all_items" | "each_item") {
+        return Err(EngineError::Validation(
+            "Code itemMode must be 'all_items' or 'each_item'.".into(),
+        ));
+    }
+    let dependencies = node
+        .configuration
+        .get("dependencies")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if !dependencies.is_empty() {
+        return Err(EngineError::Permission("Code packages are not installed during execution. Managed runtimes currently provide only the documented built-in helper library.".into()));
+    }
     let (executable, extension, wrapper) = if language == "python" {
         ("python", "py", PYTHON_CODE_WRAPPER)
     } else {
         ("node", "js", JAVASCRIPT_CODE_WRAPPER)
     };
-    let runtime_version = installed_runtime_version(executable).ok_or_else(|| EngineError::Node(format!("Code could not inspect the installed {language} runtime.")))?;
-    if !runtime_requirement_met(runtime_requirement, &runtime_version) { return Err(EngineError::Validation(format!("{language} runtime {runtime_version} does not satisfy the saved requirement {runtime_requirement}."))); }
+    let runtime_version = installed_runtime_version(executable).ok_or_else(|| {
+        EngineError::Node(format!(
+            "Code could not inspect the installed {language} runtime."
+        ))
+    })?;
+    if !runtime_requirement_met(runtime_requirement, &runtime_version) {
+        return Err(EngineError::Validation(format!("{language} runtime {runtime_version} does not satisfy the saved requirement {runtime_requirement}.")));
+    }
     let code_directory = std::env::temp_dir().join("sndbox-code");
     tokio::fs::create_dir_all(&code_directory)
         .await
@@ -1804,8 +2996,15 @@ async fn execute_code(
         "mode": execution_mode,
     });
     let mut command = Command::new(executable);
-    if language == "python" { command.arg("-I").arg("-B").arg(&script_path); }
-    else { command.arg("--max-old-space-size=128").arg(node_permission_flag()).arg(format!("--allow-fs-read={}", script_path.display())).arg(&script_path); }
+    if language == "python" {
+        command.arg("-I").arg("-B").arg(&script_path);
+    } else {
+        command
+            .arg("--max-old-space-size=128")
+            .arg(node_permission_flag())
+            .arg(format!("--allow-fs-read={}", script_path.display()))
+            .arg(&script_path);
+    }
     command
         .env_clear()
         .kill_on_drop(true)
@@ -1817,7 +3016,9 @@ async fn execute_code(
     // no user or workflow environment variables are inherited.
     #[cfg(windows)]
     for name in ["SystemRoot", "WINDIR"] {
-        if let Ok(value) = std::env::var(name) { command.env(name, value); }
+        if let Ok(value) = std::env::var(name) {
+            command.env(name, value);
+        }
     }
     let mut child = command.spawn().map_err(|error| {
         EngineError::Node(format!(
@@ -1825,9 +3026,15 @@ async fn execute_code(
         ))
     })?;
     let mut stdin = child.stdin.take().expect("piped stdin");
-    let encoded_payload = serde_json::to_vec(&payload).map_err(|error| EngineError::Node(format!("Code input could not be encoded: {error}")))?;
-    tokio::spawn(async move { let _ = stdin.write_all(&encoded_payload).await; });
-    let stdout_task = tokio::spawn(read_bounded_to(child.stdout.take().expect("piped stdout"), 1_048_576));
+    let encoded_payload = serde_json::to_vec(&payload)
+        .map_err(|error| EngineError::Node(format!("Code input could not be encoded: {error}")))?;
+    tokio::spawn(async move {
+        let _ = stdin.write_all(&encoded_payload).await;
+    });
+    let stdout_task = tokio::spawn(read_bounded_to(
+        child.stdout.take().expect("piped stdout"),
+        1_048_576,
+    ));
     let stderr_task = tokio::spawn(read_bounded(child.stderr.take().expect("piped stderr")));
     let timeout_ms = node
         .configuration
@@ -1866,17 +3073,45 @@ async fn execute_code(
             bounded_log(&stderr)
         )));
     }
-    if stdout_bytes.len() >= 1_048_576 { return Err(EngineError::Node("Code output exceeded the 1 MiB limit.".into())); }
-    let protocol: Value = serde_json::from_str(stdout.trim()).map_err(|_| EngineError::Node(format!("Code runtime returned an invalid output contract. {}", bounded_log(&stderr))))?;
+    if stdout_bytes.len() >= 1_048_576 {
+        return Err(EngineError::Node(
+            "Code output exceeded the 1 MiB limit.".into(),
+        ));
+    }
+    let protocol: Value = serde_json::from_str(stdout.trim()).map_err(|_| {
+        EngineError::Node(format!(
+            "Code runtime returned an invalid output contract. {}",
+            bounded_log(&stderr)
+        ))
+    })?;
     let result = protocol.get("result").cloned().unwrap_or(Value::Null);
-    let logs = protocol.get("logs").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(bounded_log).take(100).collect::<Vec<_>>();
+    let logs = protocol
+        .get("logs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(bounded_log)
+        .take(100)
+        .collect::<Vec<_>>();
     let output = json!({"language":language,"runtimeVersion":runtime_version,"runtimeRequirement":runtime_requirement,"helperLanguageVersion":EXPRESSION_LANGUAGE_VERSION,"items":result,"result":result,"exitCode":status.code()});
     let log_bytes = logs.iter().map(String::len).sum::<usize>() as u64;
-    let dependency_environment_id = format!("builtin:{language}:{runtime_version}:helpers-v{EXPRESSION_LANGUAGE_VERSION}");
+    let dependency_environment_id =
+        format!("builtin:{language}:{runtime_version}:helpers-v{EXPRESSION_LANGUAGE_VERSION}");
     Ok(NodeResult::new(output)
         .with_logs(logs)
-        .log(format!("Executed {language} in {execution_mode} mode and validated its item contract."))
-        .with_runtime(RuntimeMetadata { runtime: language.into(), runtime_version: runtime_version.clone(), helper_language_version: EXPRESSION_LANGUAGE_VERSION, dependency_environment_id, execution_mode: execution_mode.into(), output_bytes: stdout_bytes.len() as u64, log_bytes })
+        .log(format!(
+            "Executed {language} in {execution_mode} mode and validated its item contract."
+        ))
+        .with_runtime(RuntimeMetadata {
+            runtime: language.into(),
+            runtime_version: runtime_version.clone(),
+            helper_language_version: EXPRESSION_LANGUAGE_VERSION,
+            dependency_environment_id,
+            execution_mode: execution_mode.into(),
+            output_bytes: stdout_bytes.len() as u64,
+            log_bytes,
+        })
         .with_capability("code.execute"))
 }
 
@@ -1933,21 +3168,61 @@ except BaseException:
 "#;
 
 fn node_permission_flag() -> &'static str {
-    let major = std::process::Command::new("node").arg("--version").output().ok().and_then(|output| String::from_utf8(output.stdout).ok()).and_then(|value| value.trim().trim_start_matches('v').split('.').next()?.parse::<u32>().ok()).unwrap_or(20);
-    if major >= 23 { "--permission" } else { "--experimental-permission" }
+    let major = std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|value| {
+            value
+                .trim()
+                .trim_start_matches('v')
+                .split('.')
+                .next()?
+                .parse::<u32>()
+                .ok()
+        })
+        .unwrap_or(20);
+    if major >= 23 {
+        "--permission"
+    } else {
+        "--experimental-permission"
+    }
 }
 
 fn installed_runtime_version(executable: &str) -> Option<String> {
-    let output=std::process::Command::new(executable).arg("--version").output().ok()?;
-    let value=if output.stdout.is_empty(){output.stderr}else{output.stdout};
-    let text=String::from_utf8(value).ok()?;
-    text.split_whitespace().find(|part|part.chars().any(|character|character.is_ascii_digit())).map(|part|part.trim_start_matches('v').to_string())
+    let output = std::process::Command::new(executable)
+        .arg("--version")
+        .output()
+        .ok()?;
+    let value = if output.stdout.is_empty() {
+        output.stderr
+    } else {
+        output.stdout
+    };
+    let text = String::from_utf8(value).ok()?;
+    text.split_whitespace()
+        .find(|part| part.chars().any(|character| character.is_ascii_digit()))
+        .map(|part| part.trim_start_matches('v').to_string())
 }
-fn runtime_requirement_met(requirement:&str,actual:&str)->bool {
-    let actual_parts=actual.split('.').filter_map(|part|part.parse::<u32>().ok()).collect::<Vec<_>>();
-    let expected=requirement.trim_start_matches(">=").split('.').filter_map(|part|part.parse::<u32>().ok()).collect::<Vec<_>>();
-    if actual_parts.is_empty()||expected.is_empty(){return false;}
-    if requirement.starts_with(">="){actual_parts>=expected}else{actual_parts.starts_with(&expected)}
+fn runtime_requirement_met(requirement: &str, actual: &str) -> bool {
+    let actual_parts = actual
+        .split('.')
+        .filter_map(|part| part.parse::<u32>().ok())
+        .collect::<Vec<_>>();
+    let expected = requirement
+        .trim_start_matches(">=")
+        .split('.')
+        .filter_map(|part| part.parse::<u32>().ok())
+        .collect::<Vec<_>>();
+    if actual_parts.is_empty() || expected.is_empty() {
+        return false;
+    }
+    if requirement.starts_with(">=") {
+        actual_parts >= expected
+    } else {
+        actual_parts.starts_with(&expected)
+    }
 }
 
 fn execute_condition(
@@ -1983,6 +3258,23 @@ fn execute_condition(
         "not_exists" => left.is_null(),
         "starts_with" => strings(&left, &right).is_some_and(|(a, b)| a.starts_with(b)),
         "ends_with" => strings(&left, &right).is_some_and(|(a, b)| a.ends_with(b)),
+        "is_null" => left.is_null(),
+        "is_not_null" => !left.is_null(),
+        "is_empty"
+        | "is_not_empty"
+        | "greater_than_or_equal"
+        | "less_than_or_equal"
+        | "matches_regex"
+        | "is_one_of"
+        | "is_not_one_of"
+        | "array_contains"
+        | "date_before"
+        | "date_after"
+        | "date_between" => crate::collection::evaluate_operator(
+            operator,
+            crate::collection::PathValue::Present(&left),
+            &right,
+        )?,
         _ => {
             return Err(EngineError::Node(format!(
                 "Condition operator '{operator}' is not supported."
@@ -1990,11 +3282,13 @@ fn execute_condition(
         }
     };
     let branch = if result { "true" } else { "false" }.to_string();
-    Ok(NodeResult::new(json!({"result":result,"left":left,"right":right,"operator":operator}))
-        .log(format!(
-            "Condition evaluated to {result}; followed the {branch} branch."
-        ))
-        .with_branch(branch))
+    Ok(
+        NodeResult::new(json!({"result":result,"left":left,"right":right,"operator":operator}))
+            .log(format!(
+                "Condition evaluated to {result}; followed the {branch} branch."
+            ))
+            .with_branch(branch),
+    )
 }
 fn contains(left: &Value, right: &Value) -> bool {
     match (left, right) {
@@ -2731,7 +4025,10 @@ async fn read_bounded<R: tokio::io::AsyncRead + Unpin>(mut reader: R) -> Vec<u8>
     read_bounded_to(&mut reader, 65_536).await
 }
 
-async fn read_bounded_to<R: tokio::io::AsyncRead + Unpin>(mut reader: R, maximum: usize) -> Vec<u8> {
+async fn read_bounded_to<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+    maximum: usize,
+) -> Vec<u8> {
     let mut kept = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
@@ -2773,6 +4070,28 @@ mod tests {
         ) -> Result<(), EngineError> {
             self.0.lock().unwrap().push(format!("{title}:{message}"));
             Ok(())
+        }
+    }
+    struct FlakyIntegrationHost(std::sync::atomic::AtomicUsize);
+    #[async_trait]
+    impl HostServices for FlakyIntegrationHost {
+        async fn desktop_notification(
+            &self,
+            _title: &str,
+            _message: &str,
+        ) -> Result<(), EngineError> {
+            Ok(())
+        }
+        async fn integration_operation(
+            &self,
+            _operation: &str,
+            _payload: Value,
+        ) -> Result<Value, EngineError> {
+            if self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                Err(EngineError::Node("transient test failure".into()))
+            } else {
+                Ok(json!({"message":"ok"}))
+            }
         }
     }
     struct AiTestHost;
@@ -2916,6 +4235,556 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn loop_runs_body_per_item_and_collects_done_results() {
+        let host = Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![]))));
+        let engine = Engine::new(Database::in_memory().unwrap(), host);
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "seed",
+                    "set_data",
+                    json!({"values":{"items":[{"id":1},{"id":2},{"id":3}]}}),
+                ),
+                node(
+                    "loop",
+                    "loop_over_items",
+                    json!({"batchSize":1,"concurrency":2,"maxIterations":10,"failurePolicy":"stop","perItemTimeoutMs":5000}),
+                ),
+                node("body", "aggregate", json!({"operation":"count"})),
+                node("done", "aggregate", json!({"operation":"count"})),
+            ],
+            vec![
+                edge("a", "trigger", "output", "seed"),
+                edge("b", "seed", "output", "loop"),
+                edge("c", "loop", "loop", "body"),
+                edge("d", "loop", "done", "done"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let run = engine
+            .run(wf, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(run.status, ExecutionStatus::Successful);
+        let loop_run = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "loop")
+            .unwrap();
+        assert_eq!(loop_run.collection.as_ref().unwrap().iteration_count, 3);
+        assert_eq!(loop_run.collection.as_ref().unwrap().output_item_count, 3);
+        let body_run = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "body")
+            .unwrap();
+        assert_eq!(body_run.collection.as_ref().unwrap().iteration_count, 3);
+        let done_run = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "done")
+            .unwrap();
+        assert_eq!(done_run.output.get("value"), Some(&json!(3)));
+    }
+
+    #[tokio::test]
+    async fn loop_handles_or_stops_item_failures_by_policy() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let make = |policy: &str| {
+            base(
+                vec![
+                    node("trigger", "manual_trigger", json!({})),
+                    node(
+                        "seed",
+                        "set_data",
+                        json!({"values":{"items":[{"id":1},{"id":2}]}}),
+                    ),
+                    node(
+                        "loop",
+                        "loop_over_items",
+                        json!({"batchSize":1,"concurrency":1,"maxIterations":5,"failurePolicy":policy}),
+                    ),
+                    node(
+                        "body",
+                        "split_out",
+                        json!({"fieldPath":"missing","invalidInputPolicy":"fail"}),
+                    ),
+                    node("done", "aggregate", json!({"operation":"count"})),
+                ],
+                vec![
+                    edge("a", "trigger", "output", "seed"),
+                    edge("b", "seed", "output", "loop"),
+                    edge("c", "loop", "loop", "body"),
+                    edge("d", "loop", "done", "done"),
+                ],
+            )
+        };
+        let continued = make("continue_handled");
+        engine.database().save_workflow(continued.clone()).unwrap();
+        let run = engine
+            .run(continued, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        let looped = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "loop")
+            .unwrap();
+        assert_eq!(run.status, ExecutionStatus::Successful);
+        assert_eq!(looped.collection.as_ref().unwrap().rejected_item_count, 2);
+        assert_eq!(
+            looped.collection.as_ref().unwrap().stop_reason.as_deref(),
+            Some("completed_with_handled_failures")
+        );
+        let stopped = make("stop");
+        engine.database().save_workflow(stopped.clone()).unwrap();
+        let run = engine
+            .run(stopped, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(run.status, ExecutionStatus::Failed);
+        assert!(run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "loop")
+            .unwrap()
+            .error
+            .as_ref()
+            .unwrap()
+            .message
+            .contains("iteration 0"));
+    }
+
+    #[tokio::test]
+    async fn loop_cancellation_reaches_the_active_iteration() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node("seed", "set_data", json!({"values":{"items":[1,2]}})),
+                node(
+                    "loop",
+                    "loop_over_items",
+                    json!({"batchSize":1,"concurrency":1,"maxIterations":5}),
+                ),
+                node("body", "delay", json!({"amount":2,"unit":"seconds"})),
+                node("done", "aggregate", json!({"operation":"count"})),
+            ],
+            vec![
+                edge("a", "trigger", "output", "seed"),
+                edge("b", "seed", "output", "loop"),
+                edge("c", "loop", "loop", "body"),
+                edge("d", "loop", "done", "done"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let cancellation = CancellationToken::new();
+        let cancel = cancellation.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            cancel.cancel();
+        });
+        let run = engine.run(wf, json!({}), cancellation).await.unwrap();
+        assert_eq!(run.status, ExecutionStatus::Cancelled);
+        assert_eq!(
+            run.node_executions
+                .iter()
+                .find(|entry| entry.node_id == "loop")
+                .unwrap()
+                .status,
+            NodeStatus::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn loop_retries_one_iteration_with_stable_checkpoint_identity() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(FlakyIntegrationHost(std::sync::atomic::AtomicUsize::new(0))),
+        );
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node("seed", "set_data", json!({"values":{"items":[{"id":1}]}})),
+                node(
+                    "loop",
+                    "loop_over_items",
+                    json!({"batchSize":1,"concurrency":1,"maxIterations":2,"iterationRetryCount":1}),
+                ),
+                node(
+                    "body",
+                    "gmail_get_email",
+                    json!({"credentialId":"connection","messageId":"message"}),
+                ),
+                node("done", "aggregate", json!({"operation":"count"})),
+            ],
+            vec![
+                edge("a", "trigger", "output", "seed"),
+                edge("b", "seed", "output", "loop"),
+                edge("c", "loop", "loop", "body"),
+                edge("d", "loop", "done", "done"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let run = engine
+            .run(wf, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(run.status, ExecutionStatus::Successful);
+        let body = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "body")
+            .unwrap();
+        assert_eq!(body.retry_count, 1);
+        let checkpoints = engine
+            .database()
+            .loop_iteration_checkpoints(&run.id, "loop")
+            .unwrap();
+        assert_eq!(checkpoints.len(), 1);
+        assert_eq!(checkpoints[0].0, "00000000");
+        assert_eq!(checkpoints[0].1, 2);
+        assert_eq!(checkpoints[0].2, "completed");
+    }
+
+    #[tokio::test]
+    async fn collection_node_tests_use_pinned_and_named_inputs_without_committing_them() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "filter",
+                    "filter",
+                    json!({"rules":[{"field":"active","operator":"equals","value":true}],"pinnedData":[{"active":true},{"active":false}]}),
+                ),
+                node(
+                    "merge",
+                    "merge",
+                    json!({"mode":"append","inputPorts":[{"id":"left"},{"id":"right"}],"pinnedData":{"left":[{"id":1}],"right":[{"id":2}]}}),
+                ),
+            ],
+            vec![],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let filtered = engine
+            .test_node(
+                wf.clone(),
+                "filter",
+                json!({}),
+                None,
+                false,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let filter_run = &filtered.node_executions[0];
+        assert_eq!(filter_run.collection.as_ref().unwrap().input_item_count, 2);
+        assert_eq!(filter_run.collection.as_ref().unwrap().output_item_count, 1);
+        assert_eq!(filter_run.test_data_source.as_deref(), Some("pinned_data"));
+        let merged = engine
+            .test_node(
+                wf,
+                "merge",
+                json!({}),
+                None,
+                false,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            merged.node_executions[0]
+                .collection
+                .as_ref()
+                .unwrap()
+                .branch_counts
+                .get("left"),
+            Some(&1)
+        );
+        assert_eq!(
+            merged.node_executions[0]
+                .collection
+                .as_ref()
+                .unwrap()
+                .branch_counts
+                .get("right"),
+            Some(&1)
+        );
+    }
+
+    #[tokio::test]
+    async fn loop_node_test_requires_confirmation_for_a_side_effecting_body() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "loop",
+                    "loop_over_items",
+                    json!({"pinnedData":[{"id":1}],"batchSize":1,"maxIterations":2}),
+                ),
+                node(
+                    "state",
+                    "set_workflow_state",
+                    json!({"key":"seen","value":true}),
+                ),
+                node("done", "aggregate", json!({"operation":"count"})),
+            ],
+            vec![
+                edge("a", "loop", "loop", "state"),
+                edge("b", "loop", "done", "done"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let error = engine
+            .test_node(wf, "loop", json!({}), None, false, CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert_eq!(error.execution_error().code, "permission_required");
+    }
+
+    #[tokio::test]
+    async fn merge_treats_skipped_branch_by_explicit_policy_not_arrival() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let mut left = edge("d", "left", "output", "merge");
+        left.target_handle = "input_a".into();
+        left.target_port = Some("input_a".into());
+        let mut right = edge("e", "right", "output", "merge");
+        right.target_handle = "input_b".into();
+        right.target_port = Some("input_b".into());
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "route",
+                    "condition",
+                    json!({"left":false,"operator":"equals","right":true}),
+                ),
+                node("left", "set_data", json!({"values":{"side":"left"}})),
+                node("right", "set_data", json!({"values":{"side":"right"}})),
+                node(
+                    "merge",
+                    "merge",
+                    json!({"mode":"append","inputPorts":[{"id":"input_a"},{"id":"input_b"}],"skippedInputPolicy":"empty","failedInputPolicy":"fail"}),
+                ),
+            ],
+            vec![
+                edge("a", "trigger", "output", "route"),
+                edge("b", "route", "true", "left"),
+                edge("c", "route", "false", "right"),
+                left,
+                right,
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let run = engine
+            .run(wf, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        let merged = run
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "merge")
+            .unwrap();
+        assert_eq!(merged.status, NodeStatus::Successful);
+        assert_eq!(
+            merged
+                .collection
+                .as_ref()
+                .unwrap()
+                .branch_counts
+                .get("input_a"),
+            Some(&0)
+        );
+        assert_eq!(
+            merged
+                .collection
+                .as_ref()
+                .unwrap()
+                .branch_counts
+                .get("input_b"),
+            Some(&1)
+        );
+    }
+
+    #[tokio::test]
+    async fn cross_run_deduplication_commits_only_after_complete_success() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let mut wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "seed",
+                    "set_data",
+                    json!({"values":{"items":[{"email":"a@example.com"}]}}),
+                ),
+                node(
+                    "dedupe",
+                    "remove_duplicates",
+                    json!({"fields":["email"],"scope":"workflow_state"}),
+                ),
+                node(
+                    "fail",
+                    "run_command",
+                    json!({"executable":"definitely-not-used"}),
+                ),
+            ],
+            vec![
+                edge("a", "trigger", "output", "seed"),
+                edge("b", "seed", "output", "dedupe"),
+                edge("c", "dedupe", "output", "fail"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let failed = engine
+            .run(wf.clone(), json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(failed.status, ExecutionStatus::Failed);
+        assert!(engine
+            .database()
+            .get_workflow_state(&wf.id, "__stage2_dedupe:dedupe")
+            .unwrap()
+            .is_none());
+        wf.nodes.retain(|node| node.id != "fail");
+        wf.edges.retain(|edge| edge.target_node_id != "fail");
+        let first = engine
+            .run(wf.clone(), json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(first.status, ExecutionStatus::Successful);
+        assert!(engine
+            .database()
+            .get_workflow_state(&wf.id, "__stage2_dedupe:dedupe")
+            .unwrap()
+            .is_some());
+        let second = engine
+            .run(wf, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        let dedupe = second
+            .node_executions
+            .iter()
+            .find(|entry| entry.node_id == "dedupe")
+            .unwrap();
+        assert_eq!(dedupe.collection.as_ref().unwrap().output_item_count, 0);
+        assert_eq!(dedupe.collection.as_ref().unwrap().rejected_item_count, 1);
+    }
+
+    #[tokio::test]
+    async fn collection_nodes_execute_end_to_end_through_the_real_scheduler() {
+        let engine = Engine::new(
+            Database::in_memory().unwrap(),
+            Arc::new(TestHost(Arc::new(std::sync::Mutex::new(vec![])))),
+        );
+        let mut ready_merge = edge("h", "ready_count", "output", "merge");
+        ready_merge.target_handle = "input_a".into();
+        ready_merge.target_port = Some("input_a".into());
+        let mut other_merge = edge("i", "other_count", "output", "merge");
+        other_merge.target_handle = "input_b".into();
+        other_merge.target_port = Some("input_b".into());
+        let wf = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                node(
+                    "seed",
+                    "set_data",
+                    json!({"values":{"records":[{"email":"A@example.com","active":true,"status":"ready"},{"email":"a@example.com","active":true,"status":"ready"},{"email":"b@example.com","active":true,"status":"other"},{"email":"c@example.com","active":false,"status":"ready"}]}}),
+                ),
+                node(
+                    "split",
+                    "split_out",
+                    json!({"fieldPath":"records","destinationField":"row","keepParentFields":false}),
+                ),
+                node(
+                    "filter",
+                    "filter",
+                    json!({"rules":[{"field":"row.active","operator":"equals","value":true}]}),
+                ),
+                node(
+                    "dedupe",
+                    "remove_duplicates",
+                    json!({"fields":["row.email"],"caseSensitive":false}),
+                ),
+                node(
+                    "switch",
+                    "switch",
+                    json!({"routingMode":"value","valuePath":"row.status","cases":[{"id":"ready","name":"Ready","value":"ready"}],"fallbackBranchId":"other","mode":"first_match"}),
+                ),
+                node("ready_count", "aggregate", json!({"operation":"count"})),
+                node("other_count", "aggregate", json!({"operation":"count"})),
+                node(
+                    "merge",
+                    "merge",
+                    json!({"mode":"append","inputPorts":[{"id":"input_a"},{"id":"input_b"}],"skippedInputPolicy":"empty","failedInputPolicy":"fail"}),
+                ),
+                node("final", "aggregate", json!({"operation":"count"})),
+            ],
+            vec![
+                edge("a", "trigger", "output", "seed"),
+                edge("b", "seed", "output", "split"),
+                edge("c", "split", "output", "filter"),
+                edge("d", "filter", "output", "dedupe"),
+                edge("e", "dedupe", "output", "switch"),
+                edge("f", "switch", "ready", "ready_count"),
+                edge("g", "switch", "other", "other_count"),
+                ready_merge,
+                other_merge,
+                edge("j", "merge", "output", "final"),
+            ],
+        );
+        engine.database().save_workflow(wf.clone()).unwrap();
+        let run = engine
+            .run(wf, json!({}), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(run.status, ExecutionStatus::Successful);
+        let evidence = |id: &str| {
+            run.node_executions
+                .iter()
+                .find(|entry| entry.node_id == id)
+                .unwrap()
+                .collection
+                .as_ref()
+                .unwrap()
+        };
+        assert_eq!(evidence("split").output_item_count, 4);
+        assert_eq!(evidence("filter").output_item_count, 3);
+        assert_eq!(evidence("dedupe").output_item_count, 2);
+        assert_eq!(evidence("switch").branch_counts.get("ready"), Some(&1));
+        assert_eq!(evidence("switch").branch_counts.get("other"), Some(&1));
+        assert_eq!(evidence("merge").output_item_count, 2);
+        assert_eq!(
+            run.node_executions
+                .iter()
+                .find(|entry| entry.node_id == "final")
+                .unwrap()
+                .output["value"],
+            json!(2)
+        );
+    }
+
+    #[tokio::test]
     async fn plugin_nodes_resolve_input_and_dispatch_only_through_host() {
         let calls = Arc::new(std::sync::Mutex::new(vec![]));
         let engine = Engine::new(
@@ -3020,48 +4889,178 @@ mod tests {
     }
 
     fn executable_available(name: &str) -> bool {
-        std::process::Command::new(name).arg("--version").output().is_ok()
+        std::process::Command::new(name)
+            .arg("--version")
+            .output()
+            .is_ok()
     }
 
     #[tokio::test]
     async fn javascript_code_uses_items_logs_and_restricted_host_access() {
-        if !executable_available("node") { return; }
+        if !executable_available("node") {
+            return;
+        }
         let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
-        let code = node("js", "javascript_code", json!({"language":"javascript","sourceCode":"console.log('count', items.length); console.log('x'.repeat(70000)); return items.map(item => ({value:item.data.value * 2}));","executionMode":"run","itemMode":"all_items","runtimeVersion":">=20","input":{"items":[{"data":{"value":2}},{"data":{"value":4}}]},"timeoutMs":5000}));
-        let mut workflow = base(vec![node("trigger","manual_trigger",json!({})),code.clone()],vec![]);
-        workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
-        let result=engine.execute_node(&code,&workflow,"run-js",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap();
-        assert_eq!(result.output["items"][0]["data"]["value"],4);
-        assert!(result.logs.iter().any(|line|line.contains("count 2")));
-        assert!(result.logs.iter().any(|line|line.contains("logs truncated")));
-        let escape=node("escape","javascript_code",json!({"language":"javascript","sourceCode":"return process.env;","executionMode":"run","runtimeVersion":">=20","timeoutMs":5000}));
-        assert!(engine.execute_node(&escape,&workflow,"run-escape",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.is_err());
+        let code = node(
+            "js",
+            "javascript_code",
+            json!({"language":"javascript","sourceCode":"console.log('count', items.length); console.log('x'.repeat(70000)); return items.map(item => ({value:item.data.value * 2}));","executionMode":"run","itemMode":"all_items","runtimeVersion":">=20","input":{"items":[{"data":{"value":2}},{"data":{"value":4}}]},"timeoutMs":5000}),
+        );
+        let mut workflow = base(
+            vec![node("trigger", "manual_trigger", json!({})), code.clone()],
+            vec![],
+        );
+        workflow.settings.permissions.command_execution_permitted = true;
+        workflow.settings.permissions.approval_revision = Some("approved".into());
+        let result = engine
+            .execute_node(
+                &code,
+                &workflow,
+                "run-js",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.output["items"][0]["data"]["value"], 4);
+        assert!(result.logs.iter().any(|line| line.contains("count 2")));
+        assert!(result
+            .logs
+            .iter()
+            .any(|line| line.contains("logs truncated")));
+        let escape = node(
+            "escape",
+            "javascript_code",
+            json!({"language":"javascript","sourceCode":"return process.env;","executionMode":"run","runtimeVersion":">=20","timeoutMs":5000}),
+        );
+        assert!(engine
+            .execute_node(
+                &escape,
+                &workflow,
+                "run-escape",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new()
+            )
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn python_code_uses_the_same_item_contract_and_blocks_files() {
-        if !executable_available("python") { return; }
+        if !executable_available("python") {
+            return;
+        }
         let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
-        let code=node("py","python_code",json!({"language":"python","sourceCode":"print('received', len(items))\nresult = [{'value': item['data']['value'] + 1} for item in items]","executionMode":"run","itemMode":"all_items","runtimeVersion":">=3.11","input":{"items":[{"data":{"value":1}},{"data":{"value":2}}]},"timeoutMs":5000}));
-        let mut workflow=base(vec![node("trigger","manual_trigger",json!({})),code.clone()],vec![]);workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
-        let result=engine.execute_node(&code,&workflow,"run-py",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap();
-        assert_eq!(result.output["items"][1]["data"]["value"],3);assert!(result.logs.iter().any(|line|line.contains("received 2")));
-        let escape=node("escape","python_code",json!({"language":"python","sourceCode":"result = open('secret.txt').read()","executionMode":"run","runtimeVersion":">=3.11","timeoutMs":5000}));
-        assert!(engine.execute_node(&escape,&workflow,"run-escape",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.is_err());
+        let code = node(
+            "py",
+            "python_code",
+            json!({"language":"python","sourceCode":"print('received', len(items))\nresult = [{'value': item['data']['value'] + 1} for item in items]","executionMode":"run","itemMode":"all_items","runtimeVersion":">=3.11","input":{"items":[{"data":{"value":1}},{"data":{"value":2}}]},"timeoutMs":5000}),
+        );
+        let mut workflow = base(
+            vec![node("trigger", "manual_trigger", json!({})), code.clone()],
+            vec![],
+        );
+        workflow.settings.permissions.command_execution_permitted = true;
+        workflow.settings.permissions.approval_revision = Some("approved".into());
+        let result = engine
+            .execute_node(
+                &code,
+                &workflow,
+                "run-py",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.output["items"][1]["data"]["value"], 3);
+        assert!(result.logs.iter().any(|line| line.contains("received 2")));
+        let escape = node(
+            "escape",
+            "python_code",
+            json!({"language":"python","sourceCode":"result = open('secret.txt').read()","executionMode":"run","runtimeVersion":">=3.11","timeoutMs":5000}),
+        );
+        assert!(engine
+            .execute_node(
+                &escape,
+                &workflow,
+                "run-escape",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new()
+            )
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn code_timeout_and_pinned_manual_data_are_recorded() {
-        if !executable_available("node") { return; }
-        let engine=Engine::new(Database::in_memory().unwrap(),Arc::new(LocalHost));
-        let timeout=node("timeout","javascript_code",json!({"language":"javascript","sourceCode":"while(true) {}","executionMode":"run","runtimeVersion":">=20","timeoutMs":100}));
-        let mut workflow=base(vec![node("trigger","manual_trigger",json!({})),timeout.clone()],vec![]);workflow.settings.permissions.command_execution_permitted=true;workflow.settings.permissions.approval_revision=Some("approved".into());
-        let error=engine.execute_node(&timeout,&workflow,"run-timeout",&json!({}),&HashMap::new(),&HashMap::new(),CancellationToken::new()).await.unwrap_err();assert!(error.to_string().contains("timeout"));
-        let pinned=node("pinned","javascript_code",json!({"language":"javascript","sourceCode":"return items.map(item => item.data);","executionMode":"run","runtimeVersion":">=20","pinnedData":[{"answer":42}],"timeoutMs":5000}));
-        assert_eq!(fixture_items(&json!([{"answer":42}]))[0].data,json!({"answer":42}));
-        workflow.nodes=vec![node("trigger","manual_trigger",json!({})),pinned.clone()];
+        if !executable_available("node") {
+            return;
+        }
+        let engine = Engine::new(Database::in_memory().unwrap(), Arc::new(LocalHost));
+        let timeout = node(
+            "timeout",
+            "javascript_code",
+            json!({"language":"javascript","sourceCode":"while(true) {}","executionMode":"run","runtimeVersion":">=20","timeoutMs":100}),
+        );
+        let mut workflow = base(
+            vec![
+                node("trigger", "manual_trigger", json!({})),
+                timeout.clone(),
+            ],
+            vec![],
+        );
+        workflow.settings.permissions.command_execution_permitted = true;
+        workflow.settings.permissions.approval_revision = Some("approved".into());
+        let error = engine
+            .execute_node(
+                &timeout,
+                &workflow,
+                "run-timeout",
+                &json!({}),
+                &HashMap::new(),
+                &HashMap::new(),
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("timeout"));
+        let pinned = node(
+            "pinned",
+            "javascript_code",
+            json!({"language":"javascript","sourceCode":"return items.map(item => item.data);","executionMode":"run","runtimeVersion":">=20","pinnedData":[{"answer":42}],"timeoutMs":5000}),
+        );
+        assert_eq!(
+            fixture_items(&json!([{"answer":42}]))[0].data,
+            json!({"answer":42})
+        );
+        workflow.nodes = vec![node("trigger", "manual_trigger", json!({})), pinned.clone()];
         engine.database().save_workflow(workflow.clone()).unwrap();
-        let record=engine.test_node(workflow,"pinned",json!({}),None,true,CancellationToken::new()).await.unwrap();let execution=&record.node_executions[0];assert_eq!(execution.test_data_source.as_deref(),Some("pinned_data"));assert_eq!(execution.output_items[0].data,json!({"answer":42}),"{execution:#?}");
+        let record = engine
+            .test_node(
+                workflow,
+                "pinned",
+                json!({}),
+                None,
+                true,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        let execution = &record.node_executions[0];
+        assert_eq!(execution.test_data_source.as_deref(), Some("pinned_data"));
+        assert_eq!(
+            execution.output_items[0].data,
+            json!({"answer":42}),
+            "{execution:#?}"
+        );
     }
 
     #[tokio::test]

@@ -122,6 +122,11 @@ impl Database {
                 .execute_batch(include_str!("../migrations/012_code_expressions.sql"))
                 .map_err(storage)?;
         }
+        if version < 13 {
+            connection
+                .execute_batch(include_str!("../migrations/013_collection_checkpoints.sql"))
+                .map_err(storage)?;
+        }
         migrate_saved_workflows(&connection)?;
         backfill_workflow_revisions(&connection)?;
         Ok(())
@@ -133,6 +138,62 @@ impl Database {
             .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(storage)
+    }
+
+    pub fn save_loop_iteration_checkpoint(
+        &self,
+        execution_id: &str,
+        node_id: &str,
+        iteration_id: &str,
+        attempt: u32,
+        status: &str,
+        batch_hash: &str,
+        result: &Value,
+    ) -> Result<(), EngineError> {
+        if !matches!(status, "active" | "completed" | "failed" | "uncertain") {
+            return Err(EngineError::Storage(
+                "Invalid loop checkpoint status.".into(),
+            ));
+        }
+        self.connection.lock().map_err(|_|EngineError::Storage("Database lock was poisoned.".into()))?.execute(
+            "INSERT INTO loop_iteration_checkpoints(execution_id,node_id,iteration_id,attempt,status,batch_hash,result_json,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(execution_id,node_id,iteration_id) DO UPDATE SET attempt=excluded.attempt,status=excluded.status,batch_hash=excluded.batch_hash,result_json=excluded.result_json,updated_at=excluded.updated_at",
+            params![execution_id,node_id,iteration_id,attempt,status,batch_hash,serde_json::to_string(result).map_err(storage)?,Utc::now().to_rfc3339()]
+        ).map_err(storage)?;
+        Ok(())
+    }
+
+    pub fn loop_iteration_checkpoints(
+        &self,
+        execution_id: &str,
+        node_id: &str,
+    ) -> Result<Vec<(String, u32, String, String, Value)>, EngineError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| EngineError::Storage("Database lock was poisoned.".into()))?;
+        let mut statement=connection.prepare("SELECT iteration_id,attempt,status,batch_hash,result_json FROM loop_iteration_checkpoints WHERE execution_id=? AND node_id=? ORDER BY iteration_id").map_err(storage)?;
+        let rows = statement
+            .query_map(params![execution_id, node_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u32>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(storage)?;
+        rows.map(|row| {
+            let (id, attempt, status, hash, json) = row.map_err(storage)?;
+            Ok((
+                id,
+                attempt,
+                status,
+                hash,
+                serde_json::from_str(&json).map_err(storage)?,
+            ))
+        })
+        .collect()
     }
 
     pub fn create_file_grant(
@@ -793,11 +854,12 @@ impl Database {
                     .permissions
                     .communication_approval_revision = None;
             }
-        } else if workflow
-            .nodes
-            .iter()
-            .any(|n| matches!(n.node_type.as_str(), "run_command" | "code" | "javascript_code" | "python_code"))
-        {
+        } else if workflow.nodes.iter().any(|n| {
+            matches!(
+                n.node_type.as_str(),
+                "run_command" | "code" | "javascript_code" | "python_code"
+            )
+        }) {
             workflow.settings.permissions.command_execution_permitted = false;
             workflow.settings.permissions.approval_revision = None;
         }
@@ -1290,6 +1352,10 @@ impl Database {
                 .collect::<Vec<_>>();
             rows
         };
+        transaction.execute(
+            "DELETE FROM loop_iteration_checkpoints WHERE execution_id IN (SELECT id FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?))",
+            [keep as i64],
+        ).map_err(storage)?;
         let removed = transaction
             .execute(
                 "DELETE FROM executions WHERE id NOT IN (SELECT id FROM executions ORDER BY started_at DESC LIMIT ?)",
@@ -1322,6 +1388,12 @@ impl Database {
                 .flat_map(|(screenshot, trace)| screenshot.into_iter().chain(trace))
                 .collect::<Vec<_>>()
         };
+        transaction
+            .execute(
+                "DELETE FROM loop_iteration_checkpoints WHERE execution_id=?",
+                [id],
+            )
+            .map_err(storage)?;
         transaction
             .execute("DELETE FROM executions WHERE id=?", [id])
             .map_err(storage)?;
@@ -1645,7 +1717,12 @@ fn dangerous_fingerprint(workflow: &Workflow) -> String {
         &workflow
             .nodes
             .iter()
-            .filter(|n| matches!(n.node_type.as_str(), "run_command" | "code" | "javascript_code" | "python_code"))
+            .filter(|n| {
+                matches!(
+                    n.node_type.as_str(),
+                    "run_command" | "code" | "javascript_code" | "python_code"
+                )
+            })
             .map(|n| (&n.id, &n.configuration))
             .collect::<Vec<_>>(),
     )
@@ -1840,7 +1917,7 @@ fn parse_connection(row: &rusqlite::Row) -> rusqlite::Result<ConnectionMetadata>
 fn migrate_workflow(mut workflow: Workflow) -> Result<Workflow, EngineError> {
     match workflow.schema_version {
         crate::model::CURRENT_SCHEMA_VERSION => Ok(workflow),
-        1 | 2 | 3 | 4 => {
+        1 | 2 | 3 | 4 | 5 => {
             workflow.schema_version = crate::model::CURRENT_SCHEMA_VERSION;
             Ok(workflow)
         }
@@ -2011,7 +2088,7 @@ mod tests {
         let path = directory.path().join("sandbox.db");
         {
             let db = Database::open(&path).unwrap();
-            assert_eq!(db.schema_version().unwrap(), 12);
+            assert_eq!(db.schema_version().unwrap(), 13);
             db.save_workflow(workflow()).unwrap();
         }
         let reopened = Database::open(&path).unwrap();
@@ -2022,7 +2099,80 @@ mod tests {
     }
 
     #[test]
-    fn migrates_every_supported_database_version_to_twelve() {
+    fn workflow_schema_four_and_five_migrate_deterministically_to_six() {
+        for version in [4, 5] {
+            let mut legacy = workflow();
+            legacy.schema_version = version;
+            legacy.description = "unchanged".into();
+            let migrated = migrate_workflow(legacy).unwrap();
+            assert_eq!(
+                migrated.schema_version,
+                crate::model::CURRENT_SCHEMA_VERSION
+            );
+            assert_eq!(migrated.description, "unchanged");
+            assert_eq!(migrated.nodes.len(), 1);
+        }
+        let mut raw = serde_json::to_value(workflow()).unwrap();
+        raw["schemaVersion"] = json!(4);
+        raw["settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("collectionLimits");
+        raw["settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("expressionLanguageVersion");
+        let migrated = decode_workflow(&serde_json::to_string(&raw).unwrap()).unwrap();
+        assert_eq!(
+            migrated.settings.collection_limits,
+            crate::CollectionLimits::default()
+        );
+        assert_eq!(migrated.settings.expression_language_version, 1);
+    }
+
+    #[test]
+    fn loop_iteration_checkpoints_round_trip_in_iteration_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Database::open(directory.path().join("loop.db")).unwrap();
+        db.save_loop_iteration_checkpoint(
+            "execution",
+            "loop",
+            "00000001",
+            2,
+            "active",
+            "sha256:b",
+            &json!({"inputItemCount":1}),
+        )
+        .unwrap();
+        db.save_loop_iteration_checkpoint(
+            "execution",
+            "loop",
+            "00000001",
+            2,
+            "failed",
+            "sha256:b",
+            &json!({"error":"handled"}),
+        )
+        .unwrap();
+        db.save_loop_iteration_checkpoint(
+            "execution",
+            "loop",
+            "00000000",
+            1,
+            "completed",
+            "sha256:a",
+            &json!({"items":[1]}),
+        )
+        .unwrap();
+        let checkpoints = db.loop_iteration_checkpoints("execution", "loop").unwrap();
+        assert_eq!(checkpoints.len(), 2);
+        assert_eq!(checkpoints[0].0, "00000000");
+        assert_eq!(checkpoints[1].1, 2);
+        assert_eq!(checkpoints[1].2, "failed");
+    }
+
+    #[test]
+    fn migrates_every_supported_database_version_to_thirteen() {
         let migrations = [
             include_str!("../migrations/001_initial.sql"),
             include_str!("../migrations/002_schedule_state.sql"),
@@ -2035,8 +2185,9 @@ mod tests {
             include_str!("../migrations/009_workflow_revisions_and_state.sql"),
             include_str!("../migrations/010_first_party_integrations.sql"),
             include_str!("../migrations/011_poll_backoff.sql"),
+            include_str!("../migrations/012_code_expressions.sql"),
         ];
-        for version in 1..=11 {
+        for version in 1..=12 {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join(format!("v{version}.db"));
             {
@@ -2051,7 +2202,7 @@ mod tests {
             let upgraded = Database::open(&path).unwrap();
             assert_eq!(
                 upgraded.schema_version().unwrap(),
-                12,
+                13,
                 "failed migration from v{version}"
             );
         }

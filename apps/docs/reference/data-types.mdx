@@ -54,7 +54,7 @@ Required means the destination needs a resolved value before it can run. It does
 - An `object` can map to an `any` input, but a downstream text field may need a selected property or template.
 - A trusted `path` should map directly into a file or upload input; rebuilding the same characters in a template produces ordinary text without provenance.
 - A `connection` selects a host-owned credential. It cannot be mapped into content, headers, or logs as though it were the secret value.
-- Arrays and objects remain structured through Set Data, Parse JSON, Code input, and compatible plugin ports.
+- Arrays and objects remain structured through Set Data, Parse JSON, Code input, and compatible plugin ports. An array value is not automatically a collection of workflow items: use Split Out to create items and Aggregate to deliberately create one array value again.
 
 ## Null and missing
 
@@ -68,4 +68,4 @@ JSON `null`, an absent object field, and a missing workflow-state key are differ
 | Empty array or object | A present collection with no members |
 | `found: false` from state | No committed value exists for the key |
 
-Model these cases explicitly in Conditions or Code. Relying on generic “truthiness” can merge states that need different operational behavior.
+Model these cases explicitly with Condition, Filter, or Code. Filtered-out items are an execution outcome, not an empty or missing value. Relying on generic “truthiness” can merge states that need different operational behavior.

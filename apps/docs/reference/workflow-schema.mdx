@@ -1,10 +1,10 @@
 ---
 title: "Workflow schema"
-description: "Reference the current version 4 workflow, node, edge, settings, owner, and binding shapes."
+description: "Reference the current version 6 workflow, node, edge, settings, collection, owner, and binding shapes."
 icon: "network"
 ---
 
-The current engine workflow schema version is **4**. Imports reject schema 0 and versions newer than the running build; supported older definitions are migrated to the current version before storage.
+The current engine workflow schema version is **6**. Imports reject schema 0 and versions newer than the running build. Versions 1 through 5 are deterministically normalised to version 6 before storage without rewriting unrelated node content. Published revisions remain immutable.
 
 ```ts title="Workflow"
 interface Workflow {
@@ -53,8 +53,35 @@ interface WorkflowSettings {
   defaultNodeTimeoutMs: number;
   maxConcurrentNodes: number;
   permissions: PermissionSummary;
+  expressionLanguageVersion: number;
+  collectionLimits: CollectionLimits;
 }
 ```
+
+Version 6 adds stable collection limits and internal item evidence. Existing node output remains JSON-compatible; nodes are not forced to expose an envelope in user mappings.
+
+```ts title="Workflow item evidence"
+interface WorkflowItem {
+  itemId: string;
+  originItemId?: string;
+  parentItemId?: string;
+  data: unknown;
+  binary?: Record<string, BinaryReference>;
+  trustedPaths?: Record<string, string>;
+  sourceNodeId?: string;
+  sourceItemIndex?: number;
+  originalPosition?: number;
+  currentPosition?: number;
+  branch?: string;
+  branchHistory?: string[];
+  loopIteration?: number;
+  executionAttempt: number;
+  status: string;
+  correlations?: Record<string, string>;
+}
+```
+
+Switch branch IDs and Merge input IDs are stored in node configuration. Edges refer to those stable IDs through `sourceHandle` and `targetPort`; display-name changes and case reordering do not rewrite the edge identity. Control edges still decide eligibility, while input bindings still decide field values.
 
 Use the editor, import/export envelope, or typed API rather than editing a stored database row. Generated node pages show the exact version 1 configuration defaults for all built-in node types.
 

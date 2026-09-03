@@ -41,7 +41,17 @@ const locatorKinds = [
 const CodeEditorDialog = lazy(() =>
   import("./CodeEditorDialog").then((module) => ({ default: module.CodeEditorDialog })),
 );
+const CollectionNodeInspector = lazy(() =>
+  import("./CollectionNodeInspector").then((module) => ({ default: module.CollectionNodeInspector })),
+);
 const isCodeNode = (type: string) => type === "code" || type === "javascript_code" || type === "python_code";
+const ruleOperators = [
+  "equals", "not_equals", "exists", "not_exists", "is_null", "is_not_null",
+  "is_empty", "is_not_empty", "contains", "not_contains", "starts_with", "ends_with",
+  "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal",
+  "matches_regex", "is_one_of", "is_not_one_of", "array_contains",
+  "date_before", "date_after", "date_between",
+] as const;
 
 export function NodeInspector({
   workflow,
@@ -465,25 +475,21 @@ export function NodeInspector({
                 value={String(config.operator ?? "equals")}
                 onChange={(event) => set("operator", event.target.value)}
               >
-                {[
-                  "equals",
-                  "not_equals",
-                  "contains",
-                  "not_contains",
-                  "greater_than",
-                  "less_than",
-                  "exists",
-                  "not_exists",
-                  "starts_with",
-                  "ends_with",
-                ].map((value) => (
+                {ruleOperators.map((value) => (
                   <option key={value} value={value}>
                     {value.replaceAll("_", " ")}
                   </option>
                 ))}
               </CustomSelect>
             </Field>
-            {!["exists", "not_exists"].includes(String(config.operator)) && (
+            {![
+              "exists",
+              "not_exists",
+              "is_null",
+              "is_not_null",
+              "is_empty",
+              "is_not_empty",
+            ].includes(String(config.operator)) && (
               <Field label="Compare with">
                 <input
                   value={scalar(config.right)}
@@ -493,6 +499,21 @@ export function NodeInspector({
                 />
               </Field>
             )}
+          </>
+        )}
+        {["filter","switch","split_out","loop_over_items","aggregate","remove_duplicates","merge"].includes(node.type) && (
+          <>
+          <Suspense fallback={<div className="info-note">Loading collection controls…</div>}>
+            <CollectionNodeInspector workflow={workflow} node={node} onChange={onChange}/>
+          </Suspense>
+          <Field label="Manual test data source" hint="Pinned data is used when no execution is selected">
+            <CustomSelect value={testDataExecutionId} onChange={event=>onTestDataExecutionChange?.(event.target.value)}>
+              <option value="">Pinned input / empty collection</option>
+              {testDataExecutions.map(execution=><option key={execution.id} value={execution.id}>{new Date(execution.startedAt).toLocaleString()} Â· {execution.status} Â· {execution.id.slice(0,8)}</option>)}
+            </CustomSelect>
+          </Field>
+          <JsonField label={node.type==="merge"?"Pinned named inputs":"Pinned sample collection"} value={config.pinnedData??(node.type==="merge"?{}:[])} onChange={value=>set("pinnedData",value)}/>
+          <Info>{node.type==="merge"?"Use an object keyed by stable Merge input IDs. Each value is that input's independent sample collection.":node.type==="loop_over_items"?"A manual loop test can execute its body and its real-world side effects. Keep the pinned collection bounded.":"Pinned collections are development evidence only and never replace published, scheduled, or deployed inputs."}</Info>
           </>
         )}
         {node.type === "set_data" && (

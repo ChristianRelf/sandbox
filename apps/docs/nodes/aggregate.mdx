@@ -1,0 +1,112 @@
+---
+title: "Aggregate"
+description: "Reduce collection items into one deterministic result. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `aggregate` · **Version:** `1` · **Category:** Data
+
+Reduce collection items into one deterministic result. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Reduce several items to a count, numeric value, string, group, object or collected array.
+- Create a single report value after a loop.
+
+## Example: Count processed rows
+
+Count all completed items after collection processing.
+
+
+```json title="Example settings"
+{
+  "operation": "count",
+  "fieldPath": "",
+  "includeMissing": false
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Connect a collection-producing node.
+2. Choose an operation and only its relevant fields.
+3. Inspect the aggregate preview and source count.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `operation` | string | `"collect_items"` | Reduction performed over the input collection. Values: `collect_items`, `collect_field`, `count`, `sum`, `minimum`, `maximum`, `average`, `first`, `last`, `concatenate`, `group_by`, `object_by_key`. |
+| `fieldPath` | string | `""` | Selected item field for field-based operations. |
+| `includeMissing` | boolean | `false` | Represent missing selections deliberately. |
+| `preserveLineage` | boolean | `false` | Retain bounded source item identifiers in result evidence. |
+| `separator` | string | `","` | Separator for string concatenation. |
+| `groupFields` | array | `[]` | Ordered fields forming a deterministic group key. |
+| `keyField` | string | `"id"` | Field used as an object property key. |
+| `duplicateKeyPolicy` | string | `"fail"` | Explicit duplicate object-key behavior. Values: `fail`, `keep_first`, `keep_last`. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "aggregate",
+  "version": 1,
+  "configuration": {
+    "operation": "collect_items",
+    "fieldPath": "",
+    "includeMissing": false,
+    "preserveLineage": false,
+    "separator": ",",
+    "groupFields": [],
+    "keyField": "id",
+    "duplicateKeyPolicy": "fail"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array` | Yes | Items |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `value` | `any` | No | Aggregate |
+
+## Execution behavior
+
+- Numeric operations reject strings rather than coercing them.
+- Results are deterministic in input order and bounded by aggregate byte policy.
+- The editor catalogue declares `value` (any) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Empty numeric selections return null; count returns zero.
+- Object-by-key requires an explicit duplicate-key policy.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Collections and items](/workflows/collections-and-items)
+- [Limits](/reference/limits)

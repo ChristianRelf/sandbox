@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ExecutionRecord, Workflow } from "../types";
+import type { ExecutionRecord, Workflow, WorkflowItem } from "../types";
 import { ExecutionInspector } from "./ExecutionInspector";
 
 const permissionError = {
@@ -100,5 +100,18 @@ describe("ExecutionInspector permission recovery", () => {
       nodeId: "command",
       message: permissionError.message,
     });
+  });
+
+  it("shows bounded collection counts and rejected item lineage", () => {
+    const item:WorkflowItem={itemId:"source:1",originItemId:"source:1",data:{email:"duplicate@example.com"},executionAttempt:1,status:"removed"};
+    const collectionRun:ExecutionRecord={...run,status:"successful",error:undefined,nodeExecutions:[{...run.nodeExecutions[0],status:"successful",error:undefined,inputItems:[item],outputItems:[],collection:{inputItemCount:2,outputItemCount:1,rejectedItemCount:1,branchCounts:{output:1,duplicates:1},iterationCount:0,batchCount:0,sampleItems:[item],previewTruncated:true,runtimeDataTruncated:false,orderingPolicy:"input_order",waitingForInputs:[]}}]};
+    render(<ExecutionInspector run={collectionRun} workflow={workflow} onRetry={vi.fn()}/>);
+    expect(screen.getByText("Removed / rejected").parentElement).toHaveTextContent("1");
+    expect(screen.getByText(/bounded preview/i)).toBeInTheDocument();
+    const tab=screen.getByRole("tab",{name:/Items/i});
+    fireEvent.mouseDown(tab,{button:0,ctrlKey:false});
+    fireEvent.click(tab);
+    expect(screen.getAllByText("source:1")).toHaveLength(2);
+    expect(screen.getByText(/duplicate@example.com/)).toBeInTheDocument();
   });
 });

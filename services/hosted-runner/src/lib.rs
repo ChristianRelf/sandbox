@@ -127,6 +127,13 @@ const HOSTED_BUILT_INS: &[&str] = &[
     "schedule_trigger",
     "gmail_new_email_trigger",
     "condition",
+    "filter",
+    "switch",
+    "loop_over_items",
+    "split_out",
+    "aggregate",
+    "merge",
+    "remove_duplicates",
     "set_data",
     "delay",
     "http_request",
@@ -490,5 +497,16 @@ mod tests {
                 .output,
             serde_json::json!({"answer":42})
         );
+    }
+
+    #[tokio::test]
+    async fn hosted_runner_uses_the_shared_collection_runtime() {
+        let mut workload=request("filter");
+        workload.workflow.nodes[1].configuration=serde_json::json!({"rules":[{"field":"event.source","operator":"equals","value":"test"}]});
+        assert!(validate_hosted_workflow(&workload).is_empty());
+        let result=HostedRunner::default().execute(workload,CancellationToken::new()).await.unwrap();
+        let filtered=result.node_executions.iter().find(|node|node.node_id=="action").unwrap();
+        assert_eq!(filtered.collection.as_ref().unwrap().input_item_count,1);
+        assert_eq!(filtered.collection.as_ref().unwrap().output_item_count,1);
     }
 }

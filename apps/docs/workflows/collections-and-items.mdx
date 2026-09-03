@@ -1,0 +1,79 @@
+---
+title: "Collections and workflow items"
+description: "Split, route, loop, join, deduplicate, aggregate, and trace collections without implicit flattening."
+icon: "list-tree"
+---
+
+A **collection** is an ordered set of workflow items. Each item contains one JSON-compatible value plus engine-maintained identity, source, position, branch, iteration, attempt, binary-reference, trusted-path, and correlation metadata. One item may itself contain an array; that array does not become several workflow items until Split Out explicitly expands it.
+
+Control edges and data mappings remain separate. A control edge makes a node eligible. A typed input binding decides which value a field receives. Canvas position and branch arrival time have no execution meaning.
+
+## Condition or Filter
+
+Use Condition for one workflow-level decision. It selects exactly one `true` or `false` control branch and records the unselected path as skipped. Use Filter for an item collection: every item is evaluated, and the retained and optionally rejected items keep their identities.
+
+Shared operators are strict. The number `200` is not the string `"200"`; missing, `null`, empty string, empty array, and empty object remain distinct. Date operators accept RFC 3339 strings. Regular expressions use the runner's bounded regular-expression engine and are limited to 1,024 characters.
+
+## Split arrays into items
+
+Split Out selects a top-level array or a path such as `response.body.results`. Choose whether to keep parent fields and the original array, where to place each split value, and whether to include the array index. Empty arrays can emit nothing, keep the parent, or fail. Missing and non-array values can fail, emit nothing, or enter Rejected; objects and strings are never silently treated as arrays.
+
+Each child records its parent ID and array position. Splitting arrays nested in several incoming items preserves both parent order and array order.
+
+## Route through Switch
+
+Switch cases have stable internal IDs and editable names. Renaming or reordering a case does not disconnect its edge.
+
+- **First match** sends each item only to the earliest matching case.
+- **All matches** copies an item to every matching case while preserving a shared origin ID.
+- Unmatched items use Fallback. If nothing is connected there, execution evidence still reports them as intentionally unmatched.
+
+Exact-value routing accepts strings, numbers, and booleans without coercion. Rule routing uses the same operators and rule-group semantics as Filter.
+
+## Loop safely
+
+Loop Over Items has separate **Loop** and **Done** outputs. Batch membership and iteration IDs are deterministic. Set batch size, maximum iterations, per-item timeout, retry count, and concurrency explicitly.
+
+Concurrency 1 preserves iteration order and allows a later iteration to observe staged workflow-state changes from a completed earlier iteration. Higher concurrency can complete work out of order, so the permission review warns when downstream actions may be repeated or run in parallel. A handled-failure policy collects failed input items and continues; stop mode ends at the first failed iteration. Cancellation propagates to active work.
+
+Local checkpoints record completed, failed, or uncertain iterations with their stable IDs, attempt counts, input hashes, and bounded results. They support diagnosis and safe recovery decisions; they do not promise exactly-once side effects. A runner lost during a mutation with uncertain outcome still requires the existing outcome-certainty review.
+
+## Aggregate and deduplicate
+
+Aggregate reduces a collection to one result. It can collect full items or a field, count, sum, find minimum/maximum/average, take first/last, concatenate strings, group by fields, or build an object keyed by a field. Numeric operations reject numeric-looking strings. Group output is a deterministic ordered array of `{ key, items, count }` records. Object-key collisions must fail, keep first, or keep last.
+
+Remove Duplicates can compare full items or selected fields, keep first or last, and optionally normalise string case and whitespace. Deep equality sorts object keys canonically and distinguishes types, missing fields, and `null`. The Duplicates output contains removed items.
+
+Cross-run mode compares with successfully committed workflow state. New keys remain staged until the entire workflow succeeds and the runner-enforced key limit prevents unbounded state. Visible evidence contains only a SHA-256 key fingerprint, not the source value. Reset by clearing the node's workflow-state entry or returning the node to collection scope before a deliberate new baseline.
+
+## Merge branches deliberately
+
+Merge waits for named inputs, then uses configured input-port order rather than arrival order.
+
+| Mode | Result |
+| --- | --- |
+| Wait for all | One object whose properties contain each named input collection |
+| Append | All items, input by input in configured order |
+| Combine by position | Corresponding positions, with keep/drop/fail for unequal lengths |
+| Combine by matching fields | Inner, left, right, or full join; duplicate keys produce every match |
+| Cartesian | Every pair from two inputs, subject to a hard previewed result limit |
+| Choose branch | First non-empty input in explicit priority order |
+
+Combined items can nest by input, prefix fields, prefer left/right, or fail on property conflicts. Failed inputs either fail Merge or are explicitly treated as empty. Skipped inputs have their own policy. Empty inputs remain present in branch counts.
+
+An ordinary node with several incoming control edges is rejected as ambiguous. Add Merge to define convergence instead of letting timing decide.
+
+## Test and inspect
+
+Every collection node accepts a pinned sample collection or a compatible previous execution. Merge accepts an object keyed by its stable input IDs so each input can be tested independently. Pinned data is used only for manual tests, never production runs. A loop test can execute a real side-effecting body and still requires the normal confirmation.
+
+Execution evidence keeps authoritative input, output, rejected, branch, batch, and iteration counts. Item previews are bounded and honestly marked as truncated without truncating runtime data. Search or filter preview items, select one to compare before/after data, and follow its parent, origin, source node, branch history, iteration, attempt, and correlations.
+
+## Implemented examples
+
+- HTTP Request → Split Out → Filter → Loop Over Items → Aggregate
+- Parse CSV → Remove Duplicates → Switch → Merge → Write File
+- List Folder → Filter → Loop Over Items → Aggregate
+- Extract Data → Split Out → Switch → downstream processing
+
+See each generated node page for its shipped defaults and ports, and [Execution limits](/execution/limits) for hard boundaries.

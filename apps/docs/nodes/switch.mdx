@@ -1,0 +1,136 @@
+---
+title: "Switch"
+description: "Route items through stable named cases. Exact configuration, ports, placement, and execution behavior."
+icon: "git-branch"
+---
+
+**Node type:** `switch` · **Version:** `1` · **Category:** Logic
+
+Route items through stable named cases. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Route records through more than two named outcomes.
+- Copy one item to every matching case when all-match behavior is deliberate.
+
+## Example: Route CSV rows by status
+
+Send parsed and split rows through stable named status cases and a fallback.
+
+
+```json title="Example settings"
+{
+  "mode": "first_match",
+  "routingMode": "value",
+  "valuePath": "status",
+  "cases": [
+    {
+      "id": "approved",
+      "name": "Approved",
+      "value": "approved"
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "value": "review"
+    }
+  ],
+  "fallbackBranchId": "fallback",
+  "fallbackName": "Fallback"
+}
+```
+
+This shows the important settings, not a complete exported node. Local paths must be selected, mapped from a trusted path, or covered by the runner's approved boundary.
+
+
+1. Parse CSV → Split Out → Switch.
+2. Connect cases by their stable IDs.
+3. Converge branches through Merge rather than ordinary multi-input nodes.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `mode` | string | `"first_match"` | Route to the first match or every matching case. Values: `first_match`, `all_matches`. |
+| `routingMode` | string | `"rules"` | Use exact values or strict rule groups. Values: `rules`, `value`. |
+| `valuePath` | string | `""` | Item path resolved for exact-value routing. |
+| `cases` | array | `[{"id":"case_1","name":"Case 1","combinator":"all","rules":[{"id":"rule_1","field":"","operator":"equals","value":""}]}]` | Ordered cases with stable branch IDs. |
+| `fallbackBranchId` | string | `"fallback"` | Stable fallback branch ID. |
+| `fallbackName` | string | `"Fallback"` | Displayed fallback label. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "switch",
+  "version": 1,
+  "configuration": {
+    "mode": "first_match",
+    "routingMode": "rules",
+    "valuePath": "",
+    "cases": [
+      {
+        "id": "case_1",
+        "name": "Case 1",
+        "combinator": "all",
+        "rules": [
+          {
+            "id": "rule_1",
+            "field": "",
+            "operator": "equals",
+            "value": ""
+          }
+        ]
+      }
+    ],
+    "fallbackBranchId": "fallback",
+    "fallbackName": "Fallback"
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array` | Yes | Items |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `fallback` | `array` | No | Fallback |
+
+## Execution behavior
+
+- First match selects the first case in configured order; all matches preserves a shared origin ID across copies.
+- Unmatched items enter the fallback collection and empty branches remain visible in evidence.
+- The editor catalogue declares `fallback` (array) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Renaming and reordering preserve case IDs; deleting a connected case requires confirmation.
+- Do not use arrival timing to choose a branch.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Branches and collections](/workflows/collections-and-items)
+- [Merge](/nodes/merge)

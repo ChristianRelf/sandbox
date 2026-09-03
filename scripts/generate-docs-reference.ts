@@ -165,6 +165,13 @@ const fieldDescriptions: Record<string, string> = {
 const nodeFieldDescriptions: Record<string, string> = {
   "read_file.encoding": "Text encoding used to read the file. The current runner accepts UTF-8 only.",
   "run_command.timeoutMs": "Reserved timeout setting stored in the node schema. The current runner stops the process on cancellation but does not yet enforce this value.",
+  "filter.mode":"Keep matching items or remove matching items.","filter.combinator":"Require all rules or any rule.","filter.rules":"Ordered strict rule definitions with stable IDs.","filter.exposeRejected":"Expose removed items through the Rejected branch.",
+  "switch.mode":"Route to the first match or every matching case.","switch.routingMode":"Use exact values or strict rule groups.","switch.valuePath":"Item path resolved for exact-value routing.","switch.cases":"Ordered cases with stable branch IDs.","switch.fallbackBranchId":"Stable fallback branch ID.","switch.fallbackName":"Displayed fallback label.",
+  "split_out.fieldPath":"Explicit array path; empty selects a top-level array item.","split_out.destinationField":"Property receiving each split element.","split_out.keepParentFields":"Copy parent fields into child items.","split_out.keepOriginalArray":"Retain the source array after splitting.","split_out.includeIndex":"Include the source array index.","split_out.emptyArrayPolicy":"Behavior for an empty selected array.","split_out.invalidInputPolicy":"Behavior for missing or non-array values.",
+  "loop_over_items.batchSize":"Number of items in one deterministic iteration batch.","loop_over_items.concurrency":"Maximum active body iterations.","loop_over_items.maxIterations":"Hard iteration bound.","loop_over_items.iterationRetryCount":"Retries an individual iteration with the same stable identity.","loop_over_items.failurePolicy":"Stop or continue after a handled item failure.","loop_over_items.perItemTimeoutMs":"Timeout applied to each body node in an iteration.",
+  "aggregate.operation":"Reduction performed over the input collection.","aggregate.fieldPath":"Selected item field for field-based operations.","aggregate.includeMissing":"Represent missing selections deliberately.","aggregate.preserveLineage":"Retain bounded source item identifiers in result evidence.","aggregate.separator":"Separator for string concatenation.","aggregate.groupFields":"Ordered fields forming a deterministic group key.","aggregate.keyField":"Field used as an object property key.","aggregate.duplicateKeyPolicy":"Explicit duplicate object-key behavior.",
+  "remove_duplicates.fields":"Comparison paths; empty means whole-item deep equality.","remove_duplicates.caseSensitive":"Use case-sensitive string equality.","remove_duplicates.normalizeWhitespace":"Trim and collapse string whitespace before comparison.","remove_duplicates.keep":"Retain the first or last occurrence.","remove_duplicates.scope":"Deduplicate this collection or successfully committed workflow state.","remove_duplicates.exposeDuplicates":"Expose removed duplicates on a named branch.",
+  "merge.mode":"Wait, append, combine, join, multiply or choose named inputs.","merge.inputPorts":"Stable ordered named input ports.","merge.unmatchedPolicy":"Keep, drop or fail on unmatched positions.","merge.join":"Inner, left, right or full outer field join.","merge.leftKey":"Join key path on the first input.","merge.rightKey":"Join key path on the second input.","merge.conflictStrategy":"Nest, prefix, prefer one side or fail on property conflicts.","merge.failedInputPolicy":"Explicit failed-input behavior.","merge.skippedInputPolicy":"Explicit skipped-input behavior.","merge.chooseStrategy":"Choose the first non-empty or first successful input in priority order.","merge.maxResults":"Hard result bound, including Cartesian products.","merge.priority":"Configured branch priority, independent of arrival time.",
 };
 
 const extras: Record<string, FieldOverride[]> = {
@@ -184,7 +191,12 @@ const options: Record<string, string[]> = {
   "schedule_trigger.scheduleType": ["minutes", "hourly", "daily", "cron"],
   "file_watch_trigger.events": ["created", "modified", "deleted"],
   "gmail_new_email_trigger.markAsProcessed": ["deduplicate"],
-  "condition.operator": ["equals", "not_equals", "contains", "not_contains", "greater_than", "less_than", "exists", "not_exists", "starts_with", "ends_with"],
+  "condition.operator": ["equals", "not_equals", "contains", "not_contains", "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal", "exists", "not_exists", "is_null", "is_not_null", "is_empty", "is_not_empty", "starts_with", "ends_with", "matches_regex", "is_one_of", "is_not_one_of", "array_contains", "date_before", "date_after", "date_between"],
+  "filter.mode":["keep_matches","remove_matches"],"filter.combinator":["all","any"],"switch.mode":["first_match","all_matches"],"switch.routingMode":["rules","value"],
+  "split_out.emptyArrayPolicy":["emit_no_items","keep_parent","fail"],"split_out.invalidInputPolicy":["fail","emit_no_items","rejected"],
+  "loop_over_items.failurePolicy":["stop","continue_handled"],"aggregate.operation":["collect_items","collect_field","count","sum","minimum","maximum","average","first","last","concatenate","group_by","object_by_key"],
+  "aggregate.duplicateKeyPolicy":["fail","keep_first","keep_last"],"remove_duplicates.keep":["first","last"],"remove_duplicates.scope":["collection","workflow_state"],
+  "merge.mode":["wait_all","append","combine_position","combine_fields","cartesian","choose_branch"],"merge.unmatchedPolicy":["keep","drop","fail"],"merge.join":["inner","left","right","full"],"merge.conflictStrategy":["nest","prefix","prefer_left","prefer_right","fail"],"merge.failedInputPolicy":["fail","empty"],"merge.skippedInputPolicy":["fail","empty"],"merge.chooseStrategy":["first_non_empty","first_successful"],
   "delay.unit": ["seconds", "minutes"],
   "http_request.method": ["GET", "POST", "PUT", "PATCH", "DELETE"],
   "read_file.encoding": ["utf8"],
@@ -305,6 +317,20 @@ const nodeGuides: Record<string, NodeGuide> = {
     commonIssues: ["The string \"200\" and number 200 may not compare as intended; inspect the upstream output type.", "A control edge chooses what runs, while an input binding supplies the value being compared."],
     related: [{ label: "Branches and conditions", href: "/workflows/branches-and-conditions" }, { label: "Data types", href: "/reference/data-types" }],
   },
+  filter: {
+    useCases:["Keep or remove records from an explicit workflow collection.","Inspect rejected items without turning a collection decision into workflow-level branching."],
+    example:{title:"Keep active API records",description:"Split an API result array, then retain only records whose active field is the boolean true.",configuration:{mode:"keep_matches",combinator:"all",rules:[{id:"rule_active",field:"active",operator:"equals",value:true}],exposeRejected:true},flow:["HTTP Request → Split Out → Filter.","Use the Rejected output only when removed records need downstream handling.","Inspect retained and rejected counts in execution history."]},
+    behavior:["Rules use strict types: number 200 does not equal string 200.","Missing, null, empty strings, empty arrays, empty objects, and filtered items remain distinct."],
+    commonIssues:["Use Condition for one workflow-level true/false decision.","Invalid regular expressions fail validation and runtime evaluation."],related:[{label:"Collections and items",href:"/workflows/collections-and-items"},{label:"Condition",href:"/nodes/condition"}]},
+  switch: {
+    useCases:["Route records through more than two named outcomes.","Copy one item to every matching case when all-match behavior is deliberate."],
+    example:{title:"Route CSV rows by status",description:"Send parsed and split rows through stable named status cases and a fallback.",configuration:{mode:"first_match",routingMode:"value",valuePath:"status",cases:[{id:"approved",name:"Approved",value:"approved"},{id:"review",name:"Review",value:"review"}],fallbackBranchId:"fallback",fallbackName:"Fallback"},flow:["Parse CSV → Split Out → Switch.","Connect cases by their stable IDs.","Converge branches through Merge rather than ordinary multi-input nodes."]},
+    behavior:["First match selects the first case in configured order; all matches preserves a shared origin ID across copies.","Unmatched items enter the fallback collection and empty branches remain visible in evidence."],commonIssues:["Renaming and reordering preserve case IDs; deleting a connected case requires confirmation.","Do not use arrival timing to choose a branch."],related:[{label:"Branches and collections",href:"/workflows/collections-and-items"},{label:"Merge",href:"/nodes/merge"}]},
+  loop_over_items:{useCases:["Run a visible body once per item or deterministic batch.","Bound parallel item processing while retaining item identity and attempts."],example:{title:"Process approved files sequentially",description:"Filter a folder listing, then process one approved path at a time.",configuration:{batchSize:1,concurrency:1,maxIterations:10000,iterationRetryCount:0,failurePolicy:"stop",perItemTimeoutMs:30000},flow:["List Folder → Filter → Loop Over Items.","Connect Loop to the body and Done to aggregation.","Review side-effect warnings before increasing concurrency."]},behavior:["Batch membership and iteration IDs are deterministic; concurrency greater than one may complete out of order.","Iteration retry reuses identity, cancellation reaches active bodies, and exactly-once side effects are not promised."],commonIssues:["Both Loop and Done outputs must be connected.","Keep a finite maximum iteration count and use idempotent downstream mutations."],related:[{label:"Loops and recovery",href:"/workflows/collections-and-items"},{label:"Retries and recovery",href:"/execution/retries-and-recovery"}]},
+  split_out:{useCases:["Turn an explicit array field into workflow items.","Retain selected parent context and original array positions."],example:{title:"Split API results",description:"Expand response.body.results under item while keeping safe parent fields.",configuration:{fieldPath:"response.body.results",destinationField:"item",keepParentFields:true,keepOriginalArray:false,includeIndex:true,emptyArrayPolicy:"emit_no_items",invalidInputPolicy:"fail"},flow:["Map or connect the response collection.","Choose the exact array path.","Test empty, missing and non-array fixtures separately."]},behavior:["Objects and strings are never treated as arrays.","Each child retains its parent and origin identity plus array position."],commonIssues:["An empty path means the input item itself must be an array.","Choose explicit failure, no-output or Rejected behavior for invalid inputs."],related:[{label:"Collections and items",href:"/workflows/collections-and-items"},{label:"Filter",href:"/nodes/filter"}]},
+  aggregate:{useCases:["Reduce several items to a count, numeric value, string, group, object or collected array.","Create a single report value after a loop."],example:{title:"Count processed rows",description:"Count all completed items after collection processing.",configuration:{operation:"count",fieldPath:"",includeMissing:false},flow:["Connect a collection-producing node.","Choose an operation and only its relevant fields.","Inspect the aggregate preview and source count."]},behavior:["Numeric operations reject strings rather than coercing them.","Results are deterministic in input order and bounded by aggregate byte policy."],commonIssues:["Empty numeric selections return null; count returns zero.","Object-by-key requires an explicit duplicate-key policy."],related:[{label:"Collections and items",href:"/workflows/collections-and-items"},{label:"Limits",href:"/reference/limits"}]},
+  remove_duplicates:{useCases:["Deduplicate one collection by full value or selected keys.","Reject records already committed by successful earlier workflow runs."],example:{title:"Keep one customer per email",description:"Compare normalized email keys and retain the first item.",configuration:{fields:["email"],caseSensitive:false,normalizeWhitespace:true,keep:"first",scope:"collection",exposeDuplicates:true},flow:["Parse CSV → Split Out → Remove Duplicates.","Connect Duplicates only when rejected rows need handling.","Use workflow-state scope only with a visible retention policy."]},behavior:["Deep object equality canonicalizes property order and distinguishes missing from null.","Cross-run keys are staged and commit only when the complete workflow succeeds."],commonIssues:["Visible evidence contains a safe key hash, not raw secret key material.","Cross-run key retention is bounded by runner policy."],related:[{label:"Workflow state",href:"/files-and-data/workflow-state"},{label:"Collections and items",href:"/workflows/collections-and-items"}]},
+  merge:{useCases:["Converge named branches without depending on arrival timing.","Append, join, combine or deliberately choose among independent collections."],example:{title:"Join rows by customer ID",description:"Full-outer join two named inputs by explicit keys and nest conflicts by input.",configuration:{mode:"combine_fields",inputPorts:[{id:"input_a",name:"Customers",required:true},{id:"input_b",name:"Orders",required:true}],join:"full",leftKey:"id",rightKey:"customerId",conflictStrategy:"nest",maxResults:25000},flow:["Connect each branch to its named input port.","Set both join keys and duplicate behavior.","Inspect empty inputs and expected result size before running."]},behavior:["Configured port order, never completion timing, determines append and priority order.","Cartesian results and every other result collection are hard bounded."],commonIssues:["Ordinary nodes cannot ambiguously converge; insert Merge.","Flat conflict strategies require object items; nesting is the safest general strategy."],related:[{label:"Merge modes",href:"/workflows/collections-and-items"},{label:"Limits",href:"/reference/limits"}]},
   set_data: {
     useCases: ["Give several upstream values a stable object shape before passing them on.", "Create a small request body or notification payload without writing code."],
     example: {
@@ -835,8 +861,13 @@ function exampleNode(node: NodeDefinition): string {
   return JSON.stringify({ type: node.type, version: 1, configuration: node.defaults }, null, 2);
 }
 
+function guideFor(node:NodeDefinition):NodeGuide|undefined{
+  if(node.type==="javascript_code"||node.type==="python_code")return nodeGuides.code;
+  return nodeGuides[node.type];
+}
+
 function renderGuide(node: NodeDefinition): string {
-  const guide = nodeGuides[node.type];
+  const guide = guideFor(node);
   if (!guide) throw new Error(`Missing documentation guidance for ${node.type}`);
   const serializedExample = JSON.stringify(guide.example.configuration ?? {});
   const exampleCaveats = [
@@ -869,7 +900,7 @@ ${guide.example.flow.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 }
 
 function renderBehavior(node: NodeDefinition): string {
-  const guide = nodeGuides[node.type];
+  const guide = guideFor(node)!;
   const portSummary = node.outputs.length
     ? `The editor catalogue declares ${node.outputs.map(port => `\`${port.key}\` (${port.type})`).join(", ")} for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.`
     : "This node has no declared output ports; its value is in controlling when or how later work proceeds.";
@@ -887,7 +918,7 @@ ${guide.commonIssues.map(item => `- ${item}`).join("\n")}
 function renderRelated(node: NodeDefinition): string {
   return `## Related guides
 
-${nodeGuides[node.type].related.map(item => `- [${item.label}](${item.href})`).join("\n")}`;
+${guideFor(node)!.related.map(item => `- [${item.label}](${item.href})`).join("\n")}`;
 }
 
 function renderNode(node: NodeDefinition): string {

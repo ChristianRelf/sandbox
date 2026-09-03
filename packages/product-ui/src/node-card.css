@@ -109,6 +109,7 @@
   font-size: 10px;
   line-height: 1.2;
 }
+.node-item-count{position:absolute;right:10px;bottom:7px;font-size:10px;font-weight:700;color:var(--text-muted,#697386);background:var(--surface-raised,#f4f6f8);border-radius:999px;padding:2px 6px}
 
 .node-data-contract span:first-child,
 .node-data-contract span:last-child {

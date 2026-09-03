@@ -54,6 +54,7 @@
               "workflows/editor",
               "workflows/ai-builder",
               "workflows/variables-and-data",
+              "workflows/collections-and-items",
               "workflows/branches-and-conditions",
               "workflows/schedules-and-triggers",
               "workflows/testing",
@@ -207,6 +208,10 @@
             "group": "Logic",
             "pages": [
               "nodes/condition",
+              "nodes/filter",
+              "nodes/switch",
+              "nodes/loop-over-items",
+              "nodes/merge",
               "nodes/delay",
               "nodes/compare-previous",
               "nodes/approval"
@@ -217,6 +222,9 @@
             "pages": [
               "nodes/ai-prompt",
               "nodes/code",
+              "nodes/split-out",
+              "nodes/aggregate",
+              "nodes/remove-duplicates",
               "nodes/set-data",
               "nodes/read-file",
               "nodes/list-folder",

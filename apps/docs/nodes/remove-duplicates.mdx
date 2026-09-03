@@ -1,0 +1,114 @@
+---
+title: "Remove Duplicates"
+description: "Remove deterministic duplicates within or across runs. Exact configuration, ports, placement, and execution behavior."
+icon: "braces"
+---
+
+**Node type:** `remove_duplicates` · **Version:** `1` · **Category:** Data
+
+Remove deterministic duplicates within or across runs. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Deduplicate one collection by full value or selected keys.
+- Reject records already committed by successful earlier workflow runs.
+
+## Example: Keep one customer per email
+
+Compare normalized email keys and retain the first item.
+
+
+```json title="Example settings"
+{
+  "fields": [
+    "email"
+  ],
+  "caseSensitive": false,
+  "normalizeWhitespace": true,
+  "keep": "first",
+  "scope": "collection",
+  "exposeDuplicates": true
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Parse CSV → Split Out → Remove Duplicates.
+2. Connect Duplicates only when rejected rows need handling.
+3. Use workflow-state scope only with a visible retention policy.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `fields` | array | `[]` | Comparison paths; empty means whole-item deep equality. |
+| `caseSensitive` | boolean | `true` | Use case-sensitive string equality. |
+| `normalizeWhitespace` | boolean | `false` | Trim and collapse string whitespace before comparison. |
+| `keep` | string | `"first"` | Retain the first or last occurrence. Values: `first`, `last`. |
+| `scope` | string | `"collection"` | Deduplicate this collection or successfully committed workflow state. Values: `collection`, `workflow_state`. |
+| `exposeDuplicates` | boolean | `true` | Expose removed duplicates on a named branch. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "remove_duplicates",
+  "version": 1,
+  "configuration": {
+    "fields": [],
+    "caseSensitive": true,
+    "normalizeWhitespace": false,
+    "keep": "first",
+    "scope": "collection",
+    "exposeDuplicates": true
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `array` | Yes | Items |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `array` | No | Unique |
+| `duplicates` | `array` | No | Duplicates |
+
+## Execution behavior
+
+- Deep object equality canonicalizes property order and distinguishes missing from null.
+- Cross-run keys are staged and commit only when the complete workflow succeeds.
+- The editor catalogue declares `output` (array), `duplicates` (array) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Visible evidence contains a safe key hash, not raw secret key material.
+- Cross-run key retention is bounded by runner policy.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Workflow state](/files-and-data/workflow-state)
+- [Collections and items](/workflows/collections-and-items)

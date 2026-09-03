@@ -4,7 +4,7 @@ description: "Every node currently implemented in sndbox, generated from the pro
 icon: "blocks"
 ---
 
-sndbox currently implements **45 built-in nodes** across triggers, logic, data, network, browser, communication, and system automation. These pages are generated from `src/catalogue.ts`; names, type IDs, defaults, typed ports, side-effect flags, and supported placements are not hand-copied.
+sndbox currently implements **54 built-in nodes** across triggers, logic, data, network, browser, communication, and system automation. These pages are generated from `src/catalogue.ts`; names, type IDs, defaults, typed ports, side-effect flags, and supported placements are not hand-copied.
 
 <Tip>
   Start with a trigger, connect compatible ports, and map outputs into later node fields. The node inspector only shows settings implemented by that node.
@@ -78,6 +78,18 @@ The **Default node configuration** block is the exact generated storage shape. *
 <Card title="Condition" icon="git-branch" href="/nodes/condition">
   Follow a true or false branch.
 </Card>
+<Card title="Filter" icon="git-branch" href="/nodes/filter">
+  Keep or remove collection items using strict rules.
+</Card>
+<Card title="Switch" icon="git-branch" href="/nodes/switch">
+  Route items through stable named cases.
+</Card>
+<Card title="Loop Over Items" icon="git-branch" href="/nodes/loop-over-items">
+  Process a bounded collection in deterministic batches.
+</Card>
+<Card title="Merge" icon="git-branch" href="/nodes/merge">
+  Join named branches without arrival-time races.
+</Card>
 <Card title="Delay" icon="git-branch" href="/nodes/delay">
   Wait without blocking the runner.
 </Card>
@@ -90,6 +102,15 @@ The **Default node configuration** block is the exact generated storage shape. *
 
 ## Data
 
+<Card title="Split Out" icon="braces" href="/nodes/split-out">
+  Expand an explicit array field into workflow items.
+</Card>
+<Card title="Aggregate" icon="braces" href="/nodes/aggregate">
+  Reduce collection items into one deterministic result.
+</Card>
+<Card title="Remove Duplicates" icon="braces" href="/nodes/remove-duplicates">
+  Remove deterministic duplicates within or across runs.
+</Card>
 <Card title="Set Data" icon="braces" href="/nodes/set-data">
   Construct a structured object.
 </Card>
@@ -117,8 +138,14 @@ The **Default node configuration** block is the exact generated storage shape. *
 <Card title="AI" icon="braces" href="/nodes/ai-prompt">
   Send an instruction mid-workflow and wait for the model response.
 </Card>
-<Card title="Code" icon="braces" href="/nodes/code">
-  Author Python, HTML, JavaScript, or CSS in a full editor.
+<Card title="JavaScript Code" icon="braces" href="/nodes/javascript-code">
+  Transform workflow items in a restricted JavaScript runtime.
+</Card>
+<Card title="Python Code" icon="braces" href="/nodes/python-code">
+  Transform workflow items in a restricted Python runtime.
+</Card>
+<Card title="Code / Source (legacy)" icon="braces" href="/nodes/code">
+  Author a source block or migrate it to a dedicated Code node.
 </Card>
 
 ## Network

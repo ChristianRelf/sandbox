@@ -64,6 +64,16 @@ describe("Web Builder graph inputs", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "12345678-0000-0000-0000-000000000000" });
   });
 
+  it("connects Merge by stable named target port and rejects a second producer", () => {
+    const current=workflow();
+    current.nodes.push({id:"merge",type:"merge",version:1,name:"Merge",position:{x:700,y:0},configuration:{inputPorts:[{id:"input_a",name:"A"},{id:"input_b",name:"B"}]},disabled:false});
+    const first=connectWorkflowNodes(current,{source:"html",target:"merge",sourceHandle:"output",targetHandle:"input_a"})!;
+    expect(first.edges[0]).toMatchObject({sourcePort:"output",targetPort:"input_a",targetHandle:"input_a"});
+    expect(isValidWorkflowConnection(first,{source:"js",target:"merge",sourceHandle:"output",targetHandle:"input_a"})).toBe(false);
+    expect(isValidWorkflowConnection(first,{source:"js",target:"merge",sourceHandle:"output",targetHandle:"unknown"})).toBe(false);
+    expect(isValidWorkflowConnection(first,{source:"js",target:"merge",sourceHandle:"output",targetHandle:"input_b"})).toBe(true);
+  });
+
   it("accepts only the matching Code language for each named input", () => {
     const current = workflow();
     expect(isValidWorkflowConnection(current, { source: "html", target: "site", sourceHandle: "output", targetHandle: "html" })).toBe(true);

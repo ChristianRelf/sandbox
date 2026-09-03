@@ -40,6 +40,16 @@ icon: "gauge"
 - Personal-token maximum expiry: 90 days.
 - Service-account policy: 1–365 days.
 
+## Collections
+
+- Transformation input and output: 10,000 items each.
+- One item JSON value: 1 MiB.
+- Aggregate result: 16 MiB.
+- Cartesian Merge: 25,000 results, also bounded by the node's lower configured maximum.
+- Loop Over Items: 10,000 iterations, concurrency 16, and at most 10 configured iteration retries.
+- Cross-run Remove Duplicates: 50,000 committed keys per node.
+- Execution inspector preview: 100 items per node; counts remain authoritative and runtime collections remain complete.
+
 ## Plugins
 
 - Default memory: 32 MB.

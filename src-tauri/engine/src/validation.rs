@@ -1,6 +1,6 @@
 use crate::{expressions::inspect_template, EngineError, InputBinding, Workflow};
-use serde_json::Value;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 const TRIGGERS: &[&str] = &[
@@ -49,8 +49,19 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
             None,
         ));
     }
-    if workflow.settings.expression_language_version != crate::expressions::EXPRESSION_LANGUAGE_VERSION {
-        issues.push(issue("expression_version_incompatible",format!("Workflow requires expression language {}, but this runner supports {}.",workflow.settings.expression_language_version,crate::expressions::EXPRESSION_LANGUAGE_VERSION),None,None));
+    if workflow.settings.expression_language_version
+        != crate::expressions::EXPRESSION_LANGUAGE_VERSION
+    {
+        issues.push(issue(
+            "expression_version_incompatible",
+            format!(
+                "Workflow requires expression language {}, but this runner supports {}.",
+                workflow.settings.expression_language_version,
+                crate::expressions::EXPRESSION_LANGUAGE_VERSION
+            ),
+            None,
+            None,
+        ));
     }
     let ids: HashSet<_> = workflow.nodes.iter().map(|n| n.id.as_str()).collect();
     if ids.len() != workflow.nodes.len() {
@@ -123,6 +134,51 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                     Some(edge.id.clone()),
                 ));
             }
+            if source.node_type == "switch" {
+                let valid: HashSet<&str> = source
+                    .configuration
+                    .get("cases")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|case| case.get("id").and_then(Value::as_str))
+                    .chain(
+                        source
+                            .configuration
+                            .get("fallbackBranchId")
+                            .and_then(Value::as_str),
+                    )
+                    .collect();
+                if !valid.contains(edge.source_handle.as_str()) {
+                    issues.push(issue(
+                        "switch_handle_invalid",
+                        format!(
+                            "Switch connection uses unknown branch '{}'.",
+                            edge.source_handle
+                        ),
+                        Some(source.id.clone()),
+                        Some(edge.id.clone()),
+                    ));
+                }
+            }
+            let fixed_handles: Option<&[&str]> = match source.node_type.as_str() {
+                "filter" | "split_out" => Some(&["output", "rejected"]),
+                "loop_over_items" => Some(&["loop", "done"]),
+                "remove_duplicates" => Some(&["output", "duplicates"]),
+                _ => None,
+            };
+            if fixed_handles.is_some_and(|handles| !handles.contains(&edge.source_handle.as_str()))
+            {
+                issues.push(issue(
+                    "collection_handle_invalid",
+                    format!(
+                        "{} connection uses unknown output '{}'.",
+                        source.name, edge.source_handle
+                    ),
+                    Some(source.id.clone()),
+                    Some(edge.id.clone()),
+                ));
+            }
         }
         if let Some(target) = workflow.nodes.iter().find(|n| n.id == edge.target_node_id) {
             if TRIGGERS.contains(&target.node_type.as_str()) {
@@ -132,6 +188,25 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                     Some(target.id.clone()),
                     Some(edge.id.clone()),
                 ));
+            }
+            if target.node_type == "merge" {
+                let port = edge.target_port.as_deref().unwrap_or(&edge.target_handle);
+                let valid = target
+                    .configuration
+                    .get("inputPorts")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|value| value.get("id").and_then(Value::as_str))
+                    .any(|id| id == port);
+                if !valid {
+                    issues.push(issue(
+                        "merge_input_invalid",
+                        format!("Merge connection uses unknown input port '{port}'."),
+                        Some(target.id.clone()),
+                        Some(edge.id.clone()),
+                    ));
+                }
             }
         }
     }
@@ -174,25 +249,47 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
         }
     }
     for node in &workflow.nodes {
+        validate_collection_node(workflow, node, &mut issues);
         let reachable_sources = upstream_node_ids(workflow, &node.id);
         for (field_path, source) in expression_strings(&node.configuration, "configuration") {
             if field_path.starts_with("configuration.pinnedData")
                 || field_path.starts_with("configuration.dependencies")
-                || matches!(field_path.rsplit('.').next(),Some("sourceCode"|"credentialId"|"connectionId"|"profileId"|"runtimeVersion"))
-            { continue; }
-            if !source.contains("{{") { continue; }
+                || matches!(
+                    field_path.rsplit('.').next(),
+                    Some(
+                        "sourceCode"
+                            | "credentialId"
+                            | "connectionId"
+                            | "profileId"
+                            | "runtimeVersion"
+                    )
+                )
+            {
+                continue;
+            }
+            if !source.contains("{{") {
+                continue;
+            }
             match inspect_template(source) {
                 Err(error) => {
-                    let mut expression_issue = issue("expression_invalid", error.to_string(), Some(node.id.clone()), None);
+                    let mut expression_issue = issue(
+                        "expression_invalid",
+                        error.to_string(),
+                        Some(node.id.clone()),
+                        None,
+                    );
                     expression_issue.field_path = Some(field_path);
                     issues.push(expression_issue);
                 }
-                Ok(references) => for source_id in references {
-                    if !reachable_sources.contains(source_id.as_str()) {
-                        let mut expression_issue = issue("expression_unreachable", format!("Expression references node '{source_id}', which is not reachable upstream."), Some(node.id.clone()), None);
-                        expression_issue.field_path = Some(field_path.clone());
-                        expression_issue.suggestion = Some("Choose a node connected before this field's node.".into());
-                        issues.push(expression_issue);
+                Ok(references) => {
+                    for source_id in references {
+                        if !reachable_sources.contains(source_id.as_str()) {
+                            let mut expression_issue = issue("expression_unreachable", format!("Expression references node '{source_id}', which is not reachable upstream."), Some(node.id.clone()), None);
+                            expression_issue.field_path = Some(field_path.clone());
+                            expression_issue.suggestion =
+                                Some("Choose a node connected before this field's node.".into());
+                            issues.push(expression_issue);
+                        }
                     }
                 }
             }
@@ -234,19 +331,75 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                 }
             }
         }
-        if matches!(node.node_type.as_str(), "code" | "javascript_code" | "python_code") {
-            let expected_language = match node.node_type.as_str() { "javascript_code" => Some("javascript"), "python_code" => Some("python"), _ => None };
-            if expected_language.is_some_and(|expected| node.configuration.get("language").and_then(Value::as_str) != Some(expected)) {
-                let mut mismatch=issue("code_language_mismatch",format!("{} must use the {} runtime.",node.name,expected_language.unwrap()),Some(node.id.clone()),None);mismatch.field_path=Some("configuration.language".into());issues.push(mismatch);
+        if matches!(
+            node.node_type.as_str(),
+            "code" | "javascript_code" | "python_code"
+        ) {
+            let expected_language = match node.node_type.as_str() {
+                "javascript_code" => Some("javascript"),
+                "python_code" => Some("python"),
+                _ => None,
+            };
+            if expected_language.is_some_and(|expected| {
+                node.configuration.get("language").and_then(Value::as_str) != Some(expected)
+            }) {
+                let mut mismatch = issue(
+                    "code_language_mismatch",
+                    format!(
+                        "{} must use the {} runtime.",
+                        node.name,
+                        expected_language.unwrap()
+                    ),
+                    Some(node.id.clone()),
+                    None,
+                );
+                mismatch.field_path = Some("configuration.language".into());
+                issues.push(mismatch);
             }
-            if node.configuration.get("helperLanguageVersion").and_then(Value::as_u64).unwrap_or(1) != crate::expressions::EXPRESSION_LANGUAGE_VERSION as u64 {
-                let mut unsupported=issue("expression_version_incompatible",format!("{} requires an unsupported helper-language version.",node.name),Some(node.id.clone()),None);unsupported.field_path=Some("configuration.helperLanguageVersion".into());issues.push(unsupported);
+            if node
+                .configuration
+                .get("helperLanguageVersion")
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                != crate::expressions::EXPRESSION_LANGUAGE_VERSION as u64
+            {
+                let mut unsupported = issue(
+                    "expression_version_incompatible",
+                    format!(
+                        "{} requires an unsupported helper-language version.",
+                        node.name
+                    ),
+                    Some(node.id.clone()),
+                    None,
+                );
+                unsupported.field_path = Some("configuration.helperLanguageVersion".into());
+                issues.push(unsupported);
             }
-            if node.configuration.get("dependencies").and_then(Value::as_array).is_some_and(|dependencies|!dependencies.is_empty()) {
-                let mut packages=issue("package_policy_rejected","Stage 1 Code runtimes support built-in helpers only; package installation is not enabled.",Some(node.id.clone()),None);packages.field_path=Some("configuration.dependencies".into());packages.suggestion=Some("Remove package requirements or run the transformation through an approved integration node.".into());issues.push(packages);
+            if node
+                .configuration
+                .get("dependencies")
+                .and_then(Value::as_array)
+                .is_some_and(|dependencies| !dependencies.is_empty())
+            {
+                let mut packages=issue("package_policy_rejected","Stage 1 Code runtimes support built-in helpers only; package installation is not enabled.",Some(node.id.clone()),None);
+                packages.field_path = Some("configuration.dependencies".into());
+                packages.suggestion=Some("Remove package requirements or run the transformation through an approved integration node.".into());
+                issues.push(packages);
             }
-            if node.configuration.get("networkPolicy").and_then(Value::as_str).is_some_and(|policy|policy!="none") {
-                let mut network=issue("code_network_denied","Code nodes cannot request ambient network access in this runtime.",Some(node.id.clone()),None);network.field_path=Some("configuration.networkPolicy".into());issues.push(network);
+            if node
+                .configuration
+                .get("networkPolicy")
+                .and_then(Value::as_str)
+                .is_some_and(|policy| policy != "none")
+            {
+                let mut network = issue(
+                    "code_network_denied",
+                    "Code nodes cannot request ambient network access in this runtime.",
+                    Some(node.id.clone()),
+                    None,
+                );
+                network.field_path = Some("configuration.networkPolicy".into());
+                issues.push(network);
             }
         }
         let missing = match node.node_type.as_str() {
@@ -318,8 +471,10 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
                     None
                 }
             }
-            "code" | "javascript_code" | "python_code" => missing_string_or_binding(node, "sourceCode")
-                .then_some("Code requires source before it can run."),
+            "code" | "javascript_code" | "python_code" => {
+                missing_string_or_binding(node, "sourceCode")
+                    .then_some("Code requires source before it can run.")
+            }
             "web_builder" => (missing_string_or_binding(node, "html")
                 || missing_string_or_binding(node, "javascript")
                 || missing_string_or_binding(node, "css"))
@@ -441,19 +596,458 @@ pub fn validate(workflow: &Workflow) -> Vec<ValidationIssue> {
         }
     }
     for name in &workflow.settings.permissions.approved_environment_variables {
-        if name.is_empty() || name.len()>128 || !name.chars().all(|character|character.is_ascii_uppercase()||character.is_ascii_digit()||character=='_') {
+        if name.is_empty()
+            || name.len() > 128
+            || !name.chars().all(|character| {
+                character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_'
+            })
+        {
             issues.push(issue("environment_name_invalid",format!("Environment variable name '{name}' is invalid; use uppercase letters, digits and underscores."),None,None));
         }
     }
     issues
 }
 
+enum ArraySchema {
+    Unknown,
+    Object(&'static [&'static str]),
+}
+impl ArraySchema {
+    fn rejects(&self, path: &str) -> bool {
+        match self {
+            Self::Unknown => false,
+            Self::Object(fields) => path.is_empty() || !fields.contains(&path),
+        }
+    }
+}
+
+fn validate_collection_node(
+    workflow: &Workflow,
+    node: &crate::WorkflowNode,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    let config = &node.configuration;
+    match node.node_type.as_str() {
+        "filter" => {
+            if config
+                .get("rules")
+                .and_then(Value::as_array)
+                .is_none_or(Vec::is_empty)
+            {
+                issues.push(issue(
+                    "filter_rules_missing",
+                    "Filter requires at least one rule.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            validate_rules(node, config, issues);
+        }
+        "switch" => {
+            let cases = config
+                .get("cases")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            if cases.is_empty() {
+                issues.push(issue(
+                    "switch_cases_missing",
+                    "Switch requires at least one case.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            let mut ids = HashSet::new();
+            for case in cases {
+                let id = case.get("id").and_then(Value::as_str).unwrap_or("");
+                if id.is_empty()
+                    || !id
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+                {
+                    issues.push(issue(
+                        "switch_branch_id_invalid",
+                        "Switch case IDs must contain letters, numbers, underscores or hyphens.",
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                } else if !ids.insert(id) {
+                    issues.push(issue(
+                        "switch_branch_id_duplicate",
+                        format!("Switch branch ID '{id}' is duplicated."),
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                }
+                validate_rules(node, case, issues);
+            }
+            let fallback = config
+                .get("fallbackBranchId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if fallback.is_empty()
+                || !fallback
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+            {
+                issues.push(issue(
+                    "switch_fallback_invalid",
+                    "Switch requires a valid stable fallback branch ID.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            } else if !ids.insert(fallback) {
+                issues.push(issue(
+                    "switch_branch_id_duplicate",
+                    "Switch fallback ID duplicates a case ID.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+        }
+        "split_out" => {
+            if config.get("fieldPath").and_then(Value::as_str).is_none() {
+                issues.push(issue("split_array_path_missing","Split Out requires an array field path (use an empty string only for a top-level array).",Some(node.id.clone()),None));
+            } else if let Some(source) = workflow
+                .edges
+                .iter()
+                .find(|edge| edge.target_node_id == node.id)
+                .and_then(|edge| {
+                    workflow
+                        .nodes
+                        .iter()
+                        .find(|candidate| candidate.id == edge.source_node_id)
+                })
+            {
+                let known: ArraySchema = match source.node_type.as_str() {
+                    "parse_csv" => ArraySchema::Object(&["rows", "headers"]),
+                    "list_folder" => ArraySchema::Object(&["entries"]),
+                    "parse_text" => ArraySchema::Object(&["lines"]),
+                    _ => ArraySchema::Unknown,
+                };
+                let path = config
+                    .get("fieldPath")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if known.rejects(path) {
+                    issues.push(issue(
+                        "split_array_schema_mismatch",
+                        format!("'{path}' is not a known array output from {}.", source.name),
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                }
+            }
+        }
+        "loop_over_items" => {
+            let done = workflow
+                .edges
+                .iter()
+                .any(|edge| edge.source_node_id == node.id && edge.source_handle == "done");
+            if !done {
+                issues.push(issue(
+                    "loop_completion_missing",
+                    "Loop Over Items requires a connected Done output.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            let body = workflow
+                .edges
+                .iter()
+                .any(|edge| edge.source_node_id == node.id && edge.source_handle == "loop");
+            if !body {
+                issues.push(issue(
+                    "loop_body_missing",
+                    "Loop Over Items requires a connected Loop body.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            let maximum = config
+                .get("maxIterations")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if maximum == 0 {
+                issues.push(issue(
+                    "loop_unbounded",
+                    "Loop Over Items requires a positive maximum iteration count.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            } else if maximum as usize > workflow.settings.collection_limits.max_loop_iterations {
+                issues.push(issue(
+                    "loop_iteration_limit",
+                    format!(
+                        "Loop maximum {maximum} exceeds runner policy {}.",
+                        workflow.settings.collection_limits.max_loop_iterations
+                    ),
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if config.get("batchSize").and_then(Value::as_u64).unwrap_or(0) == 0 {
+                issues.push(issue(
+                    "loop_batch_size_invalid",
+                    "Loop Over Items requires a positive batch size.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            let concurrency = config
+                .get("concurrency")
+                .and_then(Value::as_u64)
+                .unwrap_or(1) as usize;
+            if concurrency > workflow.settings.collection_limits.max_loop_concurrency {
+                issues.push(issue(
+                    "loop_concurrency_limit",
+                    format!(
+                        "Loop concurrency {concurrency} exceeds runner policy {}.",
+                        workflow.settings.collection_limits.max_loop_concurrency
+                    ),
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if config
+                .get("iterationRetryCount")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 10
+            {
+                issues.push(issue(
+                    "loop_retry_limit",
+                    "Loop iteration retries cannot exceed 10.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+        }
+        "aggregate" => {
+            let allowed = [
+                "collect_items",
+                "collect_field",
+                "count",
+                "sum",
+                "minimum",
+                "maximum",
+                "average",
+                "first",
+                "last",
+                "concatenate",
+                "group_by",
+                "object_by_key",
+            ];
+            let operation = config.get("operation").and_then(Value::as_str);
+            if !operation.is_some_and(|value| allowed.contains(&value)) {
+                issues.push(issue(
+                    "aggregate_operation_invalid",
+                    "Aggregate requires a supported operation.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if matches!(
+                operation,
+                Some(
+                    "collect_field"
+                        | "sum"
+                        | "minimum"
+                        | "maximum"
+                        | "average"
+                        | "first"
+                        | "last"
+                        | "concatenate"
+                )
+            ) && config.get("fieldPath").and_then(Value::as_str).is_none()
+            {
+                issues.push(issue(
+                    "aggregate_field_missing",
+                    "This Aggregate operation requires a selected field path.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if operation == Some("group_by")
+                && config
+                    .get("groupFields")
+                    .and_then(Value::as_array)
+                    .is_none_or(Vec::is_empty)
+            {
+                issues.push(issue(
+                    "aggregate_group_fields_missing",
+                    "Group by requires at least one field.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+        }
+        "remove_duplicates" => {
+            if config.get("scope").and_then(Value::as_str) == Some("workflow_state")
+                && workflow.settings.collection_limits.max_deduplication_keys == 0
+            {
+                issues.push(issue(
+                    "dedupe_state_unavailable",
+                    "This runner policy does not allow retained cross-run deduplication keys.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+        }
+        "merge" => {
+            let ports = config
+                .get("inputPorts")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            if ports.len() < 2 {
+                issues.push(issue(
+                    "merge_inputs_missing",
+                    "Merge requires at least two named input ports.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            let mut ids = HashSet::new();
+            for port in ports {
+                let id = port.get("id").and_then(Value::as_str).unwrap_or("");
+                if id.is_empty() || !ids.insert(id) {
+                    issues.push(issue(
+                        "merge_input_id_duplicate",
+                        "Merge input IDs must be present and unique.",
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                }
+            }
+            let mode = config.get("mode").and_then(Value::as_str).unwrap_or("");
+            if ![
+                "wait_all",
+                "append",
+                "combine_position",
+                "combine_fields",
+                "cartesian",
+                "choose_branch",
+            ]
+            .contains(&mode)
+            {
+                issues.push(issue(
+                    "merge_mode_invalid",
+                    "Merge requires a supported mode.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if matches!(mode, "combine_fields" | "cartesian") && ports.len() != 2 {
+                issues.push(issue(
+                    "merge_binary_mode_inputs",
+                    format!("Merge mode '{mode}' requires exactly two named inputs."),
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if mode == "combine_fields"
+                && (config
+                    .get("leftKey")
+                    .and_then(Value::as_str)
+                    .is_none_or(str::is_empty)
+                    || config
+                        .get("rightKey")
+                        .and_then(Value::as_str)
+                        .is_none_or(str::is_empty))
+            {
+                issues.push(issue(
+                    "merge_join_key_missing",
+                    "Combine by matching fields requires both join-key paths.",
+                    Some(node.id.clone()),
+                    None,
+                ));
+            }
+            if mode == "choose_branch"
+                && !config
+                    .get("chooseStrategy")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| matches!(value, "first_non_empty" | "first_successful"))
+            {
+                issues.push(issue("merge_choice_invalid","Choose branch requires an explicit first-non-empty or first-successful strategy.",Some(node.id.clone()),None));
+            }
+            if mode == "cartesian" {
+                let maximum = config
+                    .get("maxResults")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize;
+                if maximum == 0 {
+                    issues.push(issue(
+                        "merge_cartesian_unbounded",
+                        "Cartesian Merge requires a positive hard result limit.",
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                } else if maximum > workflow.settings.collection_limits.max_cartesian_items {
+                    issues.push(issue(
+                        "merge_cartesian_limit",
+                        format!(
+                            "Cartesian limit {maximum} exceeds runner policy {}.",
+                            workflow.settings.collection_limits.max_cartesian_items
+                        ),
+                        Some(node.id.clone()),
+                        None,
+                    ));
+                }
+            }
+        }
+        _ => {}
+    }
+    let incoming = workflow
+        .edges
+        .iter()
+        .filter(|edge| edge.target_node_id == node.id)
+        .count();
+    if incoming > 1 && node.node_type != "merge" {
+        issues.push(issue("ambiguous_convergence",format!("{} has {incoming} incoming control branches. Add Merge to define convergence explicitly.",node.name),Some(node.id.clone()),None));
+    }
+}
+
+fn validate_rules(node: &crate::WorkflowNode, value: &Value, issues: &mut Vec<ValidationIssue>) {
+    if let Some(rules) = value.get("rules").and_then(Value::as_array) {
+        for rule in rules {
+            if rule.get("rules").is_some() {
+                validate_rules(node, rule, issues);
+                continue;
+            }
+            if rule.get("operator").and_then(Value::as_str) == Some("matches_regex") {
+                let pattern = rule
+                    .get("value")
+                    .or_else(|| rule.get("right"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if pattern.len() > 1024 || regex::Regex::new(pattern).is_err() {
+                    let mut invalid = issue(
+                        "rule_regex_invalid",
+                        "Rule contains an invalid or overlong regular expression.",
+                        Some(node.id.clone()),
+                        None,
+                    );
+                    invalid.field_path = Some("configuration.rules".into());
+                    issues.push(invalid);
+                }
+            }
+        }
+    }
+}
+
 fn upstream_node_ids<'a>(workflow: &'a Workflow, node_id: &str) -> HashSet<&'a str> {
     let mut reachable = HashSet::new();
     let mut pending = vec![node_id];
     while let Some(target) = pending.pop() {
-        for edge in workflow.edges.iter().filter(|edge| edge.target_node_id == target) {
-            if reachable.insert(edge.source_node_id.as_str()) { pending.push(edge.source_node_id.as_str()); }
+        for edge in workflow
+            .edges
+            .iter()
+            .filter(|edge| edge.target_node_id == target)
+        {
+            if reachable.insert(edge.source_node_id.as_str()) {
+                pending.push(edge.source_node_id.as_str());
+            }
         }
     }
     reachable
@@ -463,8 +1057,16 @@ fn expression_strings<'a>(value: &'a Value, prefix: &str) -> Vec<(String, &'a st
     let mut result = Vec::new();
     match value {
         Value::String(source) => result.push((prefix.to_string(), source.as_str())),
-        Value::Array(values) => for (index, value) in values.iter().enumerate() { result.extend(expression_strings(value, &format!("{prefix}.{index}"))); },
-        Value::Object(values) => for (key, value) in values { result.extend(expression_strings(value, &format!("{prefix}.{key}"))); },
+        Value::Array(values) => {
+            for (index, value) in values.iter().enumerate() {
+                result.extend(expression_strings(value, &format!("{prefix}.{index}")));
+            }
+        }
+        Value::Object(values) => {
+            for (key, value) in values {
+                result.extend(expression_strings(value, &format!("{prefix}.{key}")));
+            }
+        }
         _ => {}
     }
     result
@@ -755,5 +1357,58 @@ mod tests {
         assert!(validate(&workflow(vec![("a", "b")]))
             .iter()
             .any(|i| i.code == "disconnected_node"));
+    }
+    #[test]
+    fn validates_collection_graph_shapes_and_rules() {
+        let mut switch = workflow(vec![("a", "b")]);
+        switch.nodes[1].node_type = "switch".into();
+        switch.nodes[1].configuration = json!({"cases":[]});
+        assert!(validate(&switch)
+            .iter()
+            .any(|issue| issue.code == "switch_cases_missing"));
+
+        let mut filter = workflow(vec![("a", "b")]);
+        filter.nodes[1].node_type = "filter".into();
+        filter.nodes[1].configuration =
+            json!({"rules":[{"field":"name","operator":"matches_regex","value":"["}]});
+        assert!(validate(&filter)
+            .iter()
+            .any(|issue| issue.code == "rule_regex_invalid"));
+
+        let converged = workflow(vec![("a", "b"), ("a", "c"), ("b", "c")]);
+        assert!(validate(&converged)
+            .iter()
+            .any(|issue| issue.code == "ambiguous_convergence"));
+    }
+
+    #[test]
+    fn validates_loop_and_merge_boundaries() {
+        let mut looped = workflow(vec![("a", "b")]);
+        looped.nodes[1].node_type = "loop_over_items".into();
+        looped.nodes[1].configuration = json!({"maxIterations":0,"concurrency":99});
+        let issues = validate(&looped);
+        for code in [
+            "loop_body_missing",
+            "loop_completion_missing",
+            "loop_unbounded",
+            "loop_concurrency_limit",
+        ] {
+            assert!(
+                issues.iter().any(|issue| issue.code == code),
+                "missing {code}"
+            );
+        }
+
+        let mut merged = workflow(vec![("a", "b")]);
+        merged.nodes[1].node_type = "merge".into();
+        merged.nodes[1].configuration =
+            json!({"mode":"cartesian","maxResults":0,"inputPorts":[{"id":"same"},{"id":"same"}]});
+        let issues = validate(&merged);
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "merge_input_id_duplicate"));
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "merge_cartesian_unbounded"));
     }
 }

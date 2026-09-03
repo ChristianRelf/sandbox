@@ -3,6 +3,23 @@ import { createNode, createPluginNode, definitionFor, enabledPluginNodes, NODE_D
 import type { InstalledPlugin } from "./types";
 
 describe("stage two node catalogue", () => {
+  it("ships every collection node with stable routing defaults", () => {
+    const types = new Set(NODE_DEFINITIONS.map(definition => definition.type));
+    for (const type of ["filter", "switch", "loop_over_items", "split_out", "aggregate", "merge", "remove_duplicates"] as const) {
+      expect(types.has(type)).toBe(true);
+      expect(definitionFor(type).placements).toEqual(expect.arrayContaining(["local", "paired_runner", "hosted_runner"]));
+    }
+    const first=createNode("switch",{x:0,y:0});
+    const second=createNode("switch",{x:0,y:0});
+    expect(first.configuration.cases).toEqual(expect.arrayContaining([expect.objectContaining({id:"case_1"})]));
+    (first.configuration.cases as Array<{name:string}>)[0].name="Renamed";
+    expect((second.configuration.cases as Array<{name:string}>)[0].name).toBe("Case 1");
+    expect(createNode("merge",{x:0,y:0}).configuration.inputPorts).toEqual([
+      expect.objectContaining({id:"input_a"}),
+      expect.objectContaining({id:"input_b"}),
+    ]);
+  });
+
   it("exposes the complete managed Chromium action set", () => {
     const types = new Set(NODE_DEFINITIONS.map(definition => definition.type));
     for (const type of ["open_browser", "navigate", "click_element", "fill_field", "select_option", "press_key", "wait_for", "extract_data", "screenshot", "download_file", "upload_file", "close_browser"] as const) {

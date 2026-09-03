@@ -19,6 +19,10 @@ Select a node, provide any required mapped sample input, and choose **Test node*
 
 If the node depends on earlier output, choose a compatible previous execution snapshot or supply an explicit sample override. The snapshot must belong to the same workflow. The test log states that only this node ran, so a successful test should not be read as evidence that its producer was re-executed.
 
+Collection nodes accept pinned arrays including empty, single-item, mixed-type, missing-field, and null examples. Merge accepts pinned collections independently under each stable input ID. Filter and Switch evidence shows branch counts and selected items; Aggregate and Remove Duplicates show before/after counts. Loop runs use the configured bounded sample and may execute the connected body, so they are not labelled harmless.
+
+Pinned data is development evidence only. Scheduled, published, and deployed runs resolve their real control-edge outputs and typed bindings instead.
+
 Side-effecting and destructive nodes do not become harmless in test mode. sndbox can require explicit confirmation for commands, deletion, upload, communication, or other bounded actions.
 
 ## Validate the graph

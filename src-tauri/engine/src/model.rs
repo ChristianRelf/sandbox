@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 5;
+pub const CURRENT_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -264,6 +264,8 @@ pub struct WorkflowSettings {
     pub permissions: PermissionSummary,
     #[serde(default = "default_expression_language_version")]
     pub expression_language_version: u32,
+    #[serde(default)]
+    pub collection_limits: CollectionLimits,
 }
 fn default_timeout() -> u64 {
     30_000
@@ -271,7 +273,9 @@ fn default_timeout() -> u64 {
 fn default_concurrency() -> usize {
     4
 }
-fn default_expression_language_version() -> u32 { 1 }
+fn default_expression_language_version() -> u32 {
+    1
+}
 impl Default for WorkflowSettings {
     fn default() -> Self {
         Self {
@@ -279,8 +283,73 @@ impl Default for WorkflowSettings {
             max_concurrent_nodes: default_concurrency(),
             permissions: PermissionSummary::default(),
             expression_language_version: default_expression_language_version(),
+            collection_limits: CollectionLimits::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionLimits {
+    #[serde(default = "default_max_collection_items")]
+    pub max_input_items: usize,
+    #[serde(default = "default_max_collection_items")]
+    pub max_result_items: usize,
+    #[serde(default = "default_max_item_bytes")]
+    pub max_item_bytes: usize,
+    #[serde(default = "default_max_aggregate_bytes")]
+    pub max_aggregate_bytes: usize,
+    #[serde(default = "default_max_cartesian_items")]
+    pub max_cartesian_items: usize,
+    #[serde(default = "default_max_loop_iterations")]
+    pub max_loop_iterations: usize,
+    #[serde(default = "default_max_loop_concurrency")]
+    pub max_loop_concurrency: usize,
+    #[serde(default = "default_max_deduplication_keys")]
+    pub max_deduplication_keys: usize,
+    #[serde(default = "default_max_history_previews")]
+    pub max_history_item_previews: usize,
+}
+
+impl Default for CollectionLimits {
+    fn default() -> Self {
+        Self {
+            max_input_items: default_max_collection_items(),
+            max_result_items: default_max_collection_items(),
+            max_item_bytes: default_max_item_bytes(),
+            max_aggregate_bytes: default_max_aggregate_bytes(),
+            max_cartesian_items: default_max_cartesian_items(),
+            max_loop_iterations: default_max_loop_iterations(),
+            max_loop_concurrency: default_max_loop_concurrency(),
+            max_deduplication_keys: default_max_deduplication_keys(),
+            max_history_item_previews: default_max_history_previews(),
+        }
+    }
+}
+
+fn default_max_collection_items() -> usize {
+    10_000
+}
+fn default_max_item_bytes() -> usize {
+    1_048_576
+}
+fn default_max_aggregate_bytes() -> usize {
+    16_777_216
+}
+fn default_max_cartesian_items() -> usize {
+    25_000
+}
+fn default_max_loop_iterations() -> usize {
+    10_000
+}
+fn default_max_loop_concurrency() -> usize {
+    16
+}
+fn default_max_deduplication_keys() -> usize {
+    50_000
+}
+fn default_max_history_previews() -> usize {
+    100
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -360,6 +429,12 @@ pub struct BinaryReference {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowItem {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub item_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_item_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_item_id: Option<String>,
     #[serde(default)]
     pub data: Value,
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -369,13 +444,80 @@ pub struct WorkflowItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_item_index: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_position: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_position: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub branch_history: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loop_iteration: Option<usize>,
+    #[serde(default = "default_execution_attempt")]
+    pub execution_attempt: u32,
+    #[serde(default = "default_item_status")]
+    pub status: String,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub trusted_paths: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub correlations: std::collections::BTreeMap<String, String>,
+}
+
+fn default_execution_attempt() -> u32 {
+    1
+}
+fn default_item_status() -> String {
+    "successful".into()
 }
 
 impl WorkflowItem {
     pub fn json(data: Value) -> Self {
-        Self { data, binary: Default::default(), source_node_id: None, source_item_index: None, branch: None }
+        Self {
+            item_id: String::new(),
+            origin_item_id: None,
+            parent_item_id: None,
+            data,
+            binary: Default::default(),
+            source_node_id: None,
+            source_item_index: None,
+            original_position: None,
+            current_position: None,
+            branch: None,
+            branch_history: vec![],
+            loop_iteration: None,
+            execution_attempt: 1,
+            status: default_item_status(),
+            trusted_paths: Default::default(),
+            correlations: Default::default(),
+        }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionEvidence {
+    pub input_item_count: usize,
+    pub output_item_count: usize,
+    #[serde(default)]
+    pub rejected_item_count: usize,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub branch_counts: std::collections::BTreeMap<String, usize>,
+    #[serde(default)]
+    pub iteration_count: usize,
+    #[serde(default)]
+    pub batch_count: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sample_items: Vec<WorkflowItem>,
+    #[serde(default)]
+    pub preview_truncated: bool,
+    #[serde(default)]
+    pub runtime_data_truncated: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ordering_policy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_for_inputs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -437,6 +579,8 @@ pub struct NodeExecution {
     pub test_data_source: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capability_usage: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection: Option<CollectionEvidence>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

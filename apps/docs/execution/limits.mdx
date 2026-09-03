@@ -22,6 +22,14 @@ icon: "gauge"
 | Python/JavaScript Code timeout | 100–120000 ms; default 30000 ms |
 | Code stdout/stderr | 64 KiB each |
 | Web Builder source | 4 MB combined across HTML, JavaScript, and CSS |
+| Collection node input | 10,000 items |
+| Collection node result | 10,000 items |
+| One workflow item | 1 MiB JSON value |
+| Aggregate result | 16 MiB |
+| Cartesian Merge | 25,000 result items, further bounded by configured `maxResults` |
+| Loop Over Items | 10,000 iterations and concurrency 16 |
+| Cross-run deduplication | 50,000 committed keys per node |
+| Execution item preview | 100 items per node; authoritative counts are retained |
 
 Plugin runtime defaults are 32 MB linear memory, 25 million fuel units, 30 seconds, 1 MB input/output, and 2 MB host responses. A plugin node can request a shorter timeout up to five minutes; host policy can impose a lower bound.
 

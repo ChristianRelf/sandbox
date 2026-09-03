@@ -16,6 +16,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   onAdd: (sourceId: string) => void;
   connectionRole?: "input" | "output" | "both";
   dimmed?: boolean;
+  itemCount?: number;
 }
 
 export function WorkflowNodeCard({ data, selected }: NodeProps) {
@@ -30,8 +31,15 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
     onAdd,
     connectionRole,
     dimmed,
+    itemCount,
   } = data as WorkflowNodeData;
   const definition = definitionFor(node.type);
+  const inputPorts = node.type === "web_builder"
+    ? [...WEB_BUILDER_INPUT_PORTS]
+    : node.type === "merge"
+      ? ((node.configuration.inputPorts as Array<{id:string;name:string}> | undefined) ?? []).map(port=>({id:port.id,label:port.name}))
+      : undefined;
+  const outputPorts = dynamicOutputPorts(node);
 
   return (
     <>
@@ -46,12 +54,14 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
         warning={warning}
         trigger={isTrigger(node.type)}
         condition={node.type === "condition"}
-        inputCount={definition.inputs.length}
-        inputPorts={node.type === "web_builder" ? [...WEB_BUILDER_INPUT_PORTS] : undefined}
-        outputLabels={definition.outputs.map((port) => port.label)}
+        inputCount={inputPorts?.length ?? definition.inputs.length}
+        inputPorts={inputPorts}
+        outputLabels={outputPorts?.map(port=>port.label) ?? definition.outputs.map((port) => port.label)}
+        outputPorts={outputPorts}
         onAdd={onAdd}
         connectionRole={connectionRole}
         dimmed={dimmed}
+        itemCount={itemCount}
       />
       <NodeAskAiAction
         node={node}
@@ -63,6 +73,18 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
       />
     </>
   );
+}
+
+function dynamicOutputPorts(node:WorkflowNode):Array<{id:string;label:string}>|undefined{
+  if(node.type==="switch")return [
+    ...(((node.configuration.cases as Array<{id:string;name:string}>|undefined)??[]).map(item=>({id:item.id,label:item.name}))),
+    {id:String(node.configuration.fallbackBranchId??"fallback"),label:String(node.configuration.fallbackName??"Fallback")},
+  ];
+  if(node.type==="filter")return [{id:"output",label:"Retained"},{id:"rejected",label:"Rejected"}];
+  if(node.type==="split_out")return [{id:"output",label:"Items"},{id:"rejected",label:"Rejected"}];
+  if(node.type==="loop_over_items")return [{id:"loop",label:"Loop"},{id:"done",label:"Done"}];
+  if(node.type==="remove_duplicates")return [{id:"output",label:"Unique"},{id:"duplicates",label:"Duplicates"}];
+  return undefined;
 }
 
 export function NodeAskAiAction({

@@ -1,0 +1,150 @@
+---
+title: "Merge"
+description: "Join named branches without arrival-time races. Exact configuration, ports, placement, and execution behavior."
+icon: "git-branch"
+---
+
+**Node type:** `merge` · **Version:** `1` · **Category:** Logic
+
+Join named branches without arrival-time races. This node is not marked with the catalogue's generic side-effect flag. That classification is not a guarantee that every configured operation is read-only; review the concrete action and its destination.
+
+## When to use this node
+
+- Converge named branches without depending on arrival timing.
+- Append, join, combine or deliberately choose among independent collections.
+
+## Example: Join rows by customer ID
+
+Full-outer join two named inputs by explicit keys and nest conflicts by input.
+
+
+```json title="Example settings"
+{
+  "mode": "combine_fields",
+  "inputPorts": [
+    {
+      "id": "input_a",
+      "name": "Customers",
+      "required": true
+    },
+    {
+      "id": "input_b",
+      "name": "Orders",
+      "required": true
+    }
+  ],
+  "join": "full",
+  "leftKey": "id",
+  "rightKey": "customerId",
+  "conflictStrategy": "nest",
+  "maxResults": 25000
+}
+```
+
+This shows the important settings, not a complete exported node.
+
+
+1. Connect each branch to its named input port.
+2. Set both join keys and duplicate behavior.
+3. Inspect empty inputs and expected result size before running.
+
+
+## Configuration
+
+| Field | Type | Default | What it controls |
+| --- | --- | --- | --- |
+| `mode` | string | `"wait_all"` | Wait, append, combine, join, multiply or choose named inputs. Values: `wait_all`, `append`, `combine_position`, `combine_fields`, `cartesian`, `choose_branch`. |
+| `inputPorts` | array | `[{"id":"input_a","name":"Input A","required":true},{"id":"input_b","name":"Input B","required":true}]` | Stable ordered named input ports. |
+| `unmatchedPolicy` | string | `"keep"` | Keep, drop or fail on unmatched positions. Values: `keep`, `drop`, `fail`. |
+| `join` | string | `"inner"` | Inner, left, right or full outer field join. Values: `inner`, `left`, `right`, `full`. |
+| `leftKey` | string | `"id"` | Join key path on the first input. |
+| `rightKey` | string | `"id"` | Join key path on the second input. |
+| `conflictStrategy` | string | `"nest"` | Nest, prefix, prefer one side or fail on property conflicts. Values: `nest`, `prefix`, `prefer_left`, `prefer_right`, `fail`. |
+| `failedInputPolicy` | string | `"fail"` | Explicit failed-input behavior. Values: `fail`, `empty`. |
+| `skippedInputPolicy` | string | `"empty"` | Explicit skipped-input behavior. Values: `fail`, `empty`. |
+| `chooseStrategy` | string | `"first_non_empty"` | Choose the first non-empty or first successful input in priority order. Values: `first_non_empty`, `first_successful`. |
+| `maxResults` | number | `25000` | Hard result bound, including Cartesian products. |
+| `priority` | array | `["input_a","input_b"]` | Configured branch priority, independent of arrival time. |
+
+
+
+## Workflow JSON
+
+The editor stores this node with the following implemented default configuration:
+
+```json title="Default node configuration"
+{
+  "type": "merge",
+  "version": 1,
+  "configuration": {
+    "mode": "wait_all",
+    "inputPorts": [
+      {
+        "id": "input_a",
+        "name": "Input A",
+        "required": true
+      },
+      {
+        "id": "input_b",
+        "name": "Input B",
+        "required": true
+      }
+    ],
+    "unmatchedPolicy": "keep",
+    "join": "inner",
+    "leftKey": "id",
+    "rightKey": "id",
+    "conflictStrategy": "nest",
+    "failedInputPolicy": "fail",
+    "skippedInputPolicy": "empty",
+    "chooseStrategy": "first_non_empty",
+    "maxResults": 25000,
+    "priority": [
+      "input_a",
+      "input_b"
+    ]
+  }
+}
+```
+
+Values may be entered literally or mapped from an earlier compatible output when the inspector exposes a mapping control. See [Variables and data mapping](/workflows/variables-and-data).
+
+## Inputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `input_a` | `array` | Yes | Input A |
+| `input_b` | `array` | Yes | Input B |
+
+## Outputs
+
+| Port | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `array` | No | Merged |
+
+## Execution behavior
+
+- Configured port order, never completion timing, determines append and priority order.
+- Cartesian results and every other result collection are hard bounded.
+- The editor catalogue declares `output` (array) for mapping. The execution inspector can contain additional evidence fields; inspect a real result before selecting nested paths from object or any outputs.
+
+## Common issues
+
+- Ordinary nodes cannot ambiguously converge; insert Merge.
+- Flat conflict strategies require object items; nesting is the safest general strategy.
+
+
+## Where it can run
+
+- Desktop local runner
+- Paired self-hosted runner
+- Hosted runner
+
+## Test and inspect
+
+Use **Test node** in the editor to preview this step with the current configuration. A full run records resolved inputs, outputs, logs, duration, and any artifacts in the execution inspector. Side-effecting or destructive nodes can require an additional confirmation or approved workflow permission.
+
+## Related guides
+
+- [Merge modes](/workflows/collections-and-items)
+- [Limits](/reference/limits)

@@ -53,4 +53,10 @@ If Gmail accepted a message but the response was lost, repeating Send Email can 
 
 Set Workflow State and Compare With Previous stage their updates. A later failure prevents commit, so a retry sees the prior successful value. This avoids advancing a cursor past work that never fully completed.
 
+## Loop iteration recovery
+
+Loop Over Items assigns immutable iteration IDs and deterministic batch membership. It checkpoints an iteration before its body starts, then records the completed, failed, or uncertain terminal state with the same batch hash. A retry keeps the iteration identity and increments its attempt; completed evidence is not reopened, and a surviving active checkpoint identifies interrupted work for recovery review.
+
+Pure transformation bodies are safe to recompute from immutable input. A body containing communication, commands, browser mutations, file changes, or other side effects remains subject to the same outcome-certainty rules as a top-level node. Concurrent bodies can finish out of order, cancellation propagates to active iterations, and a runner loss during an uncertain mutation requires review rather than an automatic exactly-once claim.
+
 Never describe uncertain recovery as “exactly once.”

@@ -66,6 +66,10 @@ export function isValidWorkflowConnection(
   );
   if (duplicate) return false;
 
+  if(target.type === "merge"){
+    const ports=((target.configuration.inputPorts as Array<{id:string}>|undefined)??[]).map(port=>port.id);
+    return ports.includes(targetHandle)&&!workflow.edges.some(edge=>edge.targetNodeId===target.id&&(edge.targetPort??edge.targetHandle)===targetHandle);
+  }
   if (target.type !== "web_builder") return targetHandle === "input";
   if (!isWebBuilderInput(targetHandle) || source.type !== "code") return false;
 
@@ -88,7 +92,9 @@ export function connectWorkflowNodes(
   const targetId = connection.target!;
   const sourceHandle = connection.sourceHandle ?? "output";
   const targetHandle = connection.targetHandle ?? "input";
-  const webBuilderInput = isWebBuilderInput(targetHandle);
+  const target=workflow.nodes.find(node=>node.id===targetId);
+  const webBuilderInput = isWebBuilderInput(targetHandle)&&target?.type==="web_builder";
+  const mergeInput=target?.type==="merge";
   const edge: WorkflowEdge = {
     id: `edge_${crypto.randomUUID().slice(0, 8)}`,
     sourceNodeId: sourceId,
@@ -101,7 +107,7 @@ export function connectWorkflowNodes(
           sourcePort: "code",
           targetPort: targetHandle,
         }
-      : {}),
+      : mergeInput ? {kind:"control" as const,sourcePort:sourceHandle,targetPort:targetHandle} : {}),
   };
 
   return {
