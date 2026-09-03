@@ -9,7 +9,7 @@ async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive","env"] }
 ed25519-dalek = { version = "3", features = ["pkcs8","rand_core","alloc"] }
-rand = "0.9"
+rand = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["blocking","json","multipart","rustls-tls"] }
 keyring = { version = "4.1", features = ["v1"] }
 parking_lot = "0.12"
