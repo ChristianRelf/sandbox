@@ -1,0 +1,86 @@
+---
+title: "Issues and permissions"
+description: "Understand sndbox information, warning, error, and permission codes; fix the cause; and create a safe diagnostic report."
+icon: "circle-alert"
+---
+
+sndbox assigns every workflow issue a stable public identifier. The identifier is shown beside the issue in the editor, execution inspector, copied diagnostic reports, and support documentation.
+
+## Severity levels
+
+| Prefix | Level | Meaning | Workflow behaviour |
+| --- | --- | --- | --- |
+| `I#` | Information | Something needs attention, but expected workflow behaviour remains correct. | Runs normally. |
+| `W#` | Warning | Something may cause incomplete, incorrect, or unexpected output. | Runs, but review is recommended. |
+| `E#` | Error | Something prevents the workflow or affected operation from working. | Run or publish is blocked, or the affected execution fails. |
+| `P#` | Permission required | A required capability is locked until you decide. | Pauses or blocks only the protected operation. |
+
+The three digits identify the underlying condition. For example, `E#028` is a blocking incomplete-node issue and `W#020` is a disconnected-node warning. The letter is part of the identifier because it communicates the current impact.
+
+Permission is a separate state rather than a fourth severity level. A locked amber shield means a decision is required. A green shield means the permission is already granted; it is not an error.
+
+## Fix an issue
+
+1. Select **Fix field**, **Open node**, or **Review permissions** on the issue.
+2. Read the impact and suggested correction before changing configuration.
+3. Make the correction. The editor validates the workflow again automatically.
+4. Confirm that the issue disappears and that blocking error counts return to zero.
+
+The editor tracks when an issue was first seen, last seen, resolved, and seen again. Tracking stores only identifiers, workflow or node references, and timestamps on the local device. It does not store workflow configuration, input values, credentials, protected variables, or execution output.
+
+## Report an issue
+
+Select **Copy report** on an issue to copy a sanitized JSON report. It contains:
+
+- the public and internal issue codes;
+- severity, message, and suggested correction;
+- applicable workflow, execution, node, and field identifiers;
+- first-seen, last-seen, and occurrence information; and
+- the report timestamp.
+
+Review the report before sharing it. Workflow configuration, secrets, protected values, and execution payloads are deliberately excluded. See [Report a bug](/troubleshooting/report-a-bug) when the suggested correction does not resolve the issue.
+
+## Permission required
+
+`P#001` means that a workflow attempted to use a capability that has not been approved. Select **Review permissions** to open the permission screen at the relevant control. Check the requested domains, folders, browser profiles, communication actions, external writes, commands, or background access before approving.
+
+Declining does not silently grant access. The workflow remains unchanged and the protected operation stays blocked.
+
+## Issue codes
+
+Public numbers are append-only: an assigned number is never reused or reordered. The internal machine code remains available in copied reports for support and engineering diagnosis.
+
+| Number | Internal machine code | Area |
+| --- | --- | --- |
+| `#001`–`#004` | Aggregate configuration and ambiguous convergence | Collections |
+| `#005`–`#008` | Input binding field, source, self-reference, and reachability | Data mapping |
+| `#009`–`#010` | Browser operation and session failures | Browser automation |
+| `#011` | Cancelled execution | Execution |
+| `#012`–`#015` | Code language, network policy, syntax, and type mismatch | Code |
+| `#016`–`#019` | Collection handles, conditions, cycles, and state availability | Workflow structure |
+| `#020`–`#022` | Disconnected nodes and duplicate edges or nodes | Workflow structure |
+| `#023`–`#027` | Environment, expression, and filter validation | Configuration |
+| `#028` | `incomplete_node` | Node configuration |
+| `#029`–`#035` | Loop batch, body, completion, concurrency, retry, and bound validation | Collections |
+| `#036`–`#044` | Merge mode, input, join, binary, and Cartesian validation | Collections |
+| `#045` | `missing_endpoint` | Workflow structure |
+| `#046`–`#047` | Node execution and node test failures | Execution |
+| `#048` | `package_policy_rejected` | Code security |
+| `P#001` | `permission_required` | Permissions |
+| `#050` | `rule_regex_invalid` | Conditions and filters |
+| `#051`–`#053` | Runner, restart, and save failures | Runtime and storage |
+| `#054`–`#056` | Self-connections and Split Out validation | Workflow structure |
+| `#057` | `storage_error` | Local storage |
+| `#058`–`#062` | Switch branches, cases, fallback, and handles | Collections |
+| `#063`–`#065` | Trigger count, input, and saved-trigger mismatch | Triggers |
+| `#066` | `unsupported_schema` | Compatibility |
+| `#067` | `validation_unavailable` | Validation service |
+| `#068` | `workflow_validation` | Runtime validation |
+| `#069`–`#075` | External communication, destructive actions, code execution, and external effects | Safety review |
+| `#076`–`#077` | Concurrent collection and Cartesian amplification notices | Collections |
+| `#078`–`#079` | Approval impact and protected input | Permissions and safety |
+| `#081` | Development plugin notice | Plugins |
+| `#082`–`#085` | Bounded previews and browser diagnostics | Execution evidence |
+| `#086` | Collection state and amplification review | Collections |
+
+Codes in the reserved `#900`–`#999` range are deterministic compatibility codes for a condition introduced before its permanent number has been published. Include the internal machine code when reporting one.

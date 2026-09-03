@@ -43,7 +43,7 @@ export interface WorkflowMetadata { favorite:boolean; folder?:string; tags:strin
 export interface WorkflowMetadataPatch { favorite?:boolean; folder?:string|null; tags?:string[]; archivedAt?:string|null; lastOpenedAt?:string|null }
 export interface WorkflowSummary { workflow:Workflow; metadata:WorkflowMetadata; lastExecution?:ExecutionRecord; nextRunAt?:string }
 export interface WorkflowRevisionSummary { revisionId:string; workflowId:string; parentRevisionId?:string; schemaVersion:number; contentHash:string; changeSummary:string; createdAt:string; current:boolean }
-export interface ValidationIssue { code:string; message:string; severity:"error"|"warning"; nodeId?:string; edgeId?:string; fieldPath?:string; suggestion?:string }
+export interface ValidationIssue { code:string; message:string; severity:"info"|"warning"|"error"; nodeId?:string; edgeId?:string; fieldPath?:string; suggestion?:string }
 export interface ExecutionQuery { search?:string; workflowIds?:string[]; statuses?:ExecutionStatus[]; triggerTypes?:string[]; startedAfter?:string; startedBefore?:string; cursor?:string; limit?:number }
 export interface ExecutionPage { items:ExecutionRecord[]; nextCursor?:string }
 export interface RunnerStatus { paused:boolean; activeWorkflowIds:string[]; localSchedulesStopOnQuit:boolean; scheduledWorkflowCount:number; nextRunAt?:string }

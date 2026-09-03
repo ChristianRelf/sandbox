@@ -87,6 +87,8 @@
 .state-skipped,
 .state-cancelled { background: #63646b; }
 .node-warning { margin-left: 7px; color: var(--warning, #d8aa5e); }
+.node-warning-info { color: var(--info, #70a7ff); }
+.node-warning-error { color: var(--error, #e16f70); }
 
 .node-card > b,
 .node-card > small {

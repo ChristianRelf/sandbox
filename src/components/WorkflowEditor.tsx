@@ -16,7 +16,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   Accessibility,
-  AlertTriangle,
   ArrowLeft,
   ChevronDown,
   ChevronUp,
@@ -24,12 +23,15 @@ import {
   History,
   Play,
   Save,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   TestTube2,
   Wrench,
 } from "lucide-react";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -50,6 +52,8 @@ import {
 } from "../catalogue";
 import { usePreferences } from "../preferences";
 import { useAppStore } from "../store";
+import { issueFingerprint, issuePriority } from "../issues";
+import { useIssueTracking } from "../issueTracking";
 import {
   connectWorkflowNodes,
   connectedNodeRoles,
@@ -74,7 +78,6 @@ import {
   AiWorkflowChat,
   type AiWorkflowChatContext,
 } from "./AiWorkflowChat";
-import { AccessibleWorkflowEditor } from "./AccessibleWorkflowEditor";
 import { CommandPalette } from "./CommandPalette";
 import {
   ExecutionInspector,
@@ -83,10 +86,14 @@ import {
 import { NodeInspector } from "./NodeInspector";
 import { WorkflowNodeCard, type WorkflowNodeData } from "./WorkflowNodeCard";
 import { ConfirmDialog, Dialog, FocusDialog } from "./ui/Dialog";
+import { IssueNotice, IssueSummary } from "./ui/IssueNotice";
 import { useToast } from "./ui/Toast";
 import { Tooltip } from "./ui/Tooltip";
 
 const nodeTypes = { workflow: WorkflowNodeCard };
+const AccessibleWorkflowEditor = lazy(() =>
+  import("./AccessibleWorkflowEditor").then((module) => ({ default: module.AccessibleWorkflowEditor })),
+);
 const workflowNodeDimensions = { width: 194, height: 112 } as const;
 
 function workflowNodeHandles(node: WorkflowNode): Node<WorkflowNodeData>["handles"] {
@@ -204,6 +211,7 @@ export function WorkflowEditor() {
   const [instance, setInstance] =
     useState<ReactFlowInstance<Node<WorkflowNodeData>, Edge>>();
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
+  const issueTracking = useIssueTracking(workflow.id, issues);
   const [runningNode, setRunningNode] = useState<string>();
   const [run, setRun] = useState<ExecutionRecord>();
   const [testDataExecutions,setTestDataExecutions]=useState<ExecutionRecord[]>([]);
@@ -802,13 +810,16 @@ export function WorkflowEditor() {
       }),
     });
   };
-  const nodeWarnings = useMemo(
-    () =>
-      new Map(
-        issues.filter((i) => i.nodeId).map((i) => [i.nodeId!, i.message]),
-      ),
-    [issues],
-  );
+  const nodeIssues = useMemo(() => {
+    const result = new Map<string, ValidationIssue>();
+    issues.filter((issue) => issue.nodeId).forEach((issue) => {
+      const current = result.get(issue.nodeId!);
+      if (!current || issuePriority(issue.severity) > issuePriority(current.severity)) {
+        result.set(issue.nodeId!, issue);
+      }
+    });
+    return result;
+  }, [issues]);
   const nodeExecutions = useMemo(
     () => new Map(run?.nodeExecutions.map((item) => [item.nodeId, item]) ?? []),
     [run?.nodeExecutions],
@@ -831,7 +842,8 @@ export function WorkflowEditor() {
         const status = (runningNode === node.id
           ? "running"
           : (execution?.status ?? "idle")) as NodeStatus;
-        const warning = nodeWarnings.get(node.id);
+        const nodeIssue = nodeIssues.get(node.id);
+        const warning = nodeIssue?.message;
         const askAiIssue =
           warning ??
           execution?.error?.message ??
@@ -853,6 +865,7 @@ export function WorkflowEditor() {
             node,
             status,
             warning,
+            warningTone: nodeIssue?.severity,
             itemCount: execution?.collection?.outputItemCount,
             askAiIssue,
             showAskAiOnInteraction: showAskAiOnNodeInteraction,
@@ -878,7 +891,7 @@ export function WorkflowEditor() {
       selectedNodeId,
       runningNode,
       nodeExecutions,
-      nodeWarnings,
+      nodeIssues,
       showAskAiOnNodeInteraction,
       showAskAiOnNodeIssues,
       openAiForNode,
@@ -1208,18 +1221,20 @@ export function WorkflowEditor() {
           </div>
         )}
         {accessibleEditorOpen && (
-          <AccessibleWorkflowEditor
-            workflow={workflow}
-            selectedNodeId={selectedNodeId}
-            onSelect={setSelectedNodeId}
-            onAddNode={() =>
-              setPicker({ open: true, position: { x: 360, y: 220 } })
-            }
-            onChange={(next, message) => {
-              if (next !== workflow) commit(next);
-              setAnnouncement(message);
-            }}
-          />
+          <Suspense fallback={<div className="drawer-empty" role="status">Loading accessible editor…</div>}>
+            <AccessibleWorkflowEditor
+              workflow={workflow}
+              selectedNodeId={selectedNodeId}
+              onSelect={setSelectedNodeId}
+              onAddNode={() =>
+                setPicker({ open: true, position: { x: 360, y: 220 } })
+              }
+              onChange={(next, message) => {
+                if (next !== workflow) commit(next);
+                setAnnouncement(message);
+              }}
+            />
+          </Suspense>
         )}
         {selectedNode && (
           <>
@@ -1278,12 +1293,7 @@ export function WorkflowEditor() {
               {run.status}
             </span>
           )}
-          {issues.length > 0 && (
-            <span className="warning-count">
-              <AlertTriangle size={13} />
-              {issues.length} issue{issues.length === 1 ? "" : "s"}
-            </span>
-          )}
+          {issues.length > 0 && <IssueSummary issues={issues} />}
           <span className="topbar-spacer" />
           {bottomOpen ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
         </button>
@@ -1293,23 +1303,15 @@ export function WorkflowEditor() {
               <div className="validation-list">
                 <h3>Workflow needs attention</h3>
                 {issues.map((issue, i) => (
-                  <button
-                    key={i}
-                    onClick={() =>
-                      issue.nodeId && setSelectedNodeId(issue.nodeId)
-                    }
-                  >
-                    <AlertTriangle size={14} />
-                    <span>
-                      <b>{issue.message}</b>
-                      <small>
-                        {issue.nodeId
-                          ? workflow.nodes.find((n) => n.id === issue.nodeId)
-                              ?.name
-                          : "Workflow"}
-                      </small>
-                    </span>
-                  </button>
+                  <IssueNotice
+                    key={`${issue.code}:${issue.nodeId ?? "workflow"}:${i}`}
+                    issue={issue}
+                    compact
+                    context={{ workflowId: workflow.id, nodeId: issue.nodeId, fieldPath: issue.fieldPath }}
+                    tracking={issueTracking[issueFingerprint(issue)]}
+                    onFix={issue.nodeId ? () => setSelectedNodeId(issue.nodeId) : undefined}
+                    fixLabel={issue.nodeId ? "Open node" : "Review workflow"}
+                  />
                 ))}
               </div>
             ) : run ? (
@@ -1642,8 +1644,8 @@ function PermissionReview({
     >
       <div className="permission-modal">
         <header>
-          <span className="permission-icon">
-            <ShieldCheck size={18} />
+          <span className={`permission-icon ${request ? "locked" : "granted"}`}>
+            {request ? <ShieldAlert size={18} /> : <ShieldCheck size={18} />}
           </span>
           <div>
             <h2>{request ? "Review permission request" : "Workflow permissions"}</h2>
@@ -1656,16 +1658,16 @@ function PermissionReview({
         </header>
         <section ref={reviewBody}>
           {request && (
-            <div className="permission-request-banner">
-              <AlertTriangle size={16} />
-              <span>
-                <b>{request.message}</b>
-                <small>
-                  Grant only if you trust this workflow. Declining leaves its
-                  permissions unchanged.
-                </small>
-              </span>
-            </div>
+            <IssueNotice
+              issue={{
+                code: "permission_required",
+                severity: "permission",
+                message: request.message,
+                suggestion: "Grant only if you trust this workflow. Declining leaves its permissions unchanged.",
+                nodeId: request.nodeId,
+              }}
+              context={{ workflowId: workflow.id, nodeId: request.nodeId }}
+            />
           )}
           <label>Approved network domains</label>
           {domains.length ? (
@@ -1750,20 +1752,20 @@ function PermissionReview({
             <>
               <label>External communication</label>
               {communicationNodes.map((node) => (
-                <div className="command-review" key={node.id}>
-                  <AlertTriangle size={15} />
-                  <div>
-                    <b>{node.name}</b>
-                    <code>
-                      {node.type === "gmail_send_email"
-                        ? `${String(node.configuration.credentialId || "No connection")} → ${String(node.configuration.to || "No recipient")}${String(node.configuration.to || "").includes("{{") ? " (dynamic)" : " (static)"}`
-                        : String(
-                            node.configuration.credentialId ||
-                              "Connection not configured",
-                          )}
-                    </code>
-                  </div>
-                </div>
+                <IssueNotice
+                  key={node.id}
+                  issue={{
+                    code: "external_communication_review",
+                    severity: "info",
+                    message: node.name,
+                    suggestion: node.type === "gmail_send_email"
+                      ? `${String(node.configuration.credentialId || "No connection")} → ${String(node.configuration.to || "No recipient")}${String(node.configuration.to || "").includes("{{") ? " (dynamic)" : " (static)"}`
+                      : String(node.configuration.credentialId || "Connection not configured"),
+                    nodeId: node.id,
+                  }}
+                  compact
+                  context={{ workflowId: workflow.id, nodeId: node.id }}
+                />
               ))}
               <label
                 className={`toggle-row ${requestedKind === "communication" ? "permission-requested" : ""}`}
@@ -1798,10 +1800,12 @@ function PermissionReview({
             <>
               <label>External data changes</label>
               {externalWriteNodes.map((node) => (
-                <div className="command-review" key={node.id}>
-                  <AlertTriangle size={15} />
-                  <div><b>{node.name}</b><code>{definitionFor(node.type).externalEffect?.replaceAll("_", " ")}</code></div>
-                </div>
+                <IssueNotice
+                  key={node.id}
+                  issue={{ code: definitionFor(node.type).externalEffect === "destructive_or_high_impact" ? "high_impact_external_write" : "external_write_review", severity: definitionFor(node.type).externalEffect === "destructive_or_high_impact" ? "warning" : "info", message: node.name, suggestion: definitionFor(node.type).externalEffect?.replaceAll("_", " "), nodeId: node.id }}
+                  compact
+                  context={{ workflowId: workflow.id, nodeId: node.id }}
+                />
               ))}
               <label className={`toggle-row ${requestedKind === "external_write" ? "permission-requested" : ""}`} data-permission-requested={requestedKind === "external_write" || undefined}>
                 <span><b>Permit external data writes</b><small>Allows these nodes to change provider data; connection secrets remain host-only.</small></span>
@@ -1809,18 +1813,17 @@ function PermissionReview({
               </label>
             </>
           )}
-          {collectionRiskNotes.length>0&&<><label>Collection amplification and state</label>{collectionRiskNotes.map(note=><div className="command-review" key={note}><AlertTriangle size={15}/><div><b>{note}</b><code>Review runner limits, repeated trusted-path access, ordering, and idempotency before publishing.</code></div></div>)}</>}
+          {collectionRiskNotes.length>0&&<><label>Collection amplification and state</label>{collectionRiskNotes.map(note=><IssueNotice key={note} issue={{code:"collection_state_review",severity:"warning",message:note,suggestion:"Review runner limits, repeated trusted-path access, ordering, and idempotency before publishing."}} compact context={{workflowId:workflow.id}}/>)}</>}
           {commandNodes.length > 0 && (
             <>
               <label>Command execution</label>
               {commandNodes.map((node) => (
-                <div className="command-review" key={node.id}>
-                  <AlertTriangle size={15} />
-                  <div>
-                    <b>{["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.language ?? "javascript")} code` : String(node.configuration.executable || "Executable not configured")}</b>
-                    <code>{["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.sourceCode ?? "").split("\n").length} lines · restricted local runtime` : (((node.configuration.arguments as string[]) ?? []).join(" ") || "No arguments")}</code>
-                  </div>
-                </div>
+                <IssueNotice
+                  key={node.id}
+                  issue={{ code: "high_risk_capability", severity: "warning", message: ["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.language ?? "javascript")} code` : String(node.configuration.executable || "Executable not configured"), suggestion: ["code","javascript_code","python_code"].includes(node.type) ? `${String(node.configuration.sourceCode ?? "").split("\n").length} lines · restricted local runtime` : (((node.configuration.arguments as string[]) ?? []).join(" ") || "No arguments"), nodeId: node.id }}
+                  compact
+                  context={{ workflowId: workflow.id, nodeId: node.id }}
+                />
               ))}
               <label
                 className={`toggle-row ${requestedKind === "command" ? "permission-requested" : ""}`}

@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, Bot, Code2, ExternalLink, FolderOpen, LocateFixed, Pencil, RefreshCcw, Trash2 } from "lucide-react";
+import { Bot, Code2, ExternalLink, FolderOpen, LocateFixed, Pencil, RefreshCcw, Trash2 } from "lucide-react";
 import {
   Children,
   cloneElement,
@@ -16,6 +16,7 @@ import { definitionFor, type NodeDefinition } from "../catalogue";
 import { expressionContext, previewExpression } from "../expressions";
 import type { CodeLanguage } from "./CodeEditorDialog";
 import { CustomSelect } from "./ui/CustomSelect";
+import { IssueNotice } from "./ui/IssueNotice";
 import type {
   BrowserProfile,
   ConnectionMetadata,
@@ -247,29 +248,28 @@ export function NodeInspector({
       </div>
       <div className="inspector-scroll">
         {issues.length > 0 && (
-          <div
+          <section
             className="inspector-issues"
-            role="list"
             aria-label="Node validation issues"
           >
             {issues.map((issue, index) => (
-              <button
-                id={`validation-${node.id}-${index}`}
+              <div
                 key={`${issue.code}:${issue.fieldPath}`}
-                role="listitem"
-                onClick={() => {
-                  const field = issue.fieldPath?.split(".").at(-1);
-                  if (field) findIssueControl(field)?.focus();
-                }}
+                id={`validation-${node.id}-${index}`}
               >
-                <AlertTriangle size={14} />
-                <span>
-                  <b>{issue.message}</b>
-                  {issue.suggestion && <small>{issue.suggestion}</small>}
-                </span>
-              </button>
+                <IssueNotice
+                  issue={issue}
+                  compact
+                  context={{ workflowId: workflow.id, nodeId: node.id, fieldPath: issue.fieldPath }}
+                  onFix={issue.fieldPath ? () => {
+                    const field = issue.fieldPath?.split(".").at(-1);
+                    if (field) findIssueControl(field)?.focus();
+                  } : undefined}
+                  fixLabel="Fix field"
+                />
+              </div>
             ))}
-          </div>
+          </section>
         )}
         <Field label="Name">
           <input
@@ -1075,16 +1075,10 @@ export function NodeInspector({
           node.type === "gmail_send_email") && (
           <>
             {node.type === "gmail_send_email" && (
-              <div className="risk-callout">
-                <AlertTriangle size={16} />
-                <div>
-                  <b>External communication</b>
-                  <p>
-                    Automatic sending requires approval for this connection and
-                    recipient logic. Any change revokes approval.
-                  </p>
-                </div>
-              </div>
+              <IssueNotice
+                issue={{ code: "external_communication_review", severity: "warning", message: "External communication", suggestion: "Automatic sending requires approval for this connection and recipient logic. Any change revokes approval." }}
+                context={{ workflowId: workflow.id, nodeId: node.id }}
+              />
             )}
             <ConnectionSelect
               provider="gmail"
@@ -1300,9 +1294,10 @@ export function NodeInspector({
         )}
         {node.type === "delete_path" && (
           <>
-            <div className="risk-callout">
-              <AlertTriangle size={16}/><div><b>Destructive operation</b><p>The path must be inside an approved folder. Test runs require an additional confirmation.</p></div>
-            </div>
+            <IssueNotice
+              issue={{ code: "destructive_operation_review", severity: "warning", message: "Destructive operation", suggestion: "The path must be inside an approved folder. Test runs require an additional confirmation." }}
+              context={{ workflowId: workflow.id, nodeId: node.id, fieldPath: "configuration.path" }}
+            />
             <FilePathInput label="Path" fieldName="path" value={String(config.path ?? "")} onChange={(value)=>set("path",value)} onChoose={()=>chooseFile("path")}/>
             <label className="toggle-row">
               <span><b>Allow recursive folder deletion</b></span>
@@ -1393,9 +1388,10 @@ export function NodeInspector({
               </Field>
             )}
             {config.executionMode === "run" && (config.language === "python" || config.language === "javascript") && (
-              <div className="risk-callout">
-                <AlertTriangle size={16} /><div><b>Restricted local code execution</b><p>Requires command execution permission. Input is delivered over a private runtime protocol; ambient environment, network, process, module and filesystem access are denied.</p></div>
-              </div>
+              <IssueNotice
+                issue={{ code: "restricted_code_execution", severity: "info", message: "Restricted local code execution", suggestion: "Requires command execution permission. Input is delivered over a private runtime protocol; ambient environment, network, process, module and filesystem access are denied." }}
+                context={{ workflowId: workflow.id, nodeId: node.id }}
+              />
             )}
             {config.executionMode === "run" && (
               <>
@@ -1441,16 +1437,10 @@ export function NodeInspector({
         )}
         {node.type === "run_command" && (
           <>
-            <div className="risk-callout">
-              <AlertTriangle size={16} />
-              <div>
-                <b>High-risk capability</b>
-                <p>
-                  Automatic runs require explicit permission review. Executable
-                  and arguments are passed separately.
-                </p>
-              </div>
-            </div>
+            <IssueNotice
+              issue={{ code: "high_risk_capability", severity: "warning", message: "High-risk capability", suggestion: "Automatic runs require explicit permission review. Executable and arguments are passed separately." }}
+              context={{ workflowId: workflow.id, nodeId: node.id }}
+            />
             <Field label="Executable">
               <input
                 placeholder="C:\\Tools\\processor.exe"
@@ -1485,22 +1475,22 @@ export function NodeInspector({
               this node automatically.
             </div>
             {definition.externalEffect === "external_write" && node.type !== "github.request_reviewers" && (
-              <div className="risk-callout">
-                <AlertTriangle size={16} />
-                <div><b>External write</b><p>This node changes data in the connected service.</p></div>
-              </div>
+              <IssueNotice
+                issue={{ code: "external_write_review", severity: "info", message: "External write", suggestion: "This node changes data in the connected service." }}
+                context={{ workflowId: workflow.id, nodeId: node.id }}
+              />
             )}
             {node.type === "github.request_reviewers" && (
-              <div className="risk-callout">
-                <AlertTriangle size={16} />
-                <div><b>Externally visible action</b><p>Requesting reviewers sends GitHub notifications to the selected users and teams.</p></div>
-              </div>
+              <IssueNotice
+                issue={{ code: "externally_visible_action", severity: "info", message: "Externally visible action", suggestion: "Requesting reviewers sends GitHub notifications to the selected users and teams." }}
+                context={{ workflowId: workflow.id, nodeId: node.id }}
+              />
             )}
             {definition.externalEffect === "destructive_or_high_impact" && (
-              <div className="risk-callout">
-                <AlertTriangle size={16} />
-                <div><b>{node.type === "github.merge_pull_request" ? "External write: merges code" : "High-impact external write"}</b><p>This operation can merge or otherwise make consequential changes. Review every mapped value.</p></div>
-              </div>
+              <IssueNotice
+                issue={{ code: "high_impact_external_write", severity: "warning", message: node.type === "github.merge_pull_request" ? "External write: merges code" : "High-impact external write", suggestion: "This operation can merge or otherwise make consequential changes. Review every mapped value." }}
+                context={{ workflowId: workflow.id, nodeId: node.id }}
+              />
             )}
             <PluginSchemaForm
               nodeType={node.type}

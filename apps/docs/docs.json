@@ -165,6 +165,7 @@
             "group": "Troubleshooting",
             "pages": [
               "troubleshooting/overview",
+              "troubleshooting/issues",
               "troubleshooting/desktop",
               "troubleshooting/browser",
               "troubleshooting/runner",

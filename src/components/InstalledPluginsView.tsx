@@ -6,7 +6,6 @@ import {
   LockKeyhole,
   RefreshCcw,
   Search,
-  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +17,7 @@ import type {
   PluginPackageInspection,
 } from "../types";
 import { FocusDialog } from "./ui/Dialog";
+import { IssueNotice } from "./ui/IssueNotice";
 
 const initialTrust: PackageTrustMetadata = {
   publisherId: "com.example.publisher",
@@ -188,11 +188,11 @@ export function InstalledPluginsView() {
                   <div className="development-badge">Development</div>
                 )}
                 {plugin.updateRequiresReview && (
-                  <div className="plugin-warning">
-                    <ShieldAlert size={14} />
-                    This version requests new permissions and remains pinned
-                    off.
-                  </div>
+                  <IssueNotice
+                    issue={{ code: "plugin_permission_expansion", severity: "permission", message: "New plugin permissions required", suggestion: "This version requests new permissions and remains pinned off until you approve them." }}
+                    onFix={() => void act(() => api.approvePluginPermissions(plugin))}
+                    fixLabel="Review permissions"
+                  />
                 )}
                 <details>
                   <summary>
@@ -302,13 +302,9 @@ export function InstalledPluginsView() {
             </header>
             {!inspection ? (
               <section>
-                <div className="development-callout">
-                  <ShieldAlert size={15} />
-                  <span>
-                    Development plugins keep the production sandbox and are
-                    disabled in production workspaces.
-                  </span>
-                </div>
+                <IssueNotice
+                  issue={{ code: "development_plugin", severity: "info", message: "Development plugin", suggestion: "Development plugins keep the production sandbox and are disabled in production workspaces." }}
+                />
                 <div className="field-grid">
                   <label className="field">
                     <span>Publisher ID</span>
@@ -367,18 +363,14 @@ export function InstalledPluginsView() {
                   ))}
                 </ul>
                 {inspection.permissionExpansion.length > 0 && (
-                  <div className="plugin-warning">
-                    <ShieldAlert size={14} />
-                    <span>
-                      {plugins.some(
-                        (item) =>
-                          item.pluginId === inspection.manifest.pluginId,
-                      )
-                        ? "Permission expansion: "
-                        : "Initial permission grant: "}
-                      {inspection.permissionExpansion.join(" · ")}
-                    </span>
-                  </div>
+                  <IssueNotice
+                    issue={{
+                      code: "plugin_permission_expansion",
+                      severity: "permission",
+                      message: plugins.some((item) => item.pluginId === inspection.manifest.pluginId) ? "Plugin permission expansion" : "Initial plugin permission grant",
+                      suggestion: inspection.permissionExpansion.join(" · "),
+                    }}
+                  />
                 )}
                 <p className="install-note">
                   Installation does not execute the plugin. The new version will

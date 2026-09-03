@@ -2,13 +2,14 @@ import type { NodeProps } from "@xyflow/react";
 import { ProductWorkflowNode } from "@sandbox/product-ui";
 import { Sparkles } from "lucide-react";
 import { definitionFor, isTrigger } from "../catalogue";
-import type { NodeStatus, WorkflowNode } from "../types";
+import type { NodeStatus, ValidationIssue, WorkflowNode } from "../types";
 import { WEB_BUILDER_INPUT_PORTS } from "../workflowConnections";
 
 export interface WorkflowNodeData extends Record<string, unknown> {
   node: WorkflowNode;
   status: NodeStatus;
   warning?: string;
+  warningTone?: ValidationIssue["severity"];
   askAiIssue?: string;
   showAskAiOnInteraction: boolean;
   showAskAiOnIssues: boolean;
@@ -24,6 +25,7 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
     node,
     status,
     warning,
+    warningTone,
     askAiIssue,
     showAskAiOnInteraction,
     showAskAiOnIssues,
@@ -52,6 +54,7 @@ export function WorkflowNodeCard({ data, selected }: NodeProps) {
         selected={selected}
         disabled={node.disabled}
         warning={warning}
+        warningTone={warningTone}
         trigger={isTrigger(node.type)}
         condition={node.type === "condition"}
         inputCount={inputPorts?.length ?? definition.inputs.length}

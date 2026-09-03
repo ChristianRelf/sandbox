@@ -4,7 +4,26 @@ description: "Pair and harden the implemented Linux x86-64 or ARM64 server runne
 icon: "server"
 ---
 
-The self-hosted server runner is available as a signed standalone Linux binary, an unprivileged container, or a hardened systemd service. It uses runner protocol v2 and reports its engine, plugin runtime, architecture, tags, environment, and concurrency before work can be routed to it.
+The self-hosted server runner is available as a signed standalone Linux binary, an unprivileged container, or a hardened systemd service. It uses runner protocol v2 and reports its engine, plugin runtime, architecture, tags, environment, and concurrency before work can be routed to it. This is the headless runner for servers and NAS devices; it is not a Linux desktop UI.
+
+## Install on a Linux server
+
+Download the archive matching `uname -m`: `linux-x86_64` for `x86_64`, or `linux-aarch64` for `aarch64`/`arm64`. After verifying the published checksum and provenance, extract and install it:
+
+```sh
+tar -xzf sandbox-runner-VERSION-linux-ARCHITECTURE.tar.gz
+sudo ./install.sh
+sudoedit /etc/sandbox-runner/config.toml
+```
+
+The installer puts the binary in `/usr/local/bin`, creates the unprivileged `sandbox-runner` account and persistent data directory, and installs a hardened systemd unit. Existing configuration is preserved during upgrades, and the service remains stopped until pairing is complete.
+
+Complete every placeholder in the config, then validate it as the service account:
+
+```sh
+sudo -u sandbox-runner /usr/local/bin/sandbox-runner \
+  --config /etc/sandbox-runner/config.toml validate
+```
 
 ## Pair the runner
 
@@ -13,17 +32,19 @@ Create a runner in the Operations area and copy the short-lived pairing token. U
 See [Runner operations](/account/runner-operations) for the account-page workflow and lifecycle controls.
 
 ```sh
-sudo SANDBOX_PAIRING_TOKEN='short-lived-token' sandbox-runner \
+sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN='short-lived-token' \
+  /usr/local/bin/sandbox-runner \
   --config /etc/sandbox-runner/config.toml pair
 ```
 
 The runner creates an Ed25519 device key locally, sends only the public key with the one-time token, and prints a fingerprint for administrator confirmation. Do not put the token in the config, image, service unit, or shell history.
 
-## Validate and run
+## Start and inspect
 
 ```sh
-sandbox-runner --config /etc/sandbox-runner/config.toml validate
-sandbox-runner --config /etc/sandbox-runner/config.toml run
+sudo systemctl enable --now sandbox-runner
+sudo systemctl status sandbox-runner
+journalctl -u sandbox-runner -f
 ```
 
 Configuration rejects unknown fields. Set both immutable `workspace_id` and `environment_id`; the human-readable environment must be `development`, `staging`, or `production`. HTTPS is required except for a localhost development control plane. Working directories and local-network targets are explicit allowlists, and command execution is disabled by default.
@@ -37,3 +58,27 @@ Every control-plane command is signature-, target-, expiry-, revision-hash-, per
 ## Harden production
 
 Use a dedicated unprivileged account, read-only system view/root filesystem, private temporary storage, one approved writable data directory, dropped capabilities, resource limits, explicit mounts, and current plus next command-signing public keys during rotation.
+
+## Run on a NAS
+
+On Synology, QNAP, TrueNAS SCALE, Unraid, or another container-oriented host, use the published `ghcr.io/sndboxhq/sandbox-server-runner` image. Run it as its built-in unprivileged UID/GID `65532`, mount the config read-only, and persist `/var/lib/sandbox-runner`. Mount only the directories workflows are allowed to access. Pair with a one-off container before starting the long-running container; never store the pairing token in Compose or the config.
+
+Download and extract either runner archive to obtain `config.example.toml`, then configure and pair the container:
+
+```sh
+mkdir -p ./sndbox-runner/data ./sndbox-runner/automation
+cp config.example.toml ./sndbox-runner/config.toml
+sudo chown -R 65532:65532 ./sndbox-runner/data ./sndbox-runner/automation
+
+docker run --rm \
+  -e SANDBOX_PAIRING_TOKEN='short-lived-token' \
+  -v "$PWD/sndbox-runner/config.toml:/etc/sandbox/runner.toml:ro" \
+  -v "$PWD/sndbox-runner/data:/var/lib/sandbox-runner" \
+  -v "$PWD/sndbox-runner/automation:/srv/automation" \
+  ghcr.io/sndboxhq/sandbox-server-runner:VERSION \
+  --config /etc/sandbox/runner.toml pair
+```
+
+Replace `VERSION` with the published immutable version. After confirming the fingerprint, create the long-running container with the same mounts, `--restart unless-stopped`, `--read-only`, `--cap-drop ALL`, and `--security-opt no-new-privileges`, changing the final command from `pair` to `run`.
+
+If the NAS does not support containers but provides a normal Linux shell, use the standalone archive and configure its service manager to run `/usr/local/bin/sandbox-runner --config /etc/sandbox-runner/config.toml run` as the `sandbox-runner` user.

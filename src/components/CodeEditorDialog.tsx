@@ -1,4 +1,5 @@
 import { AlertCircle, Bot, Braces, Check, CheckCircle2, Code2, FileCode2, Palette, Send, Sparkles, TriangleAlert, X } from "lucide-react";
+import { displayIssueCode, issueDocumentationUrl } from "../issues";
 import Prism from "prismjs";
 import "prismjs/components/prism-css";
 import "prismjs/components/prism-javascript";
@@ -101,6 +102,7 @@ export function CodeEditorDialog({
     [deferredDraft, draftLanguage],
   );
   const errorCount = diagnostics.filter((item) => item.severity === "error").length;
+  const warningCount = diagnostics.filter((item) => item.severity === "warning").length;
   const grammar = useMemo(
     () => Prism.languages[draftLanguage === "html" ? "markup" : draftLanguage],
     [draftLanguage],
@@ -230,14 +232,19 @@ export function CodeEditorDialog({
             <section className="code-problems" aria-label="Code problems" aria-live="polite">
               <header>
                 <span><AlertCircle size={13} /> Problems <b>{diagnostics.length}</b></span>
-                <small>Live syntax and type checking · code is never executed</small>
+                <small>{errorCount} error{errorCount === 1 ? "" : "s"} · {warningCount} warning{warningCount === 1 ? "" : "s"} · code is never executed</small>
               </header>
               <div className="code-problem-list">
                 {diagnostics.length ? diagnostics.map((diagnostic, index) => (
                   <div className={`code-problem code-problem-${diagnostic.severity}`} key={`${diagnostic.line}:${diagnostic.column}:${diagnostic.message}:${index}`}>
                     <span>{diagnostic.severity === "error" ? <AlertCircle size={13} /> : <TriangleAlert size={13} />}</span>
                     <p>{diagnostic.message}</p>
-                    <code>Ln {diagnostic.line}, Col {diagnostic.column}</code>
+                    <code>
+                      <a href={issueDocumentationUrl(diagnostic.severity)} target="_blank" rel="noreferrer">
+                        {displayIssueCode(diagnostic.code, diagnostic.severity)}
+                      </a>
+                      {" · "}Ln {diagnostic.line}, Col {diagnostic.column}
+                    </code>
                   </div>
                 )) : (
                   <div className="code-problems-empty"><CheckCircle2 size={14} /><span><b>No problems found</b><small>{draft.trim() ? "The live checker found no syntax or basic type errors." : "Start typing to check this file."}</small></span></div>

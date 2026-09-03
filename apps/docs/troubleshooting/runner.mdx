@@ -8,6 +8,10 @@ icon: "server"
 
 Use a fresh one-time token only in `SANDBOX_PAIRING_TOKEN`. Confirm the printed device fingerprint in the control plane. Verify HTTPS and runner clock before retrying.
 
+If `sudo` reports `sandbox-runner: command not found`, extract the complete release archive and run `sudo ./install.sh`. The binary should then exist at `/usr/local/bin/sandbox-runner`. Pair it as the service user with `sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN='…' /usr/local/bin/sandbox-runner --config /etc/sandbox-runner/config.toml pair`; using the absolute path also avoids `sudo` PATH differences.
+
+If the service reports that the runner is not paired after a successful pairing attempt, check that pairing was performed as `sandbox-runner`, not `root`, and that `/var/lib/sandbox-runner/identity.json` is owned by `sandbox-runner`. Re-running the packaged installer repairs ownership of the dedicated data directory without replacing the identity or config.
+
 ## Runner is online but rejected
 
 Routing diagnostics identify stale heartbeat, disabled/draining status, protocol or engine incompatibility, missing tag, wrong region, environment mismatch, runner capacity, or pool aggregate capacity. Do not remove a requirement merely to force selection.

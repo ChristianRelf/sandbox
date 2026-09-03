@@ -1,6 +1,5 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import {
-  AlertTriangle,
   ChevronRight,
   Clipboard,
   Copy,
@@ -14,9 +13,11 @@ import {
 import { useEffect, useState } from "react";
 import { format, formatDistanceStrict } from "date-fns";
 import { api } from "../api";
+import { executionErrorIssue } from "../issues";
 import { useToast } from "./ui/Toast";
 import type { ExecutionRecord, NodeExecution, Workflow } from "../types";
 import { Status } from "./Status";
+import { IssueNotice } from "./ui/IssueNotice";
 import "./collection-evidence.css";
 
 interface ExecutionInspectorProps {
@@ -122,34 +123,16 @@ export function ExecutionInspector({
           )}
         </div>
       </div>
-      {run.error?.code === "permission_required" && onReviewPermissions ? (
-        <button
-          className="permission-warning"
-          onClick={() =>
-            onReviewPermissions({
-              nodeId: permissionFailure?.nodeId,
-              message: run.error!.message,
-            })
-          }
-        >
-          <span className="permission-warning-icon">
-            <AlertTriangle size={15} />
-          </span>
-          <span>
-            <b>Permission required</b>
-            <small>{run.error.message}</small>
-          </span>
-          <span className="permission-warning-action">
-            Review and decide
-            <ChevronRight size={14} />
-          </span>
-        </button>
-      ) : run.error ? (
-        <div className="error-banner">
-          <b>{run.error.message}</b>
-          {run.error.suggestion && <span>{run.error.suggestion}</span>}
-        </div>
-      ) : null}
+      {run.error && (
+        <IssueNotice
+          issue={executionErrorIssue(run.error)}
+          context={{ workflowId: workflow?.id, executionId: run.id, nodeId: permissionFailure?.nodeId }}
+          onFix={run.error.code === "permission_required" && onReviewPermissions
+            ? () => onReviewPermissions({ nodeId: permissionFailure?.nodeId, message: run.error!.message })
+            : undefined}
+          fixLabel="Review permissions"
+        />
+      )}
       {run.skipReason && <div className="info-note">{run.skipReason}</div>}
       <div className="execution-body">
         <div className="timeline">
@@ -186,9 +169,10 @@ export function ExecutionInspector({
           <NodeExecutionDetail
             execution={nodeRun}
             name={node?.name ?? nodeRun.nodeId}
+            workflowId={workflow?.id}
+            executionId={run.id}
             onCopy={copy}
             onEditNode={onEditNode}
-            onReviewPermissions={onReviewPermissions}
           />
         )}
       </div>
@@ -199,15 +183,17 @@ export function ExecutionInspector({
 function NodeExecutionDetail({
   execution,
   name,
+  workflowId,
+  executionId,
   onCopy,
   onEditNode,
-  onReviewPermissions,
 }: {
   execution: NodeExecution;
   name: string;
+  workflowId?: string;
+  executionId: string;
   onCopy: (value: unknown) => void;
   onEditNode?: (nodeId: string) => void;
-  onReviewPermissions?: (request: PermissionReviewRequest) => void;
 }) {
   const itemPreviewCount=execution.collection?.sampleItems?.length??execution.outputItems?.length??0;
   return (
@@ -232,31 +218,15 @@ function NodeExecutionDetail({
         </div>
       </header>
       {execution.error && (
-        <div
-          className={`error-detail ${execution.error.code === "permission_required" ? "permission-error-detail" : ""}`}
-        >
-          <b>{execution.error.message}</b>
-          {execution.error.detail && <p>{execution.error.detail}</p>}
-          {execution.error.suggestion && (
-            <span>{execution.error.suggestion}</span>
-          )}
-          {execution.error.line != null && <code>Line {execution.error.line}{execution.error.column != null ? `, column ${execution.error.column}` : ""}</code>}
-          {execution.error.code === "permission_required" &&
-            onReviewPermissions && (
-              <button
-                className="button"
-                onClick={() =>
-                  onReviewPermissions({
-                    nodeId: execution.nodeId,
-                    message: execution.error!.message,
-                  })
-                }
-              >
-                Review permission
-                <ChevronRight size={13} />
-              </button>
-            )}
-        </div>
+        <IssueNotice
+          issue={executionErrorIssue(execution.error)}
+          compact
+          context={{ workflowId, executionId, nodeId: execution.nodeId }}
+          onFix={execution.error.code !== "permission_required" && onEditNode
+            ? () => onEditNode(execution.nodeId)
+            : undefined}
+          fixLabel={execution.error.code === "permission_required" ? "Review permissions" : "Open node"}
+        />
       )}
       {execution.skipReason && (
         <div className="skip-detail">
@@ -285,7 +255,7 @@ function NodeExecutionDetail({
           {Object.keys(execution.collection.branchCounts??{}).length>0&&<p>Branches: {Object.entries(execution.collection.branchCounts??{}).map(([branch,count])=>`${branch} ${count}`).join(" · ")}</p>}
           {execution.collection.waitingForInputs?.length?<p>Waiting for: {execution.collection.waitingForInputs.join(", ")}</p>:null}
           {execution.collection.stopReason&&<p>Stopped: {execution.collection.stopReason}</p>}
-          {execution.collection.previewTruncated&&<p className="diagnostic-warning"><AlertTriangle size={14}/>This is a bounded preview; authoritative counts and runtime data are preserved.</p>}
+          {execution.collection.previewTruncated&&<IssueNotice issue={{code:"bounded_preview",severity:"info",message:"Bounded preview",suggestion:"Authoritative counts and runtime data are preserved."}} compact context={{workflowId,executionId,nodeId:execution.nodeId}}/>}
         </section>
       )}
       <Tabs.Root defaultValue="output">
@@ -413,31 +383,13 @@ function BrowserDiagnosticDetail({
         </span>
       </div>
       {diagnostics.playwrightError && (
-        <div className="diagnostic-warning">
-          <AlertTriangle size={14} />
-          <span>
-            <b>Playwright reported</b>
-            {diagnostics.playwrightError}
-          </span>
-        </div>
+        <IssueNotice issue={{code:"browser_engine_diagnostic",severity:"error",message:"Browser engine reported an error",suggestion:diagnostics.playwrightError}} compact context={{nodeId}} onFix={onEditNode ? () => onEditNode(nodeId) : undefined} fixLabel="Open node" />
       )}
       {weak && (
-        <div className="diagnostic-warning">
-          <AlertTriangle size={14} />
-          <span>
-            <b>Weak locator fallback used</b>The target matched only after
-            stronger accessible locators failed.
-          </span>
-        </div>
+        <IssueNotice issue={{code:"weak_locator_fallback",severity:"warning",message:"Weak locator fallback used",suggestion:"The target matched only after stronger accessible locators failed."}} compact context={{nodeId}} onFix={onEditNode ? () => onEditNode(nodeId) : undefined} fixLabel="Replace locator" />
       )}
       {diagnostics.unexpectedNavigation && (
-        <div className="diagnostic-warning">
-          <AlertTriangle size={14} />
-          <span>
-            <b>Unexpected navigation</b>The page navigated when this node did
-            not declare a navigation.
-          </span>
-        </div>
+        <IssueNotice issue={{code:"unexpected_navigation",severity:"warning",message:"Unexpected navigation",suggestion:"The page navigated when this node did not declare a navigation."}} compact context={{nodeId}} onFix={onEditNode ? () => onEditNode(nodeId) : undefined} fixLabel="Open node" />
       )}
       <details open={Boolean(diagnostics.locatorAttempts.length)}>
         <summary>

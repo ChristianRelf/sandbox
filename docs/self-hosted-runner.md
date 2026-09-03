@@ -2,10 +2,34 @@
 
 The supported server runner targets Linux x86-64 and Linux ARM64 as a signed standalone binary, an unprivileged container image, or a hardened systemd service. It uses runner protocol v2 and reports its exact engine, plugin-runtime, architecture, tags, environment, and concurrency before work can be routed to it.
 
-Create a runner in the Operations area, copy the short-lived pairing token, and place it in `SANDBOX_PAIRING_TOKEN` only for the pairing command. The command contains no permanent account credential:
+## Install the standalone runner
+
+Download the release archive matching `uname -m`: `linux-x86_64` for `x86_64`, or `linux-aarch64` for `aarch64`/`arm64`. Verify it against the published `SHA256SUMS` and Sigstore bundle, then install it:
 
 ```sh
-sudo SANDBOX_PAIRING_TOKEN='short-lived-token' sandbox-runner \
+tar -xzf sandbox-runner-VERSION-linux-ARCHITECTURE.tar.gz
+sudo ./install.sh
+sudoedit /etc/sandbox-runner/config.toml
+```
+
+The installer places the executable at `/usr/local/bin/sandbox-runner`, creates the unprivileged `sandbox-runner` service account, provisions `/var/lib/sandbox-runner`, installs the example configuration without overwriting an existing one, and registers the hardened systemd unit. It deliberately does not start an unconfigured runner.
+
+Set the control-plane URL, runner and workspace/environment IDs, signing keys, and allowed working directories in the configuration. Create each allowed working directory and grant the `sandbox-runner` account only the access the workflows need.
+
+Validate configuration as the same account that runs the service:
+
+```sh
+sudo -u sandbox-runner /usr/local/bin/sandbox-runner \
+  --config /etc/sandbox-runner/config.toml validate
+```
+
+## Pair and start
+
+Create a runner in the Operations area, copy the short-lived pairing token, and place it in `SANDBOX_PAIRING_TOKEN` only for the pairing command. Pair as the service account so its private device identity has the correct owner:
+
+```sh
+sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN='short-lived-token' \
+  /usr/local/bin/sandbox-runner \
   --config /etc/sandbox-runner/config.toml pair
 ```
 
@@ -15,11 +39,44 @@ Configuration is versioned and rejects unknown fields. HTTPS is required except 
 
 Set both `workspace_id` and the immutable `environment_id`; the human-readable `environment` must be `development`, `staging`, or `production`. A command for any other environment is rejected locally even when its control-plane signature is otherwise valid.
 
-Validate configuration before starting:
+After confirming the printed fingerprint in the Operations area, start the service:
 
 ```sh
-sandbox-runner --config /etc/sandbox-runner/config.toml validate
+sudo systemctl enable --now sandbox-runner
+sudo systemctl status sandbox-runner
+journalctl -u sandbox-runner -f
 ```
+
+On a Linux host without systemd, run the same binary under that host's service manager as the `sandbox-runner` user. Keep `/var/lib/sandbox-runner` persistent and writable by that user.
+
+## NAS and container hosts
+
+For Synology, QNAP, TrueNAS SCALE, Unraid, and other container-oriented systems, use the published `ghcr.io/sndboxhq/sandbox-server-runner` image instead of modifying the NAS host. Mount a completed config read-only, plus persistent data and explicitly allowed working directories. The image runs as unprivileged UID/GID `65532`:
+
+```sh
+mkdir -p ./sndbox-runner/data ./sndbox-runner/automation
+cp config.example.toml ./sndbox-runner/config.toml
+sudo chown -R 65532:65532 ./sndbox-runner/data ./sndbox-runner/automation
+
+docker run --rm \
+  -e SANDBOX_PAIRING_TOKEN='short-lived-token' \
+  -v "$PWD/sndbox-runner/config.toml:/etc/sandbox/runner.toml:ro" \
+  -v "$PWD/sndbox-runner/data:/var/lib/sandbox-runner" \
+  -v "$PWD/sndbox-runner/automation:/srv/automation" \
+  ghcr.io/sndboxhq/sandbox-server-runner:VERSION \
+  --config /etc/sandbox/runner.toml pair
+
+docker run -d --name sandbox-runner --restart unless-stopped \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --cap-drop ALL --security-opt no-new-privileges \
+  -v "$PWD/sndbox-runner/config.toml:/etc/sandbox/runner.toml:ro" \
+  -v "$PWD/sndbox-runner/data:/var/lib/sandbox-runner" \
+  -v "$PWD/sndbox-runner/automation:/srv/automation" \
+  ghcr.io/sndboxhq/sandbox-server-runner:VERSION \
+  --config /etc/sandbox/runner.toml run
+```
+
+Replace `VERSION` with the immutable release version and edit the copied config before pairing. Prefer an immutable image digest for production.
 
 `run` reports health every 30 seconds, polls for work every two seconds while
 capacity is available, and reports `draining` during a graceful shutdown. Each

@@ -1,9 +1,9 @@
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
   Circle,
   MonitorDot,
+  ShieldCheck,
   Square,
   Trash2,
 } from "lucide-react";
@@ -12,6 +12,7 @@ import { api } from "../api";
 import type { BrowserProfile, RecordedStep } from "../types";
 import { FocusDialog } from "./ui/Dialog";
 import { CustomSelect } from "./ui/CustomSelect";
+import { IssueNotice } from "./ui/IssueNotice";
 
 export function BrowserRecorder({
   profiles,
@@ -169,7 +170,7 @@ export function BrowserRecorder({
                 />
               </label>
               <div className="security-note">
-                <AlertTriangle size={14} />
+                <ShieldCheck size={14} />
                 <span>
                   Password and payment fields are detected but their values are
                   never recorded. They become required protected inputs.
@@ -273,18 +274,14 @@ function RecordingReview({
           <span>{steps.length} steps</span>
         </header>
         {sensitive > 0 && (
-          <div className="sensitive-review">
-            <AlertTriangle size={15} />
-            <div>
-              <b>
-                {sensitive} protected input{sensitive === 1 ? "" : "s"} required
-              </b>
-              <p>
-                Values were not captured. Map a credential or protected workflow
-                input before running.
-              </p>
-            </div>
-          </div>
+          <IssueNotice
+            issue={{
+              code: "protected_input_required",
+              severity: "warning",
+              message: `${sensitive} protected input${sensitive === 1 ? "" : "s"} required`,
+              suggestion: "Values were not captured. Map a credential or protected workflow input before running.",
+            }}
+          />
         )}
         <section>
           {steps.length ? (

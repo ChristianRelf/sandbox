@@ -197,8 +197,28 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Install pinned cross-compiler
         run: cargo install cargo-zigbuild --locked --version 0.23.3
+      - name: Test Linux runner installer
+        run: sh agents/server/packaging/install.test.sh
       - name: Build and sign Linux agent archives
         run: SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" agents/server/packaging/build-release.sh "${{ needs.verify-release.outputs.version }}"
+      - name: Verify installable agent archives
+        run: |
+          set -eu
+          for archive in agents/server/dist/sandbox-runner-*-linux-*.tar.gz; do
+            package="$(mktemp -d)"
+            install_root="$(mktemp -d)"
+            tar -xzf "$archive" -C "$package"
+            for file in sandbox-runner install.sh config.example.toml sandbox-runner.service README.md; do
+              test -f "$package/$file"
+            done
+            test -x "$package/sandbox-runner"
+            test -x "$package/install.sh"
+            DESTDIR="$install_root" sh "$package/install.sh"
+            test -x "$install_root/usr/local/bin/sandbox-runner"
+            test -f "$install_root/etc/sandbox-runner/config.toml"
+            test -f "$install_root/etc/systemd/system/sandbox-runner.service"
+            rm -rf "$package" "$install_root"
+          done
       - name: Verify agent signature
         working-directory: agents/server/dist
         run: >-

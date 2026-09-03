@@ -5,6 +5,7 @@ import { parse } from "acorn";
 import type { CodeLanguage } from "./components/CodeEditorDialog";
 
 export interface CodeDiagnostic {
+  code: "code_syntax" | "code_type_mismatch";
   severity: "error" | "warning";
   message: string;
   line: number;
@@ -34,6 +35,7 @@ function javascriptSyntax(code: string): CodeDiagnostic[] {
   } catch (value) {
     const error = value as SyntaxError & { loc?: { line: number; column: number } };
     return [{
+      code: "code_syntax",
       severity: "error",
       message: error.message.replace(/ \(\d+:\d+\)$/, ""),
       line: error.loc?.line ?? 1,
@@ -51,6 +53,7 @@ function lezerSyntax(language: Exclude<CodeLanguage, "javascript">, code: string
     if (cursor.type.isError) {
       const position = offsetPosition(code, cursor.from);
       diagnostics.push({
+        code: "code_syntax",
         severity: "error",
         message: syntaxMessage(language, code, cursor.from, cursor.to),
         ...position,
@@ -83,6 +86,7 @@ function javascriptTypes(code: string): CodeDiagnostic[] {
     const next = literalType(assignment[2]);
     if (previous && next !== "unknown" && next !== "null" && previous !== next) {
       diagnostics.push({
+        code: "code_type_mismatch",
         severity: "warning",
         message: `“${assignment[1]}” was initialized as ${previous}, but this assignment is ${next}.`,
         line: index + 1,
@@ -109,6 +113,7 @@ function pythonTypes(code: string): CodeDiagnostic[] {
     const actual = literalType(annotation[3]);
     if (actual === "unknown" || actual === "null" || aliases[annotation[2]].includes(actual)) return;
     diagnostics.push({
+      code: "code_type_mismatch",
       severity: "error",
       message: `“${annotation[1]}” is annotated as ${annotation[2]}, but the assigned value is ${actual}.`,
       line: index + 1,

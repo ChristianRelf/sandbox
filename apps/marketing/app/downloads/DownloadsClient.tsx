@@ -21,6 +21,7 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
   const platform = platforms.find(item => item.id === selected)!;
   const artifact = findArtifact(manifest, selected);
   const available = Boolean(artifact);
+  const linuxRunner = selected === "linux-x64" || selected === "linux-arm64";
   const unsignedWindowsBeta = selected === "windows" && manifest?.channel === "beta";
   return <div className="download-picker">
     <nav aria-label="Platforms">{platforms.map(item => <button key={item.id} onClick={() => setSelected(item.id)} className={selected === item.id ? "active" : ""}>{item.name}</button>)}</nav>
@@ -36,6 +37,7 @@ export function DownloadsClient({ manifest }: { manifest?: ReleaseManifest }) {
         <div><dt>Verification</dt><dd>{selected === "windows" ? unsignedWindowsBeta ? "Unsigned test build · SHA-256 checksum" : manifest ? "Authenticode signature + SHA-256 checksum" : "Declared in the published release" : "Sigstore bundle + SHA-256 checksum"}</dd></div>
       </dl>
       {unsignedWindowsBeta && <p className="download-beta-note"><strong>Unsigned Windows test build.</strong> SmartScreen may show an unknown publisher warning. Only install a checksum-verified copy shared through this release.</p>}
+      {linuxRunner && <p className="download-beta-note"><strong>Headless runner.</strong> Extract the archive and run <code>sudo ./install.sh</code>. For Synology, QNAP, TrueNAS SCALE, or Unraid, follow the <a href="https://docs.sndbox.app/execution/self-hosted-runner">Linux and NAS setup guide</a>.</p>}
       {artifact
         ? <a className="sb-button sb-button--primary" href={artifact.downloadUrl}><Download size={14}/>Download · {formatBytes(artifact.bytes)}</a>
         : <a className="sb-button" href="https://github.com/sndboxhq/sandbox/releases"><ExternalLink size={14}/>View release status</a>}

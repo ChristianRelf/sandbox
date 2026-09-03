@@ -24,8 +24,13 @@ build_archive() {
 
   cargo zigbuild --locked --release --manifest-path "$manifest" --target "$rust_target"
   install -m 0755 "$repository_root/agents/server/target/$rust_target/release/sandbox-server-runner" "$stage/sandbox-runner"
+  install -m 0755 "$repository_root/agents/server/packaging/install.sh" "$stage/install.sh"
+  install -m 0644 "$repository_root/agents/server/config.example.toml" "$stage/config.example.toml"
+  install -m 0644 "$repository_root/agents/server/packaging/sandbox-runner.service" "$stage/sandbox-runner.service"
+  install -m 0644 "$repository_root/agents/server/packaging/README.md" "$stage/README.md"
   tar --sort=name --mtime="@$source_date_epoch" --owner=0 --group=0 --numeric-owner -C "$stage" \
-    -czf "$output/sandbox-runner-$version-linux-$archive_architecture.tar.gz" sandbox-runner
+    -czf "$output/sandbox-runner-$version-linux-$archive_architecture.tar.gz" \
+    sandbox-runner install.sh config.example.toml sandbox-runner.service README.md
 }
 
 build_archive x86_64-unknown-linux-gnu x86_64

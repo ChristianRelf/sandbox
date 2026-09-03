@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   Check,
   Clock3,
   ExternalLink,
@@ -15,6 +14,7 @@ import { api } from "../api";
 import type { PendingApproval, Workflow } from "../types";
 import { useAppStore } from "../store";
 import { FocusDialog } from "./ui/Dialog";
+import { IssueNotice } from "./ui/IssueNotice";
 
 export function ApprovalRequest({
   item,
@@ -133,16 +133,16 @@ export function ApprovalRequest({
             </span>
           </div>
         </div>
-        <div className="approval-impact">
-          <AlertTriangle size={15} />
-          <div>
-            <b>What happens if you approve</b>
-            <p>
-              The paused workflow continues past this step using the exact
-              details below. Approval applies only to this request.
-            </p>
-          </div>
-        </div>
+        <IssueNotice
+          issue={{
+            code: "approval_impact",
+            severity: "info",
+            message: "What happens if you approve",
+            suggestion: "The paused workflow continues past this step using the exact details below. Approval applies only to this request.",
+            nodeId: item.nodeId,
+          }}
+          context={{ workflowId: item.workflowId, executionId: item.executionId, nodeId: item.nodeId }}
+        />
         <dl className="approval-details">
           <Detail
             label="Recipient"

@@ -20,6 +20,7 @@ export type ProductWorkflowNodeProps = {
   selected?: boolean;
   disabled?: boolean;
   warning?: string;
+  warningTone?: "info" | "warning" | "error";
   trigger?: boolean;
   condition?: boolean;
   inputCount: number;
@@ -42,6 +43,7 @@ export function ProductWorkflowNode({
   selected = false,
   disabled = false,
   warning,
+  warningTone = "warning",
   trigger = false,
   condition = false,
   inputCount,
@@ -104,7 +106,7 @@ export function ProductWorkflowNode({
       <div className="node-top">
         <span className="node-icon"><Icon aria-hidden="true" size={15} /></span>
         <span className={`node-state state-${status}`} />
-        {warning && <AlertTriangle className="node-warning" aria-label={warning} size={14} />}
+        {warning && <AlertTriangle className={`node-warning node-warning-${warningTone}`} aria-label={`${warningTone}: ${warning}`} size={14} />}
       </div>
       <b>{name}</b>
       <small>{summary}</small>

@@ -32,6 +32,7 @@ pub struct ValidationIssue {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ValidationSeverity {
+    Info,
     Error,
     Warning,
 }

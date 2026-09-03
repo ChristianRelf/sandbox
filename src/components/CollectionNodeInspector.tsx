@@ -1,7 +1,7 @@
-import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Workflow, WorkflowNode } from "../types";
 import { CustomSelect } from "./ui/CustomSelect";
+import { IssueNotice } from "./ui/IssueNotice";
 
 type Props={workflow:Workflow;node:WorkflowNode;onChange:(node:WorkflowNode,workflowPatch?:Partial<Workflow>)=>void};
 type Rule={id:string;field:string;operator:string;value?:unknown};
@@ -46,7 +46,7 @@ export function CollectionNodeInspector({workflow,node,onChange}:Props){
     <Field label="Iteration retries"><input type="number" min="0" max="10" value={Number(config.iterationRetryCount??0)} onChange={event=>set("iterationRetryCount",Number(event.target.value))}/></Field>
     <Field label="Per-item timeout (ms)"><input type="number" min="100" max="600000" value={Number(config.perItemTimeoutMs??30000)} onChange={event=>set("perItemTimeoutMs",Number(event.target.value))}/></Field>
     <Field label="Item failure"><CustomSelect value={String(config.failurePolicy??"stop")} onChange={event=>set("failurePolicy",event.target.value)}><option value="stop">Stop on first failure</option><option value="continue_handled">Continue after handled failures</option></CustomSelect></Field>
-    {Number(config.concurrency??1)>1&&<Warning title="Concurrent item processing">Body completion order may differ from input order. Review side effects for ordering, retry safety and duplicate effects.</Warning>}
+    {Number(config.concurrency??1)>1&&<IssueNotice issue={{code:"collection_concurrency",severity:"warning",message:"Concurrent item processing",suggestion:"Body completion order may differ from input order. Review side effects for ordering, retry safety and duplicate effects."}} context={{workflowId:workflow.id,nodeId:node.id}}/>}
     <Info>Iterations have stable IDs and deterministic batch membership. Exactly-once side effects are not promised after uncertain runner loss.</Info>
   </>;
   if(node.type==="aggregate")return <>
@@ -76,7 +76,7 @@ export function CollectionNodeInspector({workflow,node,onChange}:Props){
     {config.mode==="combine_position"&&<Field label="Unequal lengths"><CustomSelect value={String(config.unmatchedPolicy??"keep")} onChange={event=>set("unmatchedPolicy",event.target.value)}><option value="keep">Keep unmatched</option><option value="drop">Drop unmatched</option><option value="fail">Fail</option></CustomSelect></Field>}
     {config.mode==="combine_fields"&&<><div className="field-grid"><Field label="Left key"><input value={String(config.leftKey??"id")} onChange={event=>set("leftKey",event.target.value)}/></Field><Field label="Right key"><input value={String(config.rightKey??"id")} onChange={event=>set("rightKey",event.target.value)}/></Field></div><Field label="Join"><CustomSelect value={String(config.join??"inner")} onChange={event=>set("join",event.target.value)}><option value="inner">Inner</option><option value="left">Left</option><option value="right">Right</option><option value="full">Full outer</option></CustomSelect></Field></>}
     {config.mode==="choose_branch"&&<Field label="Choice"><CustomSelect value={String(config.chooseStrategy??"first_non_empty")} onChange={event=>set("chooseStrategy",event.target.value)}><option value="first_non_empty">First non-empty by priority</option><option value="first_successful">First successful by priority</option></CustomSelect></Field>}
-    {config.mode==="cartesian"&&<><Field label="Hard result limit"><input type="number" min="1" max={workflow.settings.collectionLimits?.maxCartesianItems??25000} value={Number(config.maxResults??25000)} onChange={event=>set("maxResults",Number(event.target.value))}/></Field><Warning title="Multiplying collections">Preview both input counts before running. The engine rejects products beyond this value or runner policy.</Warning></>}
+    {config.mode==="cartesian"&&<><Field label="Hard result limit"><input type="number" min="1" max={workflow.settings.collectionLimits?.maxCartesianItems??25000} value={Number(config.maxResults??25000)} onChange={event=>set("maxResults",Number(event.target.value))}/></Field><IssueNotice issue={{code:"cartesian_amplification",severity:"warning",message:"Multiplying collections",suggestion:"Preview both input counts before running. The engine rejects products beyond this value or runner policy."}} context={{workflowId:workflow.id,nodeId:node.id}}/></>}
     {["combine_position","combine_fields","cartesian"].includes(String(config.mode))&&<Field label="Property conflicts"><CustomSelect value={String(config.conflictStrategy??"nest")} onChange={event=>set("conflictStrategy",event.target.value)}><option value="nest">Nest by input</option><option value="prefix">Prefix fields</option><option value="prefer_left">Prefer left</option><option value="prefer_right">Prefer right</option><option value="fail">Fail</option></CustomSelect></Field>}
     <Field label="Failed input"><CustomSelect value={String(config.failedInputPolicy??"fail")} onChange={event=>set("failedInputPolicy",event.target.value)}><option value="fail">Fail Merge</option><option value="empty">Treat as empty</option></CustomSelect></Field>
     <Field label="Skipped input"><CustomSelect value={String(config.skippedInputPolicy??"empty")} onChange={event=>set("skippedInputPolicy",event.target.value)}><option value="empty">Treat as empty</option><option value="fail">Fail Merge</option></CustomSelect></Field>
@@ -92,6 +92,5 @@ function Field({label,hint,children}:{label:string;hint?:string;children:ReactNo
 function Toggle({label,hint,checked,onChange}:{label:string;hint?:string;checked:boolean;onChange:(value:boolean)=>void}){return <label className="toggle-row"><span><b>{label}</b>{hint&&<small>{hint}</small>}</span><input type="checkbox" checked={checked} onChange={event=>onChange(event.target.checked)}/></label>}
 function Lines({label,hint,value,onChange}:{label:string;hint?:string;value:string[];onChange:(value:string[])=>void}){return <Field label={label} hint={hint}><textarea rows={3} value={value.join("\n")} onChange={event=>onChange(event.target.value.split("\n").map(value=>value.trim()).filter(Boolean))}/></Field>}
 function Info({children}:{children:ReactNode}){return <div className="info-note">{children}</div>}
-function Warning({title,children}:{title:string;children:ReactNode}){return <div className="risk-callout"><AlertTriangle size={16}/><div><b>{title}</b><p>{children}</p></div></div>}
 function scalar(value:unknown){return typeof value==="string"?value:JSON.stringify(value??"")}
 function parseScalar(value:string):unknown{try{return JSON.parse(value)}catch{return value}}
