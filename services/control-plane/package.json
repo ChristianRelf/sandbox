@@ -16,7 +16,7 @@
     "openapi:check": "tsx scripts/generate-openapi.ts --check"
   },
   "dependencies": {
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/rate-limit": "^11.2.0",
     "@sandbox/contracts": "0.7.7-beta.1",
     "fastify": "^5.6.0",
     "jose": "^6.1.0",
