@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "playwright": "1.62.1",
-    "zod": "^4.1.5"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
