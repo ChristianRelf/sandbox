@@ -2302,3 +2302,18 @@ input[type="checkbox"] {
 .raw-json-error,.raw-json-help { margin:0; font-size:10px; line-height:1.4; }
 .raw-json-error { color:var(--error); }
 .raw-json-help { color:var(--text-muted); }
+.inspector { grid-template-rows:64px minmax(0,1fr) 48px; }
+.inspector-title { padding:0 12px 0 14px; background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 7%,var(--surface-sidebar)),var(--surface-sidebar) 58%); }
+.inspector-title > .node-icon { width:31px; height:31px; flex:0 0 auto; border-color:color-mix(in srgb,var(--accent) 32%,var(--border-strong)); background:color-mix(in srgb,var(--accent) 10%,var(--surface)); color:var(--accent-strong); }
+.inspector-node-heading { min-width:0; flex:1; }
+.inspector-title .inspector-node-heading b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.inspector-title .inspector-json-button { flex:0 0 auto; height:30px; padding:0 9px; border-color:color-mix(in srgb,var(--accent) 25%,var(--border)); background:color-mix(in srgb,var(--accent) 5%,var(--surface)); color:var(--text-secondary); font-weight:600; }
+.inspector-title .inspector-json-button:hover { border-color:color-mix(in srgb,var(--accent) 54%,var(--border)); background:var(--accent-muted); color:var(--text); }
+.inspector-scroll { padding:15px 14px 18px; }
+.inspector-section-bar { display:flex; align-items:center; justify-content:space-between; min-height:28px; margin:-2px 0 13px; padding:0 1px 8px; border-bottom:1px solid var(--border); }
+.inspector-section-bar > span { color:var(--text-secondary); font-size:10px; font-weight:650; letter-spacing:.055em; text-transform:uppercase; }
+.inspector-section-bar > small { color:var(--text-muted); font-size:9px; }
+.inspector-footer { padding:0 14px; background:var(--surface-sidebar); }
+.inspector-footer .button.danger-text { width:100%; justify-content:flex-start; border-radius:6px; color:color-mix(in srgb,var(--error) 82%,var(--text-secondary)); }
+.inspector-footer .button.danger-text:hover { background:color-mix(in srgb,var(--error) 7%,transparent); color:var(--error); }
+@media (max-width: 420px) { .inspector-title .inspector-json-button span { display:none; } .inspector-title .inspector-json-button { width:30px; justify-content:center; padding:0; } }

@@ -245,15 +245,19 @@ export function NodeInspector({
         <span className="node-icon">
           <Icon size={15} />
         </span>
-        <div>
+        <div className="inspector-node-heading">
           <b>{node.name}</b>
           <small>{definition.group}</small>
         </div>
-        <button className="inspector-json-button" type="button" onClick={() => setRawJsonEditorOpen(true)} title="Edit this node's configuration as raw JSON">
-          <Braces size={14} /><span>JSON</span>
+        <button className="inspector-json-button" type="button" onClick={() => setRawJsonEditorOpen(true)} aria-label="Edit node configuration as raw JSON">
+          <Braces size={14} /><span>Raw JSON</span>
         </button>
       </div>
       <div className="inspector-scroll">
+        <div className="inspector-section-bar">
+          <span>Configuration</span>
+          <small>{node.disabled ? "Disabled" : "Edits save automatically"}</small>
+        </div>
         {issues.length > 0 && (
           <section
             className="inspector-issues"
