@@ -15,7 +15,7 @@ Verify the archive against the release's `SHA256SUMS` and Sigstore bundle before
 
 ```sh
 sudo ./install.sh
-sudoedit /etc/sandbox-runner/config.toml
+sudo sandbox-runner
 ```
 
 The installer:
@@ -26,21 +26,19 @@ The installer:
 - installs `/etc/sandbox-runner/config.toml` without overwriting an existing config;
 - installs the hardened `sandbox-runner.service` systemd unit without starting it.
 
-Complete every placeholder in the config. The `workspace_id` and `environment_id` must be UUIDs, the control-plane URL must use HTTPS except for localhost development, and every workflow directory or network destination must be explicitly allowed.
+The guided setup replaces the packaged placeholder after validating every answer and preserves the original as `config.toml.bak`. The `workspace_id` and `environment_id` must be UUIDs, the control-plane URL must use HTTPS except for localhost development, and every workflow directory or network destination must be explicitly allowed.
 
 Validate the config:
 
 ```sh
-sudo -u sandbox-runner /usr/local/bin/sandbox-runner \
-  --config /etc/sandbox-runner/config.toml validate
+sudo sandbox-runner setup
+sudo -u sandbox-runner /usr/local/bin/sandbox-runner validate
 ```
 
 Create a runner in the sndbox Operations area and copy its short-lived pairing token. Pair as the service user so the private device identity receives the correct owner and permissions:
 
 ```sh
-sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN='short-lived-token' \
-  /usr/local/bin/sandbox-runner \
-  --config /etc/sandbox-runner/config.toml pair
+sudo -u sandbox-runner /usr/local/bin/sandbox-runner pair
 ```
 
 Confirm the printed fingerprint in the Operations area, then start the service:
@@ -59,7 +57,7 @@ Synology, QNAP, TrueNAS SCALE, and Unraid users should normally use the publishe
 
 Pair once with the `pair` command and `SANDBOX_PAIRING_TOKEN` supplied only to that container. Then run a long-lived container with the same mounts, the `run` command, a read-only root filesystem, all capabilities dropped, and no-new-privileges enabled. Do not store the pairing token in the config, image, or Compose file.
 
-Complete Linux and NAS instructions are available at <https://docs.sndbox.app/execution/self-hosted-runner>.
+Complete Linux and NAS instructions are available at <https://docs.sndbox.app/linux>.
 
 ## Troubleshooting
 
@@ -67,4 +65,3 @@ Complete Linux and NAS instructions are available at <https://docs.sndbox.app/ex
 - service says the runner is not paired: pair as `sandbox-runner`, not `root`; the identity is stored at `/var/lib/sandbox-runner/identity.json`.
 - configuration is invalid: replace all example IDs, URLs, signing keys, and allowlists, then run the validation command above.
 - runner stays offline: check `journalctl -u sandbox-runner`, HTTPS reachability, system time, fingerprint confirmation, and whether the runner is paused or draining.
-

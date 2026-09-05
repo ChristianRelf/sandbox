@@ -1,0 +1,255 @@
+---
+title: "Linux"
+description: "Install, configure, pair, run, automate, and troubleshoot the sndbox Linux CLI."
+icon: "terminal"
+---
+
+The sndbox Linux CLI runs published workflows on an x86-64 or ARM64 server, home lab, or NAS. Run `sandbox-runner` with no arguments in a terminal to open its guided home. The same binary has explicit subcommands for systemd, scripts, containers, and configuration management.
+
+<Note>
+  This is a headless workflow runner, not the sndbox desktop editor. Build and publish workflows in the desktop app, then route them to this machine from **Account → Operations**.
+</Note>
+
+## Quick setup
+
+<Steps>
+  <Step title="Install the signed archive">
+    Download the archive for `uname -m`, verify the published checksum and provenance, then run its installer:
+
+    ```sh
+    tar -xzf sandbox-runner-VERSION-linux-ARCHITECTURE.tar.gz
+    sudo ./install.sh
+    ```
+
+    Use `linux-x86_64` for `x86_64`, or `linux-aarch64` for `aarch64` and `arm64`. The installer adds `/usr/local/bin/sandbox-runner`, an unprivileged `sandbox-runner` account, `/var/lib/sandbox-runner`, and a hardened systemd unit. It preserves an existing config and does not start an unpaired service.
+  </Step>
+
+  <Step title="Open the Linux home">
+    ```sh
+    sudo sandbox-runner
+    ```
+
+    The home greets you with sndbox's animated ASCII hermit crab and shows configuration, pairing, and service state together with these shortcuts. Set `SANDBOX_REDUCE_MOTION=1` to keep the mascot on a static frame.
+
+    | Shortcut | Action |
+    | --- | --- |
+    | `/setup` | Create and validate the configuration with guided prompts. |
+    | `/doctor` | Check the platform, config, trust keys, pairing, paths, and service. |
+    | `/status` | Show the current runner state. |
+    | `/pair` | Show the safe service-account pairing command. |
+    | `/start` | Show the systemd start command. |
+    | `/logs` | Show the journal command. |
+    | `/help`, `/quit` | Show shortcuts or leave the terminal home. |
+  </Step>
+
+  <Step title="Configure the runner">
+    From the home, enter `/setup`, or run the setup command directly:
+
+    ```sh
+    sudo sandbox-runner setup
+    ```
+
+    Have the workspace ID, environment ID, and command-signing key shown in the runner setup area ready. Setup validates every answer and the Ed25519 trust key before it writes anything. It replaces the untouched placeholder installed with the archive and keeps it as `config.toml.bak`; any other existing file requires `setup --force`. Forced setup is allowed only while unpaired and also creates a backup first.
+  </Step>
+
+  <Step title="Pair without exposing the token">
+    In **Account → Operations**, create a short-lived Linux runner token. Pair as the service account and paste the token into the hidden prompt:
+
+    ```sh
+    sudo -u sandbox-runner /usr/local/bin/sandbox-runner pair
+    ```
+
+    For non-interactive provisioning, pass it only for that process:
+
+    ```sh
+    sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN="$PAIRING_TOKEN" \
+      /usr/local/bin/sandbox-runner pair
+    ```
+
+    Avoid a literal token in shell history, config files, images, and systemd units. The CLI refuses to pair as root so the private identity cannot accidentally become root-owned. Compare the printed device fingerprint before trusting the host.
+  </Step>
+
+  <Step title="Start and verify">
+    ```sh
+    sudo systemctl enable --now sandbox-runner
+    sandbox-runner status
+    journalctl -u sandbox-runner -f
+    ```
+
+    `status` is read-only. The service sends health every 30 seconds and polls for eligible work every two seconds while it has capacity.
+  </Step>
+</Steps>
+
+## Commands
+
+All commands accept `--config PATH`; the default is `/etc/sandbox-runner/config.toml`.
+
+| Command | Purpose | Safe to automate |
+| --- | --- | --- |
+| `sandbox-runner` | Open the guided terminal home when attached to a TTY; print help otherwise. | No |
+| `sandbox-runner setup [--force]` | Guided, validated config creation. | No |
+| `sandbox-runner validate` | Validate config, TLS options, and command-signing keys without starting. | Yes |
+| `sandbox-runner doctor [--json]` | Run local installation and safety checks. | Yes |
+| `sandbox-runner status [--json]` | Read config, pairing, and systemd state. | Yes |
+| `sandbox-runner pair [--token TOKEN]` | Create and register a local device identity. Prefer the hidden prompt or environment variable. | Yes, with `SANDBOX_PAIRING_TOKEN` |
+| `sandbox-runner run` | Run in the foreground. systemd normally owns this process. | Yes |
+| `sandbox-runner authorize-connection …` | Store a JSON credential object read from standard input in the OS vault. | Yes |
+| `sandbox-runner authorize-github …` | Complete GitHub's device flow for selected repositories. | Partly interactive |
+| `sandbox-runner remove-connection --id UUID` | Remove a local connection and credential. | Yes |
+
+Use `sandbox-runner COMMAND --help` for argument details. Unknown arguments and malformed invocations return exit code `2` with `SBX-LNX-1004`.
+
+## Status and health checks
+
+Use the human output while operating a host:
+
+```sh
+sandbox-runner status
+sandbox-runner doctor
+```
+
+Use JSON in scripts and monitoring:
+
+```sh
+sandbox-runner status --json
+sandbox-runner doctor --json
+```
+
+`status --json` reports the CLI version, OS, architecture, config path and validity, runner name, environment, pairing/runner ID, and systemd state. `doctor --json` returns a list of checks with `name`, `state`, `detail`, and optional stable `code`. A doctor warning does not fail the command; any failed check returns exit code `2`.
+
+<Tip>
+  Run health commands as a user that can read `/etc/sandbox-runner/config.toml` and `/var/lib/sandbox-runner/identity.json`. The installer gives the service account the required access.
+</Tip>
+
+## Configuration
+
+Setup writes TOML with these security boundaries:
+
+| Field | Requirement |
+| --- | --- |
+| `config_version` | Must be `1`; unknown fields are rejected. |
+| `control_plane_url` | HTTPS, except `http://localhost` for development; no credentials, query, or fragment. |
+| `runner_name` | A non-empty display name. |
+| `workspace_id`, `environment_id` | Valid UUIDs copied from the selected workspace and environment. |
+| `environment` | `development`, `staging`, or `production`. |
+| `concurrency` | From `1` through `128`. |
+| `data_directory`, `plugin_cache` | Absolute paths writable by the service account. |
+| `allowed_working_directories` | Absolute, explicit workflow filesystem roots. |
+| `approved_network_targets` | Exact host, port, and `http`, `https`, or `tcp` protocol entries. |
+| `command_signing_keys` | At least one valid control-plane Ed25519 public key. Keep current and next keys during rotation. |
+| `drain_timeout_seconds` | From `5` through `3600`. |
+| `certificate` | Client certificate and private-key paths must be set together. |
+
+Setup accepts the following values from the environment as prompt defaults: `SANDBOX_WORKSPACE_ID`, `SANDBOX_ENVIRONMENT_ID`, `SANDBOX_COMMAND_SIGNING_KEY_ID`, and `SANDBOX_COMMAND_SIGNING_PUBLIC_KEY`. These are not secrets, but review them before accepting. `SANDBOX_PAIRING_TOKEN` is a secret and is used only by `pair`.
+
+To maintain the file yourself, start with the `config.example.toml` in the release archive and validate after every change:
+
+```sh
+sudoedit /etc/sandbox-runner/config.toml
+sudo -u sandbox-runner /usr/local/bin/sandbox-runner validate
+```
+
+## Guards and safe behavior
+
+- `setup` replaces only the recognisable packaged placeholder; any other existing configuration requires `--force`.
+- Forced setup backs up the old file and refuses to reconfigure an already-paired identity.
+- Config is fully parsed, policy-checked, and trust-key-checked before it is installed.
+- Config replacement uses a temporary file and atomic rename; Linux permissions are `0640`.
+- `pair` and `run` refuse root to prevent unsafe private-key and state ownership.
+- The token prompt disables terminal echo; if echo cannot be disabled, no token is read.
+- Pairing refuses to replace an existing identity.
+- Configuration rejects unknown fields and partial client-certificate settings.
+- Runner commands are checked for signature, target, expiry, revision hash, permission, lease, and replay before execution.
+- Shutdown enters draining state, stops claiming work, and bounds completion by `drain_timeout_seconds`.
+
+## Error codes
+
+Every CLI failure begins with `error[CODE]`. Warnings from the long-running service begin with `warn[CODE]`. Codes are stable for scripts and support; wording may become more specific.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `SBX-LNX-1001` | Config not found. | Run `sudo sandbox-runner setup`. |
+| `SBX-LNX-1002` | Config cannot be read. | Repair owner/group/mode or use the service account. |
+| `SBX-LNX-1003` | Config parse or policy failure. | Run `doctor` and fix the named field. |
+| `SBX-LNX-1004` | Invalid CLI input or argument. | Check `--help` and the command reference above. |
+| `SBX-LNX-1005` | Runner is not paired. | Create a token and run `pair`. |
+| `SBX-LNX-1006` | Stored identity is invalid or unreadable. | Restore permissions; revoke and re-pair if damaged. |
+| `SBX-LNX-1007` | Setup would overwrite a config. | Validate the existing file or use guarded `--force`. |
+| `SBX-LNX-1008` | Existing paired identity blocks replacement. | Revoke deliberately before reconfiguration. |
+| `SBX-LNX-1009` | Root guard blocked pairing or foreground run. | Use `sudo -u sandbox-runner …`. |
+| `SBX-LNX-1010` | Secure token prompt unavailable. | Use `SANDBOX_PAIRING_TOKEN` for the one process. |
+| `SBX-LNX-1011` | Interactive command has no TTY. | Use an explicit non-interactive subcommand. |
+| `SBX-LNX-1100` | One or more doctor checks failed. | Resolve the named checks and rerun doctor. |
+| `SBX-LNX-1101` | Unsupported OS or architecture. | Use Linux x86-64 or ARM64. |
+| `SBX-LNX-1102` | Command-signing trust key is invalid. | Copy the complete Ed25519 key and matching key ID. |
+| `SBX-LNX-2001` | Pairing was rejected or expired. | Create a fresh workspace-scoped token. |
+| `SBX-LNX-2002` | Network, TLS, certificate, or proxy failure. | Check DNS/HTTPS and configured trust settings. |
+| `SBX-LNX-2101`–`2104` | Runtime heartbeat, draining, polling, or task warning. | Inspect surrounding logs and connectivity. |
+| `SBX-LNX-3001`–`3004` | Filesystem write, missing path, wrong type, or read-only path. | Repair the exact path and service-account access. |
+| `SBX-LNX-9001` | Unexpected runtime failure. | Run doctor, retain the code and logs, then contact support. |
+
+### Process exit codes
+
+| Exit | Category |
+| --- | --- |
+| `0` | Success; doctor may still contain warnings. |
+| `2` | Invalid input, config, unsupported platform, or failed doctor check. |
+| `3` | Safety guard or filesystem/permission failure. |
+| `4` | Pairing/authentication failure. |
+| `5` | Network, TLS, certificate, or proxy failure. |
+| `10` | Runner/runtime failure. |
+
+## systemd operation
+
+```sh
+sudo systemctl enable --now sandbox-runner
+sudo systemctl restart sandbox-runner
+sudo systemctl stop sandbox-runner
+systemctl status sandbox-runner --no-pager
+journalctl -u sandbox-runner -f
+```
+
+The packaged unit runs as `sandbox-runner`, drops capabilities, isolates temporary storage, constrains writable paths, and starts the explicit foreground command:
+
+```sh
+/usr/local/bin/sandbox-runner --config /etc/sandbox-runner/config.toml run
+```
+
+On a host without systemd, use the same command under its service manager. Keep `/var/lib/sandbox-runner` persistent and writable by only the runner account.
+
+## Containers and NAS
+
+On Synology, QNAP, TrueNAS SCALE, Unraid, or another container-oriented host, use `ghcr.io/sndboxhq/sandbox-server-runner:VERSION`. Run as the built-in UID/GID `65532`, mount config read-only, persist data, and mount only approved workflow directories.
+
+```sh
+mkdir -p ./sndbox-runner/data ./sndbox-runner/automation
+cp config.example.toml ./sndbox-runner/config.toml
+sudo chown -R 65532:65532 ./sndbox-runner/data ./sndbox-runner/automation
+
+docker run --rm -it \
+  -v "$PWD/sndbox-runner/config.toml:/etc/sandbox/runner.toml:ro" \
+  -v "$PWD/sndbox-runner/data:/var/lib/sandbox-runner" \
+  ghcr.io/sndboxhq/sandbox-server-runner:VERSION \
+  --config /etc/sandbox/runner.toml pair
+```
+
+After fingerprint confirmation, run the persistent container with the same mounts, `--restart unless-stopped`, `--read-only`, `--cap-drop ALL`, and `--security-opt no-new-privileges`, changing the final command to `run`. Pass the token at the hidden interactive prompt or with a short-lived environment injection; never put it in Compose.
+
+## Updating or removing a runner
+
+Run a newer archive's `sudo ./install.sh`. The installer atomically replaces the binary and unit while preserving the config, identity, data, and plugin cache. Validate before restarting.
+
+To retire a host, first select **Revoke** in **Account → Operations**. Stop and disable the service, then archive or remove its local state according to your retention policy. Revocation invalidates the device credential; merely stopping the host does not.
+
+## Troubleshooting
+
+Start with:
+
+```sh
+sandbox-runner doctor
+sandbox-runner status
+systemctl status sandbox-runner --no-pager
+journalctl -u sandbox-runner -n 200 --no-pager
+```
+
+Keep the stable `SBX-LNX-*` code, exact command, runner version, and redacted logs. Never include pairing tokens, private identity material, connection secrets, or complete environment dumps in a support request. For deeper runner failures, see [Runner troubleshooting](/troubleshooting/runner).

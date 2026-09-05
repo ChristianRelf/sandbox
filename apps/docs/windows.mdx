@@ -1,0 +1,286 @@
+---
+title: "Windows"
+description: "Install, configure, pair, run, automate, and troubleshoot the sndbox Windows runner service."
+icon: "terminal"
+---
+
+The sndbox Windows CLI runs published workflows as a hardened Windows service on x86-64 or ARM64 hosts. Run `sandbox-runner` in a terminal with no arguments to open its guided home; the same binary exposes explicit subcommands for the Service Control Manager, scripts, containers, and configuration management.
+
+<Note>
+  This is a headless workflow runner, not the sndbox desktop editor. Build and publish workflows in the desktop app, then route them to this machine from **Account → Operations**.
+</Note>
+
+## Quick setup
+
+<Steps>
+  <Step title="Install the signed MSI">
+    Download `sandbox-runner-VERSION-windows-ARCHITECTURE.msi`, verify the published SHA-256 and Authenticode signature, and install it:
+
+    ```powershell
+    msiexec /i sandbox-runner-VERSION-windows-x64.msi /qb
+    ```
+
+    Use `windows-x64` for `x86_64`, or `windows-arm64` for `aarch64`/`ARM64`. The MSI adds `C:\Program Files\sndbox\sandbox-runner.exe`, provisions the virtual service account `NT SERVICE\sandbox-runner`, creates `C:\ProgramData\sndbox-runner` with an ACL granting read/write to that account and Administrators only, and registers the `sandbox-runner` service in `Manual` start mode. It preserves an existing config and does not start an unpaired service.
+  </Step>
+
+  <Step title="Open the Windows home">
+    ```powershell
+    sandbox-runner
+    ```
+
+    The home greets you with sndbox's animated ASCII hermit crab and shows configuration, pairing, and service state together with these shortcuts. Set `SANDBOX_REDUCE_MOTION=1` to keep the mascot on a static frame.
+
+    | Shortcut | Action |
+    | --- | --- |
+    | `/setup` | Create and validate the configuration with guided prompts. |
+    | `/doctor` | Check the platform, config, trust keys, pairing, paths, and service. |
+    | `/status` | Show the current runner state. |
+    | `/pair` | Show the safe service-account pairing command. |
+    | `/start` | Show the `sc.exe start` command. |
+    | `/logs` | Show the Event Log query. |
+    | `/help`, `/quit` | Show shortcuts or leave the terminal home. |
+
+    The home uses ANSI escapes; Windows Terminal and VS Code's integrated terminal render them out of the box. On legacy `conhost` the CLI flips `ENABLE_VIRTUAL_TERMINAL_PROCESSING` at startup so the colors and box characters still render correctly.
+  </Step>
+
+  <Step title="Configure the runner">
+    From the home, enter `/setup`, or run the setup command directly from an **elevated** PowerShell:
+
+    ```powershell
+    sandbox-runner setup
+    ```
+
+    Have the workspace ID, environment ID, and command-signing key shown in the runner setup area ready. Setup validates every answer and the Ed25519 trust key before it writes anything. It replaces the untouched placeholder installed by the MSI and preserves the original as `config.toml.bak`; any other existing file requires `setup --force`. Forced setup is allowed only while unpaired and also creates a backup first.
+  </Step>
+
+  <Step title="Pair without exposing the token">
+    In **Account → Operations**, create a short-lived Windows runner token. Pair from a **standard** (non-elevated) PowerShell running as the operator account and paste the token into the hidden prompt:
+
+    ```powershell
+    sandbox-runner pair
+    ```
+
+    For non-interactive provisioning, pass it only for that process:
+
+    ```powershell
+    $env:SANDBOX_PAIRING_TOKEN = '<token>'; sandbox-runner pair
+    ```
+
+    Avoid a literal token in shell history, config files, images, and scheduled tasks. The CLI refuses to pair from an elevated shell so the private identity cannot accidentally end up owned by `Administrators`. Compare the printed device fingerprint before trusting the host.
+  </Step>
+
+  <Step title="Start and verify">
+    From an elevated PowerShell:
+
+    ```powershell
+    sc.exe config sandbox-runner start= auto
+    sc.exe start   sandbox-runner
+    sandbox-runner status
+    Get-WinEvent -LogName 'sandbox-runner' -MaxEvents 200
+    ```
+
+    `status` is read-only. The service sends health every 30 seconds and polls for eligible work every two seconds while it has capacity.
+  </Step>
+</Steps>
+
+## Commands
+
+All commands accept `--config PATH`; the default is `C:\ProgramData\sndbox-runner\config.toml`.
+
+| Command | Purpose | Safe to automate |
+| --- | --- | --- |
+| `sandbox-runner` | Open the guided terminal home when attached to a TTY; print help otherwise. | No |
+| `sandbox-runner setup [--force]` | Guided, validated config creation. | No |
+| `sandbox-runner validate` | Validate config, TLS options, and command-signing keys without starting. | Yes |
+| `sandbox-runner doctor [--json]` | Run local installation and safety checks. | Yes |
+| `sandbox-runner status [--json]` | Read config, pairing, and service state. | Yes |
+| `sandbox-runner pair [--token TOKEN]` | Create and register a local device identity. Prefer the hidden prompt or environment variable. | Yes, with `SANDBOX_PAIRING_TOKEN` |
+| `sandbox-runner run` | Run in the foreground. The Windows service normally owns this process. | Yes |
+| `sandbox-runner authorize-connection …` | Store a JSON credential object read from standard input in the Windows Credential Manager. | Yes |
+| `sandbox-runner authorize-github …` | Complete GitHub's device flow for selected repositories. | Partly interactive |
+| `sandbox-runner remove-connection --id UUID` | Remove a local connection and credential. | Yes |
+
+Use `sandbox-runner COMMAND --help` for argument details. Unknown arguments and malformed invocations return exit code `2` with `SBX-WIN-1004`.
+
+## Status and health checks
+
+Use the human output while operating a host:
+
+```powershell
+sandbox-runner status
+sandbox-runner doctor
+```
+
+Use JSON in scripts and monitoring:
+
+```powershell
+sandbox-runner status --json
+sandbox-runner doctor --json
+```
+
+`status --json` reports the CLI version, OS, architecture, config path and validity, runner name, environment, pairing/runner ID, and Windows service state (`running`, `stopped`, `starting`, `stopping`, `installed`, `not installed`, `unavailable`). `doctor --json` returns a list of checks with `name`, `state`, `detail`, and optional stable `code`. A doctor warning does not fail the command; any failed check returns exit code `2`.
+
+<Tip>
+  Run health commands from an account that can read `C:\ProgramData\sndbox-runner\config.toml` and `C:\ProgramData\sndbox-runner\identity.json` — the MSI grants the service account and Administrators access; other accounts are denied by ACL.
+</Tip>
+
+## Configuration
+
+Setup writes TOML with these security boundaries:
+
+| Field | Requirement |
+| --- | --- |
+| `config_version` | Must be `1`; unknown fields are rejected. |
+| `control_plane_url` | HTTPS, except `http://localhost` for development; no credentials, query, or fragment. |
+| `runner_name` | A non-empty display name. |
+| `workspace_id`, `environment_id` | Valid UUIDs copied from the selected workspace and environment. |
+| `environment` | `development`, `staging`, or `production`. |
+| `concurrency` | From `1` through `128`. |
+| `data_directory`, `plugin_cache` | Absolute paths writable by the service account (default `C:\ProgramData\sndbox-runner`). |
+| `allowed_working_directories` | Absolute, explicit workflow filesystem roots (default `C:\Users\Public\sndbox\automation`). |
+| `approved_network_targets` | Exact host, port, and `http`, `https`, or `tcp` protocol entries. |
+| `command_signing_keys` | At least one valid control-plane Ed25519 public key. Keep current and next keys during rotation. |
+| `drain_timeout_seconds` | From `5` through `3600`. |
+| `certificate` | Client certificate and private-key paths must be set together. |
+
+Setup accepts the following values from the environment as prompt defaults: `SANDBOX_WORKSPACE_ID`, `SANDBOX_ENVIRONMENT_ID`, `SANDBOX_COMMAND_SIGNING_KEY_ID`, and `SANDBOX_COMMAND_SIGNING_PUBLIC_KEY`. These are not secrets, but review them before accepting. `SANDBOX_PAIRING_TOKEN` is a secret and is used only by `pair`.
+
+To maintain the file yourself, start with the `config.example.toml` in the release archive and validate after every change:
+
+```powershell
+notepad C:\ProgramData\sndbox-runner\config.toml
+sandbox-runner validate
+```
+
+## Guards and safe behavior
+
+- `setup` replaces only the recognisable packaged placeholder; any other existing configuration requires `--force`.
+- Forced setup backs up the old file and refuses to reconfigure an already-paired identity.
+- Config is fully parsed, policy-checked, and trust-key-checked before it is installed.
+- Config replacement uses a temporary file and atomic replace; the MSI applies an ACL granting only `NT SERVICE\sandbox-runner` and `BUILTIN\Administrators`.
+- `pair` and `run` refuse elevated shells so the private key and state do not end up owned by `Administrators`.
+- The token prompt disables terminal echo; if echo cannot be disabled, no token is read.
+- Pairing refuses to replace an existing identity.
+- Configuration rejects unknown fields and partial client-certificate settings.
+- Runner commands are checked for signature, target, expiry, revision hash, permission, lease, and replay before execution.
+- Shutdown enters a draining state, stops claiming work, and bounds completion by `drain_timeout_seconds`.
+
+## Error codes
+
+Every CLI failure begins with `error[CODE]`. Warnings from the long-running service begin with `warn[CODE]`. Codes are stable for scripts and support; wording may become more specific. Windows codes use the `SBX-WIN-` prefix; Linux uses `SBX-LNX-`.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `SBX-WIN-1001` | Config not found. | Run `sandbox-runner setup` from an elevated PowerShell. |
+| `SBX-WIN-1002` | Config cannot be read. | Repair the ACL or run as the service account/Administrator. |
+| `SBX-WIN-1003` | Config parse or policy failure. | Run `doctor` and fix the named field. |
+| `SBX-WIN-1004` | Invalid CLI input or argument. | Check `--help` and the command reference above. |
+| `SBX-WIN-1005` | Runner is not paired. | Create a token and run `pair`. |
+| `SBX-WIN-1006` | Stored identity is invalid or unreadable. | Restore permissions; revoke and re-pair if damaged. |
+| `SBX-WIN-1007` | Setup would overwrite a config. | Validate the existing file or use guarded `--force`. |
+| `SBX-WIN-1008` | Existing paired identity blocks replacement. | Revoke deliberately before reconfiguration. |
+| `SBX-WIN-1009` | Elevation guard blocked pairing or foreground run. | Rerun from a standard PowerShell as the operator account. |
+| `SBX-WIN-1010` | Secure token prompt unavailable. | Use `SANDBOX_PAIRING_TOKEN` for the one process. |
+| `SBX-WIN-1011` | Interactive command has no TTY. | Use an explicit non-interactive subcommand. |
+| `SBX-WIN-1100` | One or more doctor checks failed. | Resolve the named checks and rerun doctor. |
+| `SBX-WIN-1101` | Unsupported OS or architecture. | Use Windows x64 or ARM64. |
+| `SBX-WIN-1102` | Command-signing trust key is invalid. | Copy the complete Ed25519 key and matching key ID. |
+| `SBX-WIN-2001` | Pairing was rejected or expired. | Create a fresh workspace-scoped token. |
+| `SBX-WIN-2002` | Network, TLS, certificate, or proxy failure. | Check DNS/HTTPS and configured trust settings. |
+| `SBX-WIN-2101`–`2104` | Runtime heartbeat, draining, polling, or task warning. | Inspect the Windows Event Log and connectivity. |
+| `SBX-WIN-3001`–`3004` | Filesystem write, missing path, wrong type, or read-only path. | Repair the exact path and service-account access. |
+| `SBX-WIN-9001` | Unexpected runtime failure. | Run doctor, retain the code and logs, then contact support. |
+
+### Process exit codes
+
+| Exit | Category |
+| --- | --- |
+| `0` | Success; doctor may still contain warnings. |
+| `2` | Invalid input, config, unsupported platform, or failed doctor check. |
+| `3` | Safety guard or filesystem/permission failure. |
+| `4` | Pairing/authentication failure. |
+| `5` | Network, TLS, certificate, or proxy failure. |
+| `10` | Runner/runtime failure. |
+
+## Windows service operation
+
+```powershell
+sc.exe start   sandbox-runner
+sc.exe stop    sandbox-runner
+sc.exe query   sandbox-runner
+sc.exe config  sandbox-runner start= auto
+Get-WinEvent -LogName 'sandbox-runner' -MaxEvents 200
+```
+
+The packaged service runs as `NT SERVICE\sandbox-runner` (a virtual account with no interactive login), starts the explicit foreground command, and writes to the `sandbox-runner` Event Log channel:
+
+```powershell
+"C:\Program Files\sndbox\sandbox-runner.exe" --config "C:\ProgramData\sndbox-runner\config.toml" run
+```
+
+The MSI applies these hardening defaults:
+
+- ACL on `C:\ProgramData\sndbox-runner`: `NT SERVICE\sandbox-runner` (read/write), `BUILTIN\Administrators` (read/write). Everyone else denied.
+- Service failure actions: restart after `60s`, twice.
+- No interactive desktop, no network share access from the service session.
+- Firewall: no inbound rule is added — the runner is outbound-only to the control plane.
+
+On a host without the MSI, install the service by hand from an elevated PowerShell:
+
+```powershell
+sc.exe create sandbox-runner `
+  binPath= "\"C:\Program Files\sndbox\sandbox-runner.exe\" --config \"C:\ProgramData\sndbox-runner\config.toml\" run" `
+  DisplayName= "sndbox runner" `
+  start= auto `
+  obj= "NT SERVICE\sandbox-runner"
+```
+
+## Containers
+
+On Windows Server hosts running the Docker EE / containerd runtime, use `ghcr.io/sndboxhq/sandbox-server-runner:VERSION-windowsservercore-ltsc2022`. Run the container as `ContainerUser`, mount the config read-only, persist data, and mount only approved workflow directories.
+
+```powershell
+New-Item -ItemType Directory -Force C:\sndbox-runner\data,C:\sndbox-runner\automation | Out-Null
+Copy-Item .\config.example.toml C:\sndbox-runner\config.toml
+
+docker run --rm -it `
+  -v "C:\sndbox-runner\config.toml:C:\etc\sandbox\runner.toml:ro" `
+  -v "C:\sndbox-runner\data:C:\var\lib\sandbox-runner" `
+  ghcr.io/sndboxhq/sandbox-server-runner:VERSION-windowsservercore-ltsc2022 `
+  --config C:\etc\sandbox\runner.toml pair
+```
+
+After fingerprint confirmation, run the persistent container with the same mounts, `--restart unless-stopped`, `--read-only`, and `--security-opt no-new-privileges`, changing the final command to `run`. Pass the token at the hidden interactive prompt or with a short-lived environment injection; never put it in Compose.
+
+## Updating or removing a runner
+
+Run a newer MSI over the top; Windows Installer atomically replaces the binary and refreshes the service definition while preserving the config, identity, data, and plugin cache. Validate before restarting:
+
+```powershell
+sandbox-runner validate
+sc.exe stop  sandbox-runner
+sc.exe start sandbox-runner
+```
+
+To retire a host, first select **Revoke** in **Account → Operations**. Stop and disable the service, then archive or remove its local state according to your retention policy:
+
+```powershell
+sc.exe stop     sandbox-runner
+sc.exe delete   sandbox-runner
+Remove-Item -Recurse C:\ProgramData\sndbox-runner
+```
+
+Revocation invalidates the device credential; merely stopping the host does not.
+
+## Troubleshooting
+
+Start with:
+
+```powershell
+sandbox-runner doctor
+sandbox-runner status
+sc.exe query sandbox-runner
+Get-WinEvent -LogName 'sandbox-runner' -MaxEvents 200
+```
+
+Keep the stable `SBX-WIN-*` code, exact command, runner version, and redacted logs. Never include pairing tokens, private identity material, connection secrets, or complete environment dumps in a support request. For deeper runner failures, see [Runner troubleshooting](/troubleshooting/runner). For the Linux equivalent of every command and code on this page, see the [Linux guide](/linux).

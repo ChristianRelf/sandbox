@@ -102,5 +102,5 @@ if [ -z "$install_root" ]; then
 fi
 
 printf '\nInstalled sandbox-runner at %s.\n' "$binary_path"
-printf 'Next: edit %s, validate it, pair the runner, then start the service.\n' "$config_path"
-
+printf 'Next: run "sudo sandbox-runner" for guided setup, pairing, and health checks.\n'
+printf 'Linux guide: https://docs.sndbox.app/linux\n'

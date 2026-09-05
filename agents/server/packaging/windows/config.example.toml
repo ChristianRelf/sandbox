@@ -1,0 +1,25 @@
+config_version = 1
+control_plane_url = "https://control.example.com"
+runner_name = "production-runner"
+workspace_id = "replace-with-workspace-id"
+environment_id = "replace-with-environment-id"
+environment = "production"
+tags = ["windows", "always-on"]
+concurrency = 2
+data_directory = 'C:\ProgramData\sndbox-runner'
+plugin_cache = 'C:\ProgramData\sndbox-runner\plugins'
+allowed_working_directories = ['C:\Users\Public\sndbox\automation']
+approved_network_targets = []
+log_level = "info"
+update_channel = "preview"
+update_mode = "notify_only"
+pinned_version_range = ">=0.7.3-beta.1,<0.8"
+drain_timeout_seconds = 60
+enable_managed_chromium = false
+allow_simple_commands = false
+
+# Replace this example trust root with the control plane's Ed25519 command-signing public key.
+[command_signing_keys]
+release-2026 = "MCowBQYDK2VwAyEAmvioumjf5SNvG9DZASLr1oYC3fz5MV9NVC11o7DFrZQ="
+
+[certificate]

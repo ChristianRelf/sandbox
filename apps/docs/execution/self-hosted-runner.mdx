@@ -6,6 +6,10 @@ icon: "server"
 
 The self-hosted server runner is available as a signed standalone Linux binary, an unprivileged container, or a hardened systemd service. It uses runner protocol v2 and reports its engine, plugin runtime, architecture, tags, environment, and concurrency before work can be routed to it. This is the headless runner for servers and NAS devices; it is not a Linux desktop UI.
 
+<Tip>
+  For the guided terminal home, secure token prompt, `setup`, `doctor`, `status --json`, stable error codes, and the complete command reference, use the [Linux guide](/linux).
+</Tip>
+
 ## Install on a Linux server
 
 Download the archive matching `uname -m`: `linux-x86_64` for `x86_64`, or `linux-aarch64` for `aarch64`/`arm64`. After verifying the published checksum and provenance, extract and install it:

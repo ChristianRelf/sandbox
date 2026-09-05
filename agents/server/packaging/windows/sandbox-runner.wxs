@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v4 installer for the sndbox Windows runner service.
+
+  Build (from an environment with `wix` >= 4.0 on PATH):
+
+    wix build sandbox-runner.wxs `
+      -arch x64 `
+      -define Version=$env:SBX_VERSION `
+      -define BinaryPath=..\..\target\x86_64-pc-windows-msvc\release\sandbox-runner.exe `
+      -define ConfigTemplatePath=config.example.toml `
+      -out sandbox-runner-$env:SBX_VERSION-windows-x64.msi
+
+  Then sign with an Authenticode certificate + timestamp:
+
+    signtool sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 `
+      sandbox-runner-*.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package
+      Name="sndbox runner"
+      Manufacturer="sndbox"
+      Version="$(var.Version)"
+      UpgradeCode="7d3c4b2a-8f4e-4a11-b5e8-2f5b8c9d0e11"
+      Scope="perMachine"
+      InstallerVersion="500">
+
+    <!-- Upgrade in place: newer versions atomically replace older ones,
+         preserving ProgramData config, identity, data, and plugin cache. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of the sndbox runner is already installed."
+                  Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Feature: single feature, everything required. -->
+    <Feature Id="Main" Title="sndbox runner" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="ProgramFilesComponents" />
+      <ComponentGroupRef Id="ProgramDataComponents" />
+      <ComponentGroupRef Id="ServiceComponents" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="sndbox">
+        <Directory Id="BINDIR" Name="." />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATAROOT" Name="sndbox-runner">
+        <Directory Id="PLUGINDIR" Name="plugins" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Binary + PATH entry -->
+    <ComponentGroup Id="ProgramFilesComponents" Directory="BINDIR">
+      <Component Id="SandboxRunnerBinary" Guid="9a1c8e02-6d0f-4d7d-9a3f-1c5b9a8d7e42">
+        <File Id="SandboxRunnerExe"
+              Source="$(var.BinaryPath)"
+              KeyPath="yes"
+              Name="sandbox-runner.exe" />
+        <Environment Id="PathEntry"
+                     Name="PATH"
+                     Value="[BINDIR]"
+                     Permanent="no"
+                     Part="last"
+                     Action="set"
+                     System="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- ProgramData layout: config placeholder + identity/plugin directories.
+         ACL grants full access only to the virtual service account and Administrators;
+         SYSTEM keeps read for service-manager compatibility. All other principals inherit
+         no rights because the directory disables inheritance. -->
+    <ComponentGroup Id="ProgramDataComponents" Directory="DATAROOT">
+      <Component Id="ConfigTemplate" Guid="1b2d9c31-3f75-4c25-9c92-52f9b2d1a7e0" NeverOverwrite="yes">
+        <File Id="ConfigToml"
+              Source="$(var.ConfigTemplatePath)"
+              Name="config.toml"
+              KeyPath="yes" />
+        <util:PermissionEx User="[WIX_ACCOUNT_ADMINISTRATORS]" GenericAll="yes" />
+        <util:PermissionEx User="NT SERVICE\sandbox-runner" GenericAll="yes" />
+        <util:PermissionEx User="[WIX_ACCOUNT_LOCALSYSTEM]" GenericRead="yes" GenericExecute="yes" />
+      </Component>
+
+      <Component Id="DataDirAcl" Guid="c8f6a20d-4a1e-4de5-aa39-6c9f0e5b1b12">
+        <CreateFolder>
+          <util:PermissionEx User="[WIX_ACCOUNT_ADMINISTRATORS]" GenericAll="yes" />
+          <util:PermissionEx User="NT SERVICE\sandbox-runner" GenericAll="yes" />
+        </CreateFolder>
+        <RegistryValue Root="HKLM"
+                       Key="Software\sndbox\runner"
+                       Name="DataDirectory"
+                       Type="string"
+                       Value="[DATAROOT]"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="ServiceComponents" Directory="BINDIR">
+      <Component Id="RunnerService" Guid="6f4c8a71-e2d5-4a76-9b71-3f5e0c9d81a5">
+        <File Id="SandboxRunnerServiceHost"
+              Source="$(var.BinaryPath)"
+              Name="sandbox-runner-svc.exe"
+              KeyPath="yes" />
+        <ServiceInstall Id="RunnerServiceInstall"
+                        Name="sandbox-runner"
+                        DisplayName="sndbox runner"
+                        Description="Runs signed sndbox workflows as an unprivileged service."
+                        Type="ownProcess"
+                        Start="demand"
+                        ErrorControl="normal"
+                        Account="NT SERVICE\sandbox-runner"
+                        Arguments='--config "[DATAROOT]config.toml" run'
+                        Vital="yes">
+          <util:ServiceConfig FirstFailureActionType="restart"
+                              SecondFailureActionType="restart"
+                              ThirdFailureActionType="none"
+                              RestartServiceDelayInSeconds="60"
+                              ResetPeriodInDays="1" />
+        </ServiceInstall>
+        <ServiceControl Id="RunnerServiceControl"
+                        Name="sandbox-runner"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- The runner is outbound-only; no inbound firewall rule is added. -->
+
+    <!-- ARP entries -->
+    <Property Id="ARPPRODUCTICON" Value="SandboxRunnerIcon" />
+    <Icon Id="SandboxRunnerIcon" SourceFile="sandbox-runner.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://docs.sndbox.app/windows" />
+    <Property Id="ARPHELPLINK" Value="https://docs.sndbox.app/windows#troubleshooting" />
+
+    <!-- Post-install nudge -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+              Value="Open a terminal and run &quot;sandbox-runner&quot; for guided setup, pairing, and health checks. Docs: https://docs.sndbox.app/windows" />
+
+  </Package>
+</Wix>

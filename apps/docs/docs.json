@@ -39,6 +39,8 @@
             "pages": [
               "index",
               "quickstart",
+              "linux",
+              "windows",
               "getting-started/install",
               "getting-started/first-workflow",
               "getting-started/quick-tour",

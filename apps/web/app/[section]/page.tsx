@@ -225,7 +225,7 @@ async function OperationsPage({
             })}
             {!runners.length && <div className="fleet-empty"><Server /><h3>No runners paired yet</h3><p>Create a pairing token above, then run the supplied command on a Linux x64 or ARM64 host.</p></div>}
           </section>
-          <section className="operations-guidance"><ShieldCheck /><div><strong>Device verification</strong><p>Runner keys are generated locally. Verify the printed fingerprint before starting the service.</p></div><a href="https://docs.sndbox.app/execution/self-hosted-runner">Setup guide <ArrowRight /></a></section>
+          <section className="operations-guidance"><ShieldCheck /><div><strong>Device verification</strong><p>Runner keys are generated locally. Verify the printed fingerprint before starting the service.</p></div><a href="https://docs.sndbox.app/linux">Linux guide <ArrowRight /></a></section>
         </>
       ) : (
         <section className="resource-launch-card"><span className="settings-card-icon"><Building2 /></span><div><h2>Create a workspace first</h2><p>Every runner belongs to a workspace so permissions, environments and audit history stay scoped.</p></div><Link className="portal-primary" href="/organisations">Create workspace <ArrowRight /></Link></section>

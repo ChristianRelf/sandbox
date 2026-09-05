@@ -21,7 +21,7 @@ export function RunnerPairing({
     organisation.workspaces.map((workspace) => ({ organisation, workspace })),
   );
   const selected = workspaces.find(({ workspace }) => workspace.id === selectedWorkspaceId) ?? workspaces[0];
-  const command = state.token ? `sudo -u sandbox-runner env SANDBOX_PAIRING_TOKEN='${state.token}' /usr/local/bin/sandbox-runner --config /etc/sandbox-runner/config.toml pair` : "";
+  const command = "sudo -u sandbox-runner /usr/local/bin/sandbox-runner pair";
 
   if (!open && !state.token) {
     return <button className="portal-primary" type="button" disabled={!workspaces.length} onClick={() => setOpen(true)}><Server /> Add Linux runner</button>;
@@ -37,7 +37,9 @@ export function RunnerPairing({
         <div className="runner-token-result">
           <span className="pairing-success"><Check /> Pairing token ready</span>
           <h3>Run this once on your Linux host.</h3>
-          <p>First download the Linux runner archive and run <code>sudo ./install.sh</code>. The token expires within 24 hours and is restricted to runner management in the selected workspace. It is never stored in the runner configuration. <a href="https://docs.sndbox.app/execution/self-hosted-runner" target="_blank" rel="noreferrer">Linux and NAS setup guide</a></p>
+          <p>First download the Linux runner archive, run <code>sudo ./install.sh</code>, and complete <code>sudo sandbox-runner setup</code>. The token expires within 24 hours and is restricted to runner management in the selected workspace. <a href="https://docs.sndbox.app/linux" target="_blank" rel="noreferrer">Linux guide</a></p>
+          <div className="command-copy"><code>{state.token}</code><button type="button" onClick={async () => { await navigator.clipboard.writeText(state.token ?? ""); setCopied("token"); }}><Copy /> {copied === "token" ? "Copied" : "Copy token"}</button></div>
+          <h3>Then run this and paste the token into the hidden prompt.</h3>
           <div className="command-copy"><code>{command}</code><button type="button" onClick={async () => { await navigator.clipboard.writeText(command); setCopied("command"); }}><Copy /> {copied === "command" ? "Copied" : "Copy command"}</button></div>
           <aside><strong>Next</strong><span>Confirm the printed fingerprint out of band, then start the service. The runner will appear in the fleet below after its first heartbeat.</span></aside>
         </div>
