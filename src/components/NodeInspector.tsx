@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { Bot, Code2, ExternalLink, FolderOpen, LocateFixed, Pencil, RefreshCcw, Trash2 } from "lucide-react";
+import { Bot, Braces, Code2, ExternalLink, FolderOpen, LocateFixed, Pencil, RefreshCcw, Trash2 } from "lucide-react";
 import {
   Children,
   cloneElement,
@@ -42,6 +42,9 @@ const locatorKinds = [
 const CodeEditorDialog = lazy(() =>
   import("./CodeEditorDialog").then((module) => ({ default: module.CodeEditorDialog })),
 );
+const RawJsonEditorDialog = lazy(() =>
+  import("./RawJsonEditorDialog").then((module) => ({ default: module.RawJsonEditorDialog })),
+);
 const CollectionNodeInspector = lazy(() =>
   import("./CollectionNodeInspector").then((module) => ({ default: module.CollectionNodeInspector })),
 );
@@ -82,6 +85,7 @@ export function NodeInspector({
   const [connections, setConnections] = useState<ConnectionMetadata[]>([]);
   const [locatorTest, setLocatorTest] = useState<string>();
   const [codeEditorOpen, setCodeEditorOpen] = useState(false);
+  const [rawJsonEditorOpen, setRawJsonEditorOpen] = useState(false);
   const set = (key: string, value: unknown) =>
     onChange({ ...node, configuration: { ...config, [key]: value } });
   useEffect(() => {
@@ -245,6 +249,9 @@ export function NodeInspector({
           <b>{node.name}</b>
           <small>{definition.group}</small>
         </div>
+        <button className="inspector-json-button" type="button" onClick={() => setRawJsonEditorOpen(true)} title="Edit this node's configuration as raw JSON">
+          <Braces size={14} /><span>JSON</span>
+        </button>
       </div>
       <div className="inspector-scroll">
         {issues.length > 0 && (
@@ -1568,6 +1575,9 @@ export function NodeInspector({
           />
         </Suspense>
       )}
+      <Suspense fallback={null}>
+        <RawJsonEditorDialog open={rawJsonEditorOpen} onOpenChange={setRawJsonEditorOpen} value={config} onSave={(configuration) => onChange({ ...node, configuration })} />
+      </Suspense>
     </aside>
   );
 }

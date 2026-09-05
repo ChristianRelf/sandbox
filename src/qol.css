@@ -2291,3 +2291,14 @@ input[type="checkbox"] {
 .approval-request > section > .issue-notice { margin: 12px 0; }
 .recording-review > .issue-notice { margin: 10px 12px 2px; }
 .browser-diagnostics > .issue-notice,.collection-evidence .issue-notice { margin: 8px 10px; }
+.inspector-title .inspector-json-button { margin-left:auto; height:28px; display:flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text-muted); padding:0 8px; font-size:9px; }
+.inspector-title .inspector-json-button:hover { border-color:var(--border-strong); background:var(--surface-hover); color:var(--text); }
+.raw-json-editor { display:grid; gap:9px; }
+.raw-json-toolbar { display:flex; align-items:center; justify-content:space-between; color:var(--text-secondary); font-size:10px; }
+.raw-json-toolbar .button { height:28px; font-size:9px; }
+.raw-json-editor textarea { width:100%; min-height:min(54vh,540px); resize:vertical; border:1px solid var(--border); border-radius:7px; background:#0d0d10; color:var(--text); padding:12px; font:12px/1.6 "SFMono-Regular",Consolas,"Liberation Mono",monospace; tab-size:2; }
+.raw-json-editor textarea:focus { outline:0; border-color:var(--accent); }
+.raw-json-editor textarea[aria-invalid=true] { border-color:var(--error); }
+.raw-json-error,.raw-json-help { margin:0; font-size:10px; line-height:1.4; }
+.raw-json-error { color:var(--error); }
+.raw-json-help { color:var(--text-muted); }
