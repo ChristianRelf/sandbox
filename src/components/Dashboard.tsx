@@ -42,6 +42,8 @@ import { Status } from "./Status";
 import { ConfirmDialog, Dialog } from "./ui/Dialog";
 import { EmptyState, ErrorState, LoadingSkeleton } from "./ui/States";
 import { useToast } from "./ui/Toast";
+import { readWorkspaceSnapshot, updateWorkspaceSnapshot } from "../workspaceState";
+import { isTextEntryTarget } from "../useKeyboardShortcuts";
 
 type FilterKey = "all" | "favorites" | "scheduled" | "failed" | "archived";
 type DashboardTab = "workflows" | "templates";
@@ -62,14 +64,15 @@ export function Dashboard() {
   const [items, setItems] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [tab, setTab] = useState<DashboardTab>("workflows");
-  const [search, setSearch] = useState("");
+  const remembered = useMemo(() => readWorkspaceSnapshot()?.dashboard, []);
+  const [tab, setTab] = useState<DashboardTab>(() => remembered?.activeTab ?? "workflows");
+  const [search, setSearch] = useState(() => remembered?.search ?? "");
   const [templateCategory, setTemplateCategory] = useState<
     WorkflowTemplateCategory | "all"
-  >("all");
-  const [sort, setSort] = useState("modified");
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [folder, setFolder] = useState("");
+  >(() => remembered?.templateCategory as WorkflowTemplateCategory | "all" ?? "all");
+  const [sort, setSort] = useState(() => remembered?.sortOrder ?? "modified");
+  const [filter, setFilter] = useState<FilterKey>(() => remembered?.workflowFilter ?? "all");
+  const [folder, setFolder] = useState(() => remembered?.folder ?? "");
   const [running, setRunning] = useState<string>();
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -107,13 +110,16 @@ export function Dashboard() {
     return () => window.removeEventListener("sandbox:create-workflow", create);
   }, []);
   useEffect(() => {
+    updateWorkspaceSnapshot(current => ({ ...current, dashboard: { activeTab: tab, search, workflowFilter: filter, folder, sortOrder: sort, templateCategory } }));
+  }, [tab, search, filter, folder, sort, templateCategory]);
+  useEffect(() => {
     const key = (event: KeyboardEvent) => {
       const target = event.target;
       if (
         event.key === "/" &&
         !event.ctrlKey &&
         !event.metaKey &&
-        !(target instanceof Element && target.closest("input,textarea,select"))
+        !isTextEntryTarget(target) && !(target instanceof Element && target.closest("[role=dialog],[role=alertdialog]"))
       ) {
         event.preventDefault();
         searchRef.current?.focus();
@@ -250,12 +256,10 @@ export function Dashboard() {
       if (confirm.kind === "archive")
         await api.archiveWorkflow(confirm.item.workflow.id);
       else await api.purgeWorkflow(confirm.item.workflow.id);
-      toast.push(
-        confirm.kind === "archive"
-          ? "Workflow archived."
-          : "Workflow permanently deleted.",
-        "success",
-      );
+      if (confirm.kind === "archive") {
+        const archivedId = confirm.item.workflow.id;
+        toast.push("Workflow archived.", "success", { label: "Undo", onAction: () => void api.restoreWorkflow(archivedId).then(load).catch(value => toast.push(String(value), "error")) });
+      } else toast.push("Workflow permanently deleted.", "success");
       setConfirm(undefined);
       await load();
     } catch (value) {
